@@ -5,6 +5,10 @@
 #include "conio.h"
 #include "ref.h"
 
+#define SYSTEMCOL       GREEN
+#define TICKCOL         BLUE
+#define BOARDCOL        BLUE
+
 #define ENTER 13
 #define ESC   27
 
@@ -17,9 +21,13 @@ static struct {
     int cursCoord; // coordinate cursor is at.
 } gBoardIf;
 
+
+/* (one extra space for \0.) */
+static uint8 gPieceUITable[BQUEEN + 2] = "  KKppNNBBRRQQ";
+
 void printstatus(BoardT *board, int timetaken)
 {
-    struct mlist mvlist;
+    MoveListT mvlist;
     int turn = board->ply & 1;
     textcolor(LIGHTGRAY);
     gotoxy(OPTIONS_X, 19);
@@ -28,37 +36,62 @@ void printstatus(BoardT *board, int timetaken)
     cprintf("%c%c %c%c ", File(board->ncheck[0]) + 'a',
 	    Rank(board->ncheck[0]) + '1', File(board->ncheck[1]) + 'a',
 	    Rank(board->ncheck[1]) + '1');
-    genmlist(&mvlist, board, turn);
-    if (!mvlist.lgh)
+    gotoxy(OPTIONS_X, 20);
+    cprintf("move: %d   ", (board->ply >> 1) + 1);
+    gotoxy(OPTIONS_X, 21);
+    textcolor(SYSTEMCOL);
+    cprintf("%s\'s turn", turn ? "black" : "white");
+    gotoxy(OPTIONS_X, 22);
+    cprintf(board->ncheck[turn] == FLAG ? "       " : "<check>");
+
+    mlistGenerate(&mvlist, board, 0);
+#if 1
+    if (drawThreefoldRepetition(board))
+    {
+	barf("Game is drawn (threefold repetition).");
+    }
+#endif
+    else if (drawInsufficientMaterial(board))
+    {
+	barf("Game is drawn (insufficient material).");
+    }
+    else if (!mvlist.lgh)
+    {
 	barf(board->ncheck[turn] == FLAG ? "Game is drawn (stalemate)." :
 	     turn ? "Black is checkmated." :
 	     "White is checkmated.");
-    else
-    {
-	gotoxy(OPTIONS_X, 20);
-	cprintf("move: %d   ", (board->ply >> 1) + 1);
-	gotoxy(OPTIONS_X, 21);
-	textcolor(SYSTEMCOL);
-	cprintf("%s\'s turn", turn ? "black" : "white");
-	gotoxy(OPTIONS_X, 22);
-	cprintf(board->ncheck[turn] == FLAG ? "       " : "<check>");
     }
 }
 
 
-void UIPVDraw(uint8 *moves, int eval, int howmany)
+void UIPVDraw(PvT *pv, int eval)
 /* prints out expected move sequence at the bottom of the screen. */
 {
+    static int lasthowmany = 0;
+    int howmany = pv->depth + 1;
+    uint8 *moves = pv->pv;
+    int i;
+
     gotoxy(1, 25);
     textcolor(SYSTEMCOL);
+
+    // blank out the last pv.
+    for (i = 0; i < lasthowmany * 5 + 10; i++)
+    {
+	cprintf(" ");
+    }
+    lasthowmany = howmany;
+
+    // print the new pv.
+    gotoxy(1, 25);
     cprintf("pv: %+d", eval);
-    for (; howmany >= 0; howmany--)
+    for (; howmany > 0; howmany--)
     {
 	cprintf(" %c%c%c%c", File(moves[0]) + 'a', Rank(moves[0]) + '1',
 		File(moves[1]) + 'a', Rank(moves[1]) + '1');
 	moves += 2;
     }
-    cprintf(".   ");
+    cprintf(".");
 }
 
 
@@ -122,9 +155,10 @@ static void drawoptions(void)
     prettyprint("Debug logging", 11);
     prettyprint("History window", 12);
     prettyprint("Color", 13);
-    prettyprint("shOw", 14);
-    prettyprint("Moves", 15);
-    prettyprint("Pass", 16);
+    // prettyprint("shOw", 14); still can do, just not visible
+    prettyprint("Moves", 14);
+    prettyprint("Pass", 15);
+    prettyprint("Autopass", 16);
 }
 
 
@@ -146,7 +180,7 @@ void getopt(uint8 command[])
 	    c = toupper(c); // accept lower-case commands, too.
 	if (c == 'L' || c == 'W' || c == 'B' || c == 'Q' || c == 'P' ||
 	    c == 'F' || c == 'H' || c == 'C' || c == 'S' || c == 'N' ||
-	    c == 'M' || c == 'O' || c == 'D' || c == 'R')
+	    c == 'M' || c == 'D' || c == 'R' || c == 'A')
 	{
 	    if (!gettingsrc)
 	    {
@@ -279,7 +313,7 @@ void UIBoardUpdate(BoardT *board)
 {
     int x, y;
     int i = 0;
-    char *bcoord = board->coord;
+    uint8 *bcoord = board->coord;
 
     for (y = 0; y < 8; y++)
 	for (x = 0; x < 8; x++, i++)
@@ -292,18 +326,15 @@ void UIBoardUpdate(BoardT *board)
 		   SQUARE_WIDTH / 2 + 1,
 		   2 + (gBoardIf.flipped ? y : 7 - y) * 3);
 	    /* note if we flip board, we switch the '7-' stuff... */
-	    if (!bcoord[i])
-		cprintf(" ");            /* erase any previous piece */
-	    else			/* 'draw' :) a piece */
+
+	    if (bcoord[i])
 	    {
-		/* Use the appropriate color to draw white/black pieces.
-		   note: islower() can return any true value, not just '1'.
-		*/
-		textcolor(gBoardIf.col[islower(bcoord[i]) ? 1 : 0]);
-		if (tolower(bcoord[i]) == 'p')	/* pawn */
-		    cprintf("p");
-		else putch(toupper(bcoord[i]));
+		/* Use the appropriate color to draw white/black pieces. */
+		textcolor(gBoardIf.col[bcoord[i] & 1]);
 	    }
+
+	    /* Draw a piece (or lack thereof). */
+	    putch(gPieceUITable[bcoord[i]]);
 	}
     textbackground(BLACK);
 }
@@ -354,20 +385,22 @@ void UINotifyComputerStats(CompStatsT *stats)
 {
     gotoxy(1, 1);
     textcolor(SYSTEMCOL);
-    cprintf("%d %d", stats->funcCallCount, stats->moveCount);
+    cprintf("%d %d ", stats->funcCallCount, stats->moveCount);
 }
 
 
-void UIMovelistShow(struct mlist *mvlist)
+void UIMovelistShow(MoveListT *mvlist)
 {
     int x;
     textcolor(SYSTEMCOL);
     gotoxy(1, 1);
     for (x = 0; x < mvlist->lgh; x++)
-	cprintf("%c%c%c%c%c%c  ", File(mvlist->list[x] [0]) + 'a',
+	cprintf("%c%c%c%c%c%c%c ",
+		File(mvlist->list[x] [0]) + 'a',
 		Rank(mvlist->list[x] [0]) + '1',
 		File(mvlist->list[x] [1]) + 'a',
 		Rank(mvlist->list[x] [1]) + '1',
+		mvlist->list[x] [2] ? mvlist->list[x] [2] : '0',
 		File(mvlist->list[x] [3]) + 'a',
 		Rank(mvlist->list[x] [3]) + '1');
     barf("possible moves.");
@@ -379,19 +412,30 @@ void UIExit(void)
     doneconio();
 }
 
+
 int barf(char *message)
 {
-    int ack;
-    gotoxy(40 - strlen(message) / 2, 25);
+    int chr, i;
+    int len = strlen(message);
+
+    gotoxy(40 - len / 2, 25);
     textcolor(MAGENTA);
     cprintf(message);
-    ack = getch();
+    chr = getch();
+
+    /* Now, blank the entire message. */
+    gotoxy(40 - len / 2, 25);
+    for (i = 0; i < len; i++)
+    {
+	cprintf(" ");
+    }
+
     UITicksDraw();
-    if (ack == ESC)	/* bail on ESC */
+    if (chr == ESC)	/* bail on ESC */
     {
 	doneconio();
 	exit(0);
     }
     gotoxy(1, 1); /* justncase */
-    return ack;
+    return chr;
 }

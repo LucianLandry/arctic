@@ -1,8 +1,12 @@
 #include <string.h> /* memcpy() */
+#include <stdlib.h> /* qsort(3), random(3) */
+#include <assert.h>
 #include "ref.h"
 
+GPreCalcT gPreCalc;
 
-static char gAllMoves[912] =  {
+
+static char gAllNormalMoves[512 /* yes, this is the exact size needed */] =  {
     /* 0 (northwest) direction */
     FLAG,
     8, FLAG,
@@ -110,87 +114,75 @@ static char gAllMoves[912] =  {
     46, 45, 44, 43, 42, 41, 40, FLAG,
     54, 53, 52, 51, 50, 49, 48, FLAG,
     62, 61, 60, 59, 58, 57, 56, FLAG,
-
-    /* 8 (night "direction").  1st rank: */
-    17, 10, FLAG,
-    16, 18, 11, FLAG,
-    8, 17, 19, 12, FLAG,
-    9, 18, 20, 13, FLAG,
-    10, 19, 21, 14, FLAG,
-    11, 20, 22, 15, FLAG,
-    12, 21, 23, FLAG,
-    13, 22, FLAG,
-
-    /* 2nd rank: */
-    25, 18,  2, FLAG,
-    24, 26, 19,  3, FLAG,
-    0, 16, 25, 27, 20,  4, FLAG,
-    1, 17, 26, 28, 21,  5, FLAG,
-    2, 18, 27, 29, 22,  6, FLAG,
-    3, 19, 28, 30, 23,  7, FLAG,
-    4, 20, 29, 31, FLAG,
-    5, 21, 30, FLAG,
-	
-    /* 3rd rank: */
-    33, 26, 10,  1, FLAG,
-    32, 34, 27, 11,  2,  0, FLAG,
-    33, 35, 28, 12,  3,  1,  8, 24, FLAG,
-    34, 36, 29, 13,  4,  2,  9, 25, FLAG,
-    35, 37, 30, 14,  5,  3, 10, 26, FLAG,
-    36, 38, 31, 15,  6,  4, 11, 27, FLAG,
-    37, 39,  7,  5, 12, 28, FLAG,
-    38,  6, 13, 29, FLAG,
-
-    /* 4th rank: */
-    41, 34, 18,  9, FLAG,
-    40, 42, 35, 19, 10,  8, FLAG,
-    41, 43, 36, 20, 11,  9, 16, 32, FLAG,
-    42, 44, 37, 21, 12, 10, 17, 33, FLAG,
-    43, 45, 38, 22, 13, 11, 18, 34, FLAG,
-    44, 46, 39, 23, 14, 12, 19, 35, FLAG,
-    45, 47, 15, 13, 20, 36, FLAG,
-    46, 14, 21, 37, FLAG,
-	
-    /* 5th rank: */
-    49, 42, 26, 17, FLAG,
-    48, 50, 43, 27, 18, 16, FLAG,
-    49, 51, 44, 28, 19, 17, 24, 40, FLAG,
-    50, 52, 45, 29, 20, 18, 25, 41, FLAG,
-    51, 53, 46, 30, 21, 19, 26, 42, FLAG,
-    52, 54, 47, 31, 22, 20, 27, 43, FLAG,
-    53, 55, 23, 21, 28, 44, FLAG,
-    54, 22, 29, 45, FLAG,
-	
-    /* 6th rank: */
-    57, 50, 34, 25, FLAG,
-    56, 58, 51, 35, 26, 24, FLAG,
-    57, 59, 52, 36, 27, 25, 32, 48, FLAG,
-    58, 60, 53, 37, 28, 26, 33, 49, FLAG,
-    59, 61, 54, 38, 29, 27, 34, 50, FLAG,
-    60, 62, 55, 39, 30, 28, 35, 51, FLAG,
-    61, 63, 31, 29, 36, 52, FLAG,
-    62, 30, 37, 53, FLAG,
-
-    /* 7th rank: */
-    58, 42, 33, FLAG,
-    59, 43, 34, 32, FLAG,
-    56, 60, 44, 35, 33, 40, FLAG,
-    57, 61, 45, 36, 34, 41, FLAG,
-    58, 62, 46, 37, 35, 42, FLAG,
-    59, 63, 47, 38, 36, 43, FLAG,
-    60, 39, 37, 44, FLAG,
-    38, 45, 61, FLAG,
-
-    /* 8th rank: */
-    50, 41, FLAG,
-    51, 42, 40, FLAG,
-    52, 43, 41, 48, FLAG,
-    53, 44, 42, 49, FLAG,
-    54, 45, 43, 50, FLAG,
-    55, 46, 44, 51, FLAG,
-    47, 45, 52, FLAG,
-    46, 53, FLAG
 };
+
+
+/* This is split equally between best night moves for white from a given
+   coord, and best moves for black. */
+static char gAllNightMoves[800];
+
+
+static int whiteGoodNightMove(uint8 *el1, uint8 *el2)
+{
+    int rankDiff = Rank(*el1) - Rank(*el2);
+    return rankDiff != 0 ? -rankDiff : /* higher rank comes first for White */
+	/* .. But if both moves are on the same rank, we want the one closest
+	   to center. */
+	Abs((3 + 4) - (int) (File(*el1) * 2)) -
+	Abs((3 + 4) - (int) (File(*el2) * 2));
+}
+
+
+static int blackGoodNightMove(uint8 *el1, uint8 *el2)
+{
+    int rankDiff = Rank(*el1) - Rank(*el2);
+    return rankDiff != 0 ? rankDiff : /* lower rank comes first for Black */
+	/* .. But if both moves are on the same rank, we want the one closest
+	   to center. */
+	Abs((3 + 4) - (int) (File(*el1) * 2)) -
+	Abs((3 + 4) - (int) (File(*el2) * 2));
+}
+
+
+typedef int (*QSORTFUNC)(const void *, const void *);
+
+/* Calculates night moves for 'coord' and 'turn' (in preferred order).
+   Returns number of moves (+ FLAG) copied into 'moveArray'. */
+static int calcNightMoves(uint8 *moveArray, int coord, int turn)
+{
+    uint8 myMoves[9];
+    uint8 *ptr = myMoves;
+
+    if (Rank(coord) < 6 && File(coord) > 0)
+	*(ptr++) = coord + 15; /* b1-a3 type moves */
+    if (Rank(coord) < 6 && File(coord) < 7)
+	*(ptr++) = coord + 17; /* a1-b3 type moves */
+    if (Rank(coord) < 7 && File(coord) > 1)
+	*(ptr++) = coord + 6;  /* c1-a2 type moves */
+    if (Rank(coord) < 7 && File(coord) < 6)
+	*(ptr++) = coord + 10; /* a1-c2 type moves */
+    if (Rank(coord) > 0 && File(coord) > 1)
+	*(ptr++) = coord - 10; /* c2-a1 type moves */
+    if (Rank(coord) > 0 && File(coord) < 6)
+	*(ptr++) = coord - 6;  /* a2-c1 type moves */
+    if (Rank(coord) > 1 && File(coord) > 0)
+	*(ptr++) = coord - 17; /* b3-a1 type moves */
+    if (Rank(coord) > 1 && File(coord) < 7)
+	*(ptr++) = coord - 15; /* a3-b1 type moves */
+
+    /* sort moves according to what will probably be best. */
+    qsort(myMoves, ptr - myMoves, sizeof(uint8),
+	  (QSORTFUNC) (turn ? blackGoodNightMove : whiteGoodNightMove));
+
+    *(ptr++) = FLAG; /* terminate 'myMoves'. */
+
+    /* ... and copy it over. */
+    for (ptr = myMoves; (*(moveArray++) = *(ptr++)) != FLAG; )
+	; /* no-op */
+
+    return ptr - myMoves;
+}
+
 
 
 static int dirf(int from, int to)
@@ -213,7 +205,31 @@ static int dirf(int from, int to)
 }
 
 
-static void rowinit(int d, int start, int finc, int sinc, uint8 *moves[] [9],
+/* returns 0 if friend, 1 if enemy, 2 if unoccupied */
+/* White's turn = 0. Black's is 1. */
+static int checkf(char piece, int turn)
+{
+    return piece < KING ? 2 : (piece & 1) ^ turn;
+}
+
+
+static int worthf(char piece)
+{
+    switch(piece | 1)
+    {
+    case BPAWN:   return 1;
+    case BBISHOP:
+    case BNIGHT:  return 3;
+    case BROOK:   return 5;
+    case BQUEEN:  return 9;
+    case BKING:   return -1; /*error condition. */
+    default:      break;
+    }
+    return 0;
+}
+
+
+static void rowinit(int d, int start, int finc, int sinc, uint8 *moves[] [10],
 		    char *ptr)
 {
     int temp, i;
@@ -233,7 +249,7 @@ static void rowinit(int d, int start, int finc, int sinc, uint8 *moves[] [9],
 }
 
 
-static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [9],
+static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [10],
 		     char *ptr)
 {
     int temp, i, j;
@@ -256,53 +272,120 @@ static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [9],
 }
 
 
-/* initialize pre-calculated move-array and direction-array. */
-void init(uint8 *moves[] [9], uint8 dir[] [64])
+/* initialize gPreCalc. */
+void initPreCalc(void)
 {
     int i, d, j;
-    char *ptr = gAllMoves;
+    char *ptr = gAllNormalMoves;
+
+    /* initialize moves array. */
     for (d = 0; d < 8; d++) /* d signifies direction */
     {
         switch(d)
         {
-        case 0: diaginit(d,  0,  1,  8, moves, ptr); break;
-        case 2: diaginit(d,  7, -1,  8, moves, ptr); break;
-        case 4: diaginit(d, 63, -1, -8, moves, ptr); break;
-        case 6: diaginit(d, 56,  1, -8, moves, ptr); break;
-        case 1: rowinit(d,  0,  8, 1, moves, ptr); break;
-        case 3: rowinit(d,  0,  1, 8, moves, ptr); break;
-        case 5: rowinit(d, 56, -8, 1, moves, ptr); break;
-        case 7: rowinit(d,  7, -1, 8, moves, ptr); break;
+        case 0: diaginit(d,  0,  1,  8, gPreCalc.moves, ptr); break;
+        case 2: diaginit(d,  7, -1,  8, gPreCalc.moves, ptr); break;
+        case 4: diaginit(d, 63, -1, -8, gPreCalc.moves, ptr); break;
+        case 6: diaginit(d, 56,  1, -8, gPreCalc.moves, ptr); break;
+        case 1: rowinit(d,  0,  8, 1, gPreCalc.moves, ptr); break;
+        case 3: rowinit(d,  0,  1, 8, gPreCalc.moves, ptr); break;
+        case 5: rowinit(d, 56, -8, 1, gPreCalc.moves, ptr); break;
+        case 7: rowinit(d,  7, -1, 8, gPreCalc.moves, ptr); break;
         default: break;
         };
         ptr += 64;
     }
-    for (i = 0; i < 64; i++)    /* store knight moves. */
+
+    /* Calculate knight-move arrays.  Can reuse ptr. */
+    ptr = gAllNightMoves;
+    for (i = 0; i < 2; i++)
     {
-        moves[i] [8] = ptr;
-        while(*ptr != FLAG)
-            ptr++;
-        ptr++;
+	for (j = 0; j < 64; j++)
+	{
+	    gPreCalc.moves[j] [8 + i] = ptr;
+	    ptr += calcNightMoves(ptr, j, i);
+	}
     }
+    assert(ptr = gAllNightMoves + sizeof(gAllNightMoves));
+
     /* initialize direction array. */
     for(i = 0; i < 64; i++)
-        for (j= 0; j < 64; j++)
-            dir[i] [j] = dirf(i, j);
+        for (j = 0; j < 64; j++)
+            gPreCalc.dir[i] [j] = dirf(i, j);
+
+    /* initialize check array. */
+    for (i = 0; i < 2; i++)
+    {
+	for (j = 0; j < BQUEEN + 1; j++)
+	{
+	    gPreCalc.check[i] [j] = checkf(j, i);
+	}
+    }
+
+    /* initialize worth array. */
+    for (i = 0; i < sizeof(gPreCalc.worth); i++)
+    {
+	gPreCalc.worth[i] = worthf(i);
+    }
+
+    /* initialize zobrist hashing. */
+    for (i = 0; i < 63; i++)
+    {
+	for (j = 0; j < BQUEEN + 1; j++)
+	{
+	    gPreCalc.zobrist.coord[i] [j] = random();
+	}
+	gPreCalc.zobrist.ebyte[i] = random();
+	if (i < 16)
+	{
+	    gPreCalc.zobrist.cbyte[i] = random();
+	}
+    }
+    gPreCalc.zobrist.turn = random();
+}
+
+
+/* This is useful for generating a hash for the initial board position, or
+   (slow) validating the incrementally-updated hash. */
+int calcZobrist(BoardT *board)
+{
+    int retVal = 0;
+    int i;
+    for (i = 0; i < 63; i++)
+    {
+	retVal ^= gPreCalc.zobrist.coord[i] [board->coord[i]];
+    }
+    retVal ^= gPreCalc.zobrist.cbyte[board->cbyte];
+    if (board->ply & 1)
+	retVal ^= gPreCalc.zobrist.turn;
+    if (board->ebyte != FLAG)
+	retVal ^= gPreCalc.zobrist.ebyte[board->ebyte];
+    return retVal;
 }
 
 
 void newgame(BoardT *board)
 {
     int x, y, i;
+    uint8 whitePieces[16] =
+	{ROOK, NIGHT, BISHOP, QUEEN, KING, BISHOP, NIGHT, ROOK,
+	 PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN};
+    uint8 blackPieces[16] =
+	{BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN,
+	 BROOK, BNIGHT, BBISHOP, BQUEEN, BKING, BBISHOP, BNIGHT, BROOK};
+    int saveLevel = board->level, saveHiswin = board->hiswin;
 
-    memcpy(board->coord, "RNBQKBNRPPPPPPPP", 16);	/* white */
-    for (x = 16; x < 48; x++)				/* unocc'd middle */
-	board->coord[x] = 0;
-    memcpy(&(board->coord[48]), "pppppppprnbqkbnr", 16); /* black */
+    /* blank everything. */
+    memset(board, 0, sizeof(BoardT));
 
-    /* init playlist and playptr. */
-    for (i = 0; i < 'r' + 1; i++)
-	board->playlist[i].lgh = 0;
+    /* restore saved variables. */
+    board->level = saveLevel;
+    board->hiswin = saveHiswin;
+
+    memcpy(board->coord, whitePieces, 16);	  /* white */
+    memcpy(&(board->coord[48]), blackPieces, 16); /* black */
+
+    /* init playlist/playptr. */
     for (i = 0; i < 64; i++)
 	if (board->coord[i])
 	    addpiece(board, board->coord[i], i);
@@ -311,14 +394,23 @@ void newgame(BoardT *board)
     for (i = 0; i < 2; i++)
 	for (x = 0; x < 63; x++)
 	    for (y = 0; y < 63; y++)
-		board->hist[i] [x] [y] = -1;
+	    {
+		/* -50, not -1, because -1 might trigger accidentally if
+		   we expand the history window beyond killer moves. */
+		board->hist[i] [x] [y] = -50;
+	    }
 
-    board->ply = 0;                            /* white goes first */
-    board->cbyte = 0xF0;		       /* All can castle */
+    board->cbyte = ALLCASTLE;		       /* All can castle */
     board->ebyte = FLAG;		       /* no enpassant */
     board->ncheck[0] = FLAG;		       /* no one's in check. */
     board->ncheck[1] = FLAG;
-    board->depth = 0;		               /* we're not hypothesizing :) */
+    board->totalStrgh += 2; /* compensate for kings' "worth" */
+    for (i = 0; i < 63; i++)
+    {
+        /* abuse this macro to setup board->hashcoord */
+	COORDUPDATE(board, i, board->coord[i]);
+    }
+    board->zobrist = calcZobrist(board);
     UIBoardUpdate(board);
 }
 
@@ -328,12 +420,14 @@ void addpiece(BoardT *board, uint8 piece, int coord)
     board->playptr[coord] =
 	&board->playlist[piece].list[board->playlist[piece].lgh++];
     *board->playptr[coord] = coord;
+    board->totalStrgh += WORTH(piece);
 }
 
 
 void delpiece(BoardT *board, uint8 piece, int coord)
 {
     /* change coord in playlist and dec playlist lgh. */
+    board->totalStrgh -= WORTH(piece);
     *board->playptr[coord] = board->playlist[piece].list
 	[--board->playlist[piece].lgh];
     /* set the end playptr. */

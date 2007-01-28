@@ -28,16 +28,16 @@ int LogPrint(int level, const char *format, ...)
 
 
 /* debugging funcs. */
-void LogMoveList(int level, struct mlist *mvlist)
+void LogMoveList(int level, MoveListT *mvlist)
 {
-    int i = 0;
+    int i;
     if (level > gLogLevel)
     {
 	return; /* no-op. */
     }
 
-    LogPrint(eLogDebug, "{mvlist lgh %d insrt %d ",
-	     mvlist->lgh, mvlist->insrt);
+    LogPrint(eLogDebug, "{mvlist lgh %d insrt %d co %d ",
+	     mvlist->lgh, mvlist->insrt, mvlist->capOnly);
     for (i = 0; i < mvlist->lgh; i++)
     {
 	LogPrint(level,
@@ -50,19 +50,46 @@ void LogMoveList(int level, struct mlist *mvlist)
     LogPrint(level, "}\n");
 }
 
-void LogMove(int level, int moveDepth, uint8 *comstr)
+
+void LogMove(int level, BoardT *board, uint8 *comstr)
 {
+    int moveDepth;
+    int cappiece;
+    char capstr[6];
+    char promostr[6];
+    char chkstr[10];
+
     if (level > gLogLevel)
     {
 	return; /* no-op */
     }
-    for (; moveDepth > 0; moveDepth--)
+
+    /* optimization: do all initialization after gLogLevel check. */
+    cappiece = board->coord[comstr[1]];
+    capstr[0] = '\0';
+    promostr[0] = '\0';
+    chkstr[0] = '\0';
+
+    for (moveDepth = MIN(board->depth, 20); moveDepth > 0; moveDepth--)
     {
 	LogPrint(level, "    ");
     }
-    LogPrint(level, "%c%c%c%c\n",
+    if (cappiece)
+    {
+	sprintf(capstr, "(x%c)", cappiece);
+    }
+    if (comstr[2] && !ISPAWN(comstr[2]))
+    {
+	sprintf(promostr, "(->%c)", comstr[2]);
+    }
+    if (comstr[3] != FLAG)
+    {
+	sprintf(chkstr, "(chk-%d)", comstr[3]);
+    }
+    LogPrint(level, "%c%c%c%c%s%s%s\n",
 	     File(comstr[0]) + 'a',
 	     Rank(comstr[0]) + '1',
 	     File(comstr[1]) + 'a',
-	     Rank(comstr[1]) + '1');
+	     Rank(comstr[1]) + '1',
+	     capstr, promostr, chkstr);
 }

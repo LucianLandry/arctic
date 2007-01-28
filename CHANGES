@@ -1,0 +1,43 @@
+Version 7:
+Implement autopass.
+optimization via gprof (->CHECK(), TOLOWER(), optimize kingmove(),
+	addmove() split up)
+check for castle before other king moves.
+Implement incremental search.
+Move pv to its own structure.
+Implement quiescing.
+gendclist() uses PListT instead of tuples.  findcoord() goes away.
+enpass now in comstr[2] before makemove().
+promotions/en passant taken into account when evaluating strgh in minimax()
+black direction preference now (mostly) like white direction preference during
+	movgen.
+moved precalc stuff out to its own structure.
+move unmakemove info to its own structure.
+worth is precalced now.
+Detect draw due to insufficient material.
+Detect draw due to fifty-move rule.
+Converted PpRrNnBbQqKk to squashed representation.
+Fixed beginning-of-game hiswin bug (-1 doesn't work if hiswin > 1)
+Fixed probable bug on playermove promote (indexing into wrong move).
+Fix castling bug (newcbyte() before coord update in makemove())
+Detect draw due to threefold repetition.
+
+Version 6:
+Port to linux (get conio running, 40-chr screen to 80-chr, fix warnings
+	(char -> uint8), etc)
+Tons of general cleanup -- reformatting, style, documentation,
+	ncopy() -> memcpy() etc.
+computermove stats moved to its own structure.
+All ui functionality moved to ui.c
+Print move number.
+Fix capture-king bug (knight pins in cappose(), I think)
+Fix capture-king bug (en-passant captured pawn discovered check)
+Implement save/restore functionality.
+Implement log functionality.
+Implement flip-board functionality.
+Try pawn e2e4 moves before e2e3 moves.
+Try king moves last instead of first.
+hiswin went to short, so it will not rollover.
+
+Version 5:
+Last version recovered from DOS environment.

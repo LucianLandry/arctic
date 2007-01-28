@@ -6,13 +6,12 @@
 #include "ref.h"
 
 
-static char *searchlist(struct mlist *mvlist, char *comstr)
+static char *searchlist(MoveListT *mvlist, char *comstr, int howmany)
 {
-    int x;
-    for (x = 0; x < mvlist->lgh; x++)
-	if (mvlist->list[x] [0] == comstr[0] &&
-	    mvlist->list[x] [1] == comstr[1])
-	    return mvlist->list[x];
+    int i;
+    for (i = 0; i < mvlist->lgh; i++)
+	if (!memcmp(mvlist->list[i], comstr, howmany))
+	    return mvlist->list[i];
     return NULL;
 }
 
@@ -25,11 +24,12 @@ could send signals to each other? */
 
 /* this function intended to get player input and adjust variables
  accordingly */
-void playermove(BoardT *board, int *show, int control[])
+void playermove(BoardT *board, int *autopass, int control[])
 {
     char *ptr;
-    struct mlist movelist;
-    uint8 comstr[80], cappiece;
+    uint8 chr;
+    MoveListT movelist;
+    uint8 comstr[80];
     getopt(comstr);
     switch(comstr[0])
     {
@@ -54,14 +54,15 @@ void playermove(BoardT *board, int *show, int control[])
 	    ;	/* do nothing */
 	board->hiswin <<= 1;	/* convert moves to plies. */
 	return;
-    case 'O':     /* debug mode.  Show thinking. */
-	*show = !(*show);
-	return;
     case 'W':     /* switch white control */
 	control[0] = !control[0];
 	return;
     case 'B':     /* black control */
 	control[1] = !control[1];
+	return;
+    case 'A':
+	control[0] = control[1] = 1;
+	*autopass = 1;
 	return;
     case 'C':     /* change w/b colors */
 	UIPlayerColorChange();
@@ -94,7 +95,7 @@ void playermove(BoardT *board, int *show, int control[])
 
     /* at this point must be a move or request for moves. */
     /* get valid moves. */
-    genmlist(&movelist, board, board->ply & 1);
+    mlistGenerate(&movelist, board, 0);
     if (comstr[0] == 'M')	/* display moves */
     {
 	UIMovelistShow(&movelist);
@@ -105,29 +106,37 @@ void playermove(BoardT *board, int *show, int control[])
     }
 
     /* search movelist for comstr */
-    ptr = searchlist(&movelist, comstr);
+    ptr = searchlist(&movelist, comstr, 2);
     if (ptr != NULL)
     {
 	/* do we need to promote? */
-	if (tolower(board->coord[comstr[0]]) == 'p' &&
+	if (ISPAWN(board->coord[comstr[0]]) &&
 	    (comstr[1] > 55 || comstr[1] < 8))
 	{
-	    while ((comstr[2] = barf("Promote piece to (q, r, b, n)? >"))
-		   != 'q' &&	comstr[2] != 'r' && comstr[2] != 'b' &&
-		   comstr[2] != 'n')
+	    while ((chr = barf("Promote piece to (q, r, b, n)? >")) != 'q' &&
+		   chr != 'r' && chr != 'b' && chr != 'n')
 		; /* do nothing */
-	    ptr += comstr[2] == 'b' ? 4 :
-		comstr[2] == 'r' ? 8 :
-		comstr[2] == 'q' ? 12 :
-		0;
-	    /* note: if we change size o' mvlist, better change size of this!*/
-	    comstr[2] = toupper(comstr[2]) | ((board->ply & 1) << 5);
-	    /* ascii-dependent statement converts to proper case. */
+	    /* convert the answer to board representation. */
+	    switch(chr)
+	    {
+	    case 'q': chr = QUEEN; break;
+	    case 'r': chr = ROOK; break;
+	    case 'b': chr = BISHOP; break;
+	    case 'n': chr = NIGHT; break;
+	    default: assert(0); break;
+	    }
+	    comstr[2] = chr | (board->ply & 1);
+
+	    ptr = searchlist(&movelist, comstr, 3);
+	    assert(ptr != NULL);
 	}
-	else comstr[2] = 0;
+	else
+	{
+	    comstr[2] = ptr[2];
+	}
 	comstr[3] = ptr[3];
-	cappiece = board->coord[comstr[1]];
-	makemove(board, comstr, cappiece);
+	SavePosition(board);
+	makemove(board, comstr, NULL);
     }
     else barf("Sorry, invalid move.");
     UIBoardDraw();

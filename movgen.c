@@ -1,8 +1,14 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h> /* memcpy() */
+#include <assert.h>
 #include "ref.h"
 
+
+/* optimization/cleanup: dclist and pinlist should be of the form:
+   64-bit validbits;
+   char whatever[64];
+*/
 
 static void addsrccoord(struct srclist *attlist, int from)
 {
@@ -19,81 +25,88 @@ static void genslide(BoardT *board, struct srclist *dirlist, int from,
 		     int turn)
 {
     int to, i;
-    int mask = (turn ^ 1) << 5;
+    int enemy = turn ^ 1;
     dirlist->lgh = 0;	/* init list. */
     /* find queen sliding attacks. */
-    for (i = 0; i < board->playlist['Q' | mask].lgh; i++)
+    for (i = 0; i < board->playlist[QUEEN | enemy].lgh; i++)
     {
-	to = board->playlist['Q' | mask].list[i];
-	if (!(board->dir[from] [to] & 8)) /* !(nightmove or DIRFLAG) */
+	to = board->playlist[QUEEN | enemy].list[i];
+	if (!(gPreCalc.dir[from] [to] & 8)) /* !(nightmove or DIRFLAG) */
 	    addsrccoord(dirlist, to);
     }
     /* find rook sliding attacks. */
-    for (i = 0; i < board->playlist['R' | mask].lgh; i++)
+    for (i = 0; i < board->playlist[ROOK | enemy].lgh; i++)
     {
-	to = board->playlist['R' | mask].list[i];
-	if (board->dir[from] [to] & 1 && board->dir[from] [to] != DIRFLAG)
+	to = board->playlist[ROOK | enemy].list[i];
+	if (gPreCalc.dir[from] [to] & 1 && gPreCalc.dir[from] [to] != DIRFLAG)
 	    addsrccoord(dirlist, to);
     }
     /* find bishop sliding attacks. */
-    for (i = 0; i < board->playlist['B' | mask].lgh; i++)
+    for (i = 0; i < board->playlist[BISHOP | enemy].lgh; i++)
     {
-	to = board->playlist['B' | mask].list[i];
-	if (!(board->dir[from] [to] & 1) && board->dir[from] [to] < 8)
+	to = board->playlist[BISHOP | enemy].list[i];
+	if (!(gPreCalc.dir[from] [to] & 1) && gPreCalc.dir[from] [to] < 8)
 	    addsrccoord(dirlist, to);
     }
 }
 
 
-static void findpins(BoardT *board, int kcoord, union plist *pinlist, int turn)
+static void findpins(BoardT *board, int kcoord, PListT *pinlist, int turn)
 {
     int a, odd, test, i;
     uint8 *x;
     struct srclist dirlist;
-    char *coord = board->coord;
+    uint8 *coord = board->coord;
 
     /* initialize pin array. */
-    for (i = 0; i < 16; i++)
-	pinlist->l[i] = -1;
+    for (i = 0; i < 8; i++)
+	pinlist->ll[i] = FLAG64;
     genslide(board, &dirlist, kcoord, turn);
     /* only check the possible pin dirs. */
     for (a = 0; a < dirlist.lgh; a++)
     {
-	x = board->moves[kcoord] [board->dir[kcoord] [dirlist.list[a]]];
-	while (*x != FLAG && (test = check(coord[*x], turn)) == 2)
+	x = gPreCalc.moves[kcoord] [gPreCalc.dir[kcoord] [dirlist.list[a]]];
+	while ((test = CHECK(coord[*x], turn)) == 2)
 	    x++;
-	if (*x == FLAG || test) continue; /* pinned piece must be friend. */
+	if (test) continue; /* pinned piece must be friend. */
 	i = *x; /* location of poss. pinned piece */
 
 	/* a nopose() check might be easier here, but probably take longer to
 	   find an actual pin. */
 	do {
 	    x++; /* find next occ'd space */
-	} while (*x != FLAG && (test = check(coord[*x], turn)) == 2);
-	if (*x == FLAG || test != 1) continue;	/* has to be enemy piece */
-	odd = board->dir[kcoord] [dirlist.list[a]] & 1;
-	if ((test = tolower(coord[*x])) != 'q' &&
-	    !(odd && test == 'r') &&
-	    (odd || test != 'b') /* only possibility left */)
-	    continue;	/* not right kind */
+	} while ((test = CHECK(coord[*x], turn)) == 2);
+	if (test != 1) continue;	/* has to be enemy piece */
+	odd = gPreCalc.dir[kcoord] [dirlist.list[a]] & 1;
+
+	if ((odd && !ATTACKROOK(coord[*x])) ||
+	    (!odd && !ATTACKBISHOP(coord[*x])))
+	    continue;	/* not right kind of attacking piece. */
 	/* by process of elimination, we have pinned piece. */
-	pinlist->c[i] = board->dir[kcoord] [dirlist.list[a]] & 3;
+	pinlist->c[i] = gPreCalc.dir[kcoord] [dirlist.list[a]] & 3;
 	/* set pintype */
         /* cprintf("pn:%c%c", File(i) + 'a',	Rank(i) + '1'); */
     }
 }
 
 
-static int findcoord(struct srclist *attlist, int targ)
-/* Given a gendclist()-style (2-tuple) 'attlist',
-   returns FLAG if targ not found in attlist, otherwise the checking piece
-   (stored after targ by gendclist(). */
+static int nopose(BoardT *board, int src, int dest, int hole)
+/* checks to see if there are any occupied squares between src and dest.
+   returns: 0 if blocked, 1 if nopose.  Note:  doesn't check if dir == DIRFLAG
+   (none) or 8 (knight attack), so shouldn't be called in that case. */
 {
-    int i;
-    for (i = 0; i < attlist->lgh; i += 2)
-	if (attlist->list[i] == targ)
-	    return attlist->list[i + 1];
-    return FLAG;
+    int dir = gPreCalc.dir[src] [dest];
+    uint8 *to = gPreCalc.moves[src] [dir];
+    while (*to != dest)
+    {
+	if (board->coord[*to] && *to != hole)
+	    /* hole is used to extend attacks along checking ray in
+	       attacked().  In this case it's our friendly kcoord.
+	       Usually, it should be FLAG. */
+	    return 0;	/* some sq on the way to dest is occ'd. */
+	to++;
+    }
+    return 1;	/* notice we always hit dest before we hit end o' list. */
 }
 
 
@@ -103,20 +116,22 @@ static int attacked(struct srclist *attlist, BoardT *board, int from, int turn,
 		    int onwho, int stp)
 {
     int j, toind;
-    int mask = (onwho ^ 1) << 5;
-    int ekcoord = board->playlist['K' | mask].list[0];
-    int kcoord = board->playlist['K' | (onwho << 5)].list[0];
+    int attacker = onwho ^ 1;
+    int kcoord = board->playlist[KING | onwho].list[0];
+    int ekcoord = board->playlist[KING | attacker].list[0];
     uint8 to;
     struct srclist dirlist;
-    char *coord = board->coord;
+    uint8 *coord;
     attlist->lgh = 0;
+
     /* check knight attack */
-    for (j = 0; j < board->playlist['N' | mask].lgh; j++)
-	if (board->dir[from] [board->playlist['N' | mask].list[j]] == 8)
+    for (j = 0; j < board->playlist[NIGHT | attacker].lgh; j++)
+	if (gPreCalc.dir[from] [board->playlist[NIGHT | attacker].list[j]]
+	    == 8)
 	{
 	    if (stp)
 		return 1;
-	    else addsrccoord(attlist, board->playlist['N' | mask].list[j]);
+	    addsrccoord(attlist, board->playlist[NIGHT | attacker].list[j]);
 	}
 
     /* check sliding attack */
@@ -127,37 +142,38 @@ static int attacked(struct srclist *attlist, BoardT *board, int from, int turn,
 	{
 	    if (stp)
 		return 1;
-	    else
-		addsrccoord(attlist, dirlist.list[j]);
+	    addsrccoord(attlist, dirlist.list[j]);
 	}
+
     /* check king attack, but *only* in the case of *enemy* attack */
     /* (we already find possible king moves in kingmove()). */
-    if (turn == onwho)
+    if (turn == onwho &&
+	Abs(Rank(ekcoord) - Rank(from)) < 2 &&
+	Abs(File(ekcoord) - File(from)) < 2)
     {
-	if (Abs(Rank(ekcoord) - Rank(from)) < 2 &&
-	    Abs(File(ekcoord) - File(from)) < 2)
-	    return 1; /* king can never doublecheck. */
+	return 1; /* king can never doublecheck. */
     }
+
+    coord = board->coord; // shorthand.
 
     /* check pawn attack... */
     toind = (onwho << 2) + 1;
-    to = *(board->moves[from] [toind]);
+    to = *(gPreCalc.moves[from] [toind]);
     /* if attacked square unnoc'd, and *friend* attack, want pawn advances. */
-    if (turn != onwho && check(coord[from], onwho) == 2)
+    if (turn != onwho && CHECK(coord[from], onwho) == 2)
     {
-	if (to != FLAG && check(coord[to], onwho) == 1 &&
-	    tolower(coord[to]) == 'p') /* pawn ahead */
+	if (to != FLAG && CHECK(coord[to], onwho) == 1 &&
+	    ISPAWN(coord[to])) /* pawn ahead */
 	{
 	    if (stp)
 		return 1;
 	    else addsrccoord(attlist, to);
 	}
 	/* now try e2e4 moves. */
-	if (Rank(from) == 4 - onwho && check(coord[to], onwho) == 2)
+	if (Rank(from) == 4 - onwho && CHECK(coord[to], onwho) == 2)
 	{
-	    if (check(coord[(to = *(board->moves[from] [toind] + 1))], onwho)
-		== 1 &&
-		tolower(coord[to]) == 'p')
+	    to = *(gPreCalc.moves[from] [toind] + 1);
+	    if (CHECK(coord[to], onwho)	== 1 &&	ISPAWN(coord[to]))
 	    {
 		if (stp)
 		    return 1;
@@ -170,9 +186,9 @@ static int attacked(struct srclist *attlist, BoardT *board, int from, int turn,
 	toind = onwho << 2;
 	do
 	{
-	    to = *(board->moves[from] [toind]);
-	    if (to != FLAG && check(coord[to], onwho) == 1 &&
-		tolower(coord[to]) == 'p') /* enemy on diag */
+	    to = *(gPreCalc.moves[from] [toind]);
+	    if (to != FLAG && CHECK(coord[to], onwho) == 1 &&
+		ISPAWN(coord[to])) /* enemy on diag */
 	    {
 		if (stp)
 		    return 1;
@@ -183,8 +199,8 @@ static int attacked(struct srclist *attlist, BoardT *board, int from, int turn,
 	} while (toind & 2);
 	if (from == board->ebyte) /* have to include en passant */
 	    for (j = -1; j < 2; j += 2)
-		if (check(coord[from + j], onwho) == 1 &&
-		    tolower(coord[from + j]) == 'p' &&
+		if (CHECK(coord[from + j], onwho) == 1 &&
+		    ISPAWN(coord[from + j]) &&
 		    Rank(from) == Rank(from+j))
 		    /* operates on principle that if we check for *our*
 		       attacks, then we want every one. */
@@ -194,88 +210,153 @@ static int attacked(struct srclist *attlist, BoardT *board, int from, int turn,
 }
 
 
+/* These need -O2 to win, probably. */
+#define NIGHTCHK(board, to, ekcoord) \
+    (gPreCalc.dir[to] [ekcoord] == 8 ? (to) : FLAG)
+
+#define QUEENCHK(board, to, from, ekcoord) \
+    (gPreCalc.dir[to] [ekcoord] < 8 && \
+     nopose(board, to, ekcoord, from) ? (to) : FLAG)
+
+#define BISHOPCHK(board, to, from, ekcoord) \
+    (!((gPreCalc.dir[to] [ekcoord]) & 1) && \
+     gPreCalc.dir[to] [ekcoord] < 8 && \
+     nopose(board, to, ekcoord, from) ? (to) : FLAG)
+
+#define ROOKCHK(board, to, from, ekcoord) \
+    (((gPreCalc.dir[to] [ekcoord]) & 1) && \
+     gPreCalc.dir[to] [ekcoord] != DIRFLAG && \
+     nopose(board, to, ekcoord, from) ? (to) : FLAG)
+
+#define PAWNCHK(board, to, ekcoord, turn) \
+    (Abs(File(ekcoord) - File(to)) == 1 && \
+     Rank(to) - Rank(ekcoord) == ((turn) << 1) - 1 ? (to) : FLAG)
+
+#define CALCDC(board, dc, from, to) \
+    ((dc) == FLAG ? FLAG : \
+     gPreCalc.dir[from] [dc] == gPreCalc.dir[to] [dc] ? FLAG : \
+     (dc))
+
+/* optimization thoughts:
+   -- change mvlist structure to get rid of memcpy() (separate insert list)
+      ... although the compiler at -O2 probably inlines the memcpy().
+      (... treating as comstr[] as int loses slightly, with all the shifting
+      ops???)
+   -- there may be room for further optimization here during quiescing, because
+      all our moves are "preferred".
+*/
+
 /* unconditional add.  Better watch... */
-static void addmove(struct mlist *mvlist, BoardT *board, int from, int to,
-		    int promote, int dc)
+static void addmove(MoveListT *mvlist, BoardT *board, int from, int to,
+		    int dc, int chk)
 {
     uint8 *comstr;
-    int chk, chkpiece, dir;
-    int ekcoord = board->playlist['K' | (!(board->ply & 1) << 5)].list[0];
 
-    /* now see if moving piece actually does any checking. */
-    if (tolower(board->coord[from]) == 'k' && Abs(to - from) == 2)
-	/* castling manuever. !@#$% special case */
-    {
-	dir = board->dir[(to + from) >> 1] [ekcoord];
-	chk = ((dir & 1) && dir != DIRFLAG &&
-	       nopose(board, (to + from) >> 1, ekcoord, FLAG)) ?
-	    (to + from) >> 1 : FLAG;
-    }
-    else
-    {
-	chkpiece = promote ? promote : board->coord[from];
-	dir = board->dir[to] [ekcoord];
-	switch(tolower(chkpiece))
-	{
-	case 'n':
-	    chk = dir == 8 ? to : FLAG;
-	    break;
-	case 'q':
-	    chk = dir != DIRFLAG && dir < 8 &&
-		nopose(board, to, ekcoord, from) ? to : FLAG;
-	    break;
-	case 'b':
-	    chk = !(dir & 1) && dir < 8 &&
-		nopose(board, to, ekcoord, from) ? to : FLAG;
-	    break;
-	case 'r': chk = (dir & 1) && dir != DIRFLAG &&
-		      nopose(board, to,	ekcoord, from) ? to : FLAG;
-	    break;
-	case 'p': chk = Abs(File(ekcoord) - File(to)) == 1 &&
-		      Rank(to) - Rank(ekcoord) == ((board->ply & 1)
-						   << 1) - 1 ? to : FLAG;
-	    break;
-	default : chk = FLAG; /* ie, king. */
-	}
-    }
-    if (board->coord[to] || promote || dc != FLAG || chk != FLAG ||
+    if (board->coord[to] || dc != FLAG || chk != FLAG ||
 	(board->level - board->depth > 1 &&
 	 Abs(board->hist[board->ply & 1] [from] [to]
 	     - board->ply) < board->hiswin))
-	/* capture or promo or history move w/ depth or check?  Want good
+	/* capture, promo, check, or history move w/ depth?  Want good
 	   spot. */
-	/* Should change when/if we add mobility func. */
     {
-	memcpy(mvlist->list[(mvlist->lgh)++],
-	       mvlist->list[mvlist->insrt], 4);
-	comstr = mvlist->list[(mvlist->insrt)++];
+	memcpy(mvlist->list[mvlist->lgh++],
+	       (comstr = mvlist->list[mvlist->insrt++]), 4);
     }
     else comstr = mvlist->list[(mvlist->lgh)++];
     comstr[0] = from; /* translate to command */
     comstr[1] = to;
-    comstr[2] = promote;
-    comstr[3] = chk == FLAG ? dc :
-	dc == FLAG ? chk : DISCHKFLAG;
+    comstr[2] = 0;
+    comstr[3] = dc == FLAG ? chk :
+	chk == FLAG ? dc : DISCHKFLAG;
     /* actually follows FLAG:coord:DISCHKFLAG convention.
        Read: no check, check, doublecheck. */
 }
 
 
-static void promo(struct mlist *mvlist, BoardT *board, int from, int to,
-		  int turn, int dc)
-/* an alias for multiple add w/promo.  ASCII-dependent. */
+static void addmovePromote(MoveListT *mvlist, BoardT *board, int from,
+			   int to, int promote, int dc, int chk)
 {
-    int mask = turn << 5;
-    addmove(mvlist, board, from, to, (int) 'Q' | mask, dc);
-    addmove(mvlist, board, from, to, (int) 'N' | mask, dc);
-    addmove(mvlist, board, from, to, (int) 'R' | mask, dc);
-    addmove(mvlist, board, from, to, (int) 'B' | mask, dc);
+    uint8 *comstr;
+
+    if (board->coord[to] || promote || dc != FLAG || chk != FLAG ||
+	(board->level - board->depth > 1 &&
+	 Abs(board->hist[board->ply & 1] [from] [to]
+	     - board->ply) < board->hiswin))
+	/* capture, promo, check, or history move w/ depth?  Want good
+	   spot. */
+    {
+	memcpy(mvlist->list[mvlist->lgh++],
+	       (comstr = mvlist->list[mvlist->insrt++]), 4);
+    }
+    else comstr = mvlist->list[(mvlist->lgh)++];
+    comstr[0] = from; /* translate to command */
+    comstr[1] = to;
+    comstr[2] = promote;
+    comstr[3] = dc == FLAG ? chk :
+	chk == FLAG ? dc : DISCHKFLAG;
+    /* actually follows FLAG:coord:DISCHKFLAG convention.
+       Read: no check, check, doublecheck. */
 }
 
 
-static void cappose(struct mlist *mvlist, BoardT *board, uint8 attcoord,
-		    union plist *pinlist, int turn, uint8 kcoord,
-		    struct srclist *dclist)
+static void addmoveCalcChk(MoveListT *mvlist, BoardT *board, int from,
+			   int to, int promote, int dc)
+{
+    int chk, chkpiece;
+    int ekcoord = mvlist->ekcoord;
+
+    /* See if moving piece actually does any checking. */
+    if (ISKING(board->coord[from]) &&
+	((to - from) & 0x3) == 2 /* slower:  Abs(to - from) == 2 */)
+	/* castling manuever. !@#$% special case */
+    {
+	chk = ROOKCHK(board, (to + from) >> 1, from, ekcoord);
+    }
+    else
+    {
+	chkpiece = promote ? promote : board->coord[from];
+	switch(chkpiece | 1)
+	{
+	case BNIGHT:
+	    chk = NIGHTCHK(board, to, ekcoord);
+	    break;
+	case BQUEEN:
+	    chk = QUEENCHK(board, to, from, ekcoord);
+	    break;
+	case BBISHOP:
+	    chk = BISHOPCHK(board, to, from, ekcoord);
+	    break;
+	case BROOK:
+	    chk = ROOKCHK(board, to, from, ekcoord);
+	    break;
+	case BPAWN:
+	    chk = PAWNCHK(board, to, ekcoord, board->ply & 1);
+	    break;
+	default : chk = FLAG; /* ie, king. */
+	}
+    }
+    addmovePromote(mvlist, board, from, to, promote, dc, chk);
+}
+
+
+static void promo(MoveListT *mvlist, BoardT *board, int from, int to,
+		  int turn, int dc)
+/* an alias for multiple add w/promo. */
+{
+    addmovePromote(mvlist, board, from, to, QUEEN | turn, dc,
+		   QUEENCHK(board, to, from, mvlist->ekcoord));
+    addmovePromote(mvlist, board, from, to, NIGHT | turn, dc,
+		   NIGHTCHK(board, to, mvlist->ekcoord));
+    addmovePromote(mvlist, board, from, to, ROOK | turn, dc,
+		   ROOKCHK(board, to, from, mvlist->ekcoord));
+    addmovePromote(mvlist, board, from, to, BISHOP | turn, dc,
+		   BISHOPCHK(board, to, from, mvlist->ekcoord));
+}
+
+
+static void cappose(MoveListT *mvlist, BoardT *board, uint8 attcoord,
+		    PListT *pinlist, int turn, uint8 kcoord,
+		    PListT *dclist)
 /* king in check by one piece.  Find moves that capture or interpose. */
 {
     char *j;
@@ -283,7 +364,8 @@ static void cappose(struct mlist *mvlist, BoardT *board, uint8 attcoord,
     struct srclist attlist;
     uint8 src, dest;
     int dc;
-    j = board->moves[attcoord] [board->dir[attcoord] [kcoord]];
+    int enpass;
+    j = gPreCalc.moves[attcoord] [gPreCalc.dir[attcoord] [kcoord]];
 
     while(attcoord != kcoord)
     {
@@ -296,30 +378,33 @@ static void cappose(struct mlist *mvlist, BoardT *board, uint8 attcoord,
 	{
 	    src = attlist.list[i];
 	    dest = attcoord;
-	    if (tolower(board->coord[src]) == 'p' &&
+	    enpass = 0;
+	    if (ISPAWN(board->coord[src]) &&
 		Rank(src) == Rank(attcoord)) 	/* spec case: en passant */
-		dest += (-2*turn+1) << 3;
+	    {
+		assert(dest == board->ebyte);
+		enpass = board->coord[dest];
+		dest += (-2 * turn + 1) << 3;
+	    }
 
 	    /* cprintf("Trying %c%c%c%c ", File(src) + 'a', Rank(src) + '1',
 	       File(dest) + 'a', Rank(dest) + '1'); */
 	    pintype = pinlist->c[src];
-	    if (pintype < 0 ||
+	    if (pintype == FLAG ||
 		/* pinned knights simply cannot move. */
-		(tolower(board->coord[src]) != 'n' &&
-		 pintype == (board->dir[src] [dest] & 3)))
+		(!ISNIGHT(board->coord[src]) &&
+		 pintype == (gPreCalc.dir[src] [dest] & 3)))
 		/* check pin. */
 	    {
-		dc = findcoord(dclist, src);
-		if (dc != FLAG && board->dir[src] [dc] ==
-		    board->dir[dest] [dc])
-		    dc = FLAG;
-		if (tolower(board->coord[src]) == 'p' &&
+		dc = dclist->c[src];
+		dc = CALCDC(board, dc, src, dest);
+		if (ISPAWN(board->coord[src]) &&
 		    (dest < 8 || dest > 55))
 		    promo(mvlist, board, src, dest, turn, dc);
-		else addmove(mvlist, board, src, dest, 0, dc);
+		else addmoveCalcChk(mvlist, board, src, dest, enpass, dc);
 	    }
 	}
-	if (tolower(board->coord[attcoord]) == 'n')
+	if (ISNIGHT(board->coord[attcoord]))
 	    break; /* can't attack interposing squares in n's case. */
 	attcoord = *j;
 	j++;  /* get next interposing place. */
@@ -327,115 +412,141 @@ static void cappose(struct mlist *mvlist, BoardT *board, uint8 attcoord,
 }
 
 
-static void gendclist(BoardT *board, struct srclist *dclist, int ekcoord,
+static void gendclist(BoardT *board, PListT *dclist, int ekcoord,
 		      int turn)
-/* generates a list 'dclist' containing (all possible) 2-tuples consisting of:
-   -- the source coordinate of a piece capable of giving discovered check
-   -- the source coordinate of the corresponding checking piece.
+/* fills in dclist.  Each coordinate, if !FLAG, is a piece capable of giving
+   discovered check, and its value is the source coordinate of the
+   corresponding checking piece.
 */
 {
-    int a, test;
+    int i, test;
     struct srclist attlist;
     uint8 *x;
-    dclist->lgh = 0;	/* reset list. */
+
+    for (i = 0; i < 8; i++)
+	dclist->ll[i] = FLAG64;
+
     /* generate our sliding attacks on enemy king. */
     genslide(board, &attlist, ekcoord, turn ^ 1);
     /* check the possible dirs for a discovered check piece. */
-    for (a = 0; a < attlist.lgh; a++)
+    for (i = 0; i < attlist.lgh; i++)
     {
-	x = board->moves[attlist.list[a]]
-	    [board->dir[attlist.list[a]] [ekcoord]];
-	while ((test = check(board->coord[*x], turn)) == 2)
+	x = gPreCalc.moves[attlist.list[i]]
+	    [gPreCalc.dir[attlist.list[i]] [ekcoord]];
+	while ((test = CHECK(board->coord[*x], turn)) == 2)
 	    x++;
 	if (test) continue; /* dc piece must be friend. */
 	if (nopose(board, *x, ekcoord, FLAG)) /* yes, it is a dc piece */
 	{
-	    addsrccoord(dclist, *x);
-	    addsrccoord(dclist, attlist.list[a]);
+	    dclist->c[*x] = attlist.list[i];
 	}
     }
 }
 
 
-static void nightmove(struct mlist *mvlist, BoardT *board, int from, int turn,
+static void nightmove(MoveListT *mvlist, BoardT *board, int from, int turn,
 		      int pintype, int dc)
 {
-    uint8 *moves = board->moves[from] [8];
+    uint8 *moves = gPreCalc.moves[from] [8 + turn];
+    int chk;
 
-    if (pintype > -1)
+    if (pintype != FLAG)
 	return;	/* no way we can move w/out checking king. */
 
     for (; *moves != FLAG; moves++)
     {
-	if (check(board->coord[*moves], turn) > 0)
-	    addmove(mvlist, board, from, *moves, 0, dc);
+	if ((chk = CHECK(board->coord[*moves], turn)) == 1 ||
+	    (chk == 2 && !mvlist->capOnly))
+	    addmove(mvlist, board, from, *moves, dc,
+		    NIGHTCHK(board, *moves, mvlist->ekcoord));
     }
 }
 
 
 /* probes sliding moves.  Piece should not be pinned in this direction. */
-static void probe(struct mlist *mvlist, BoardT *board, uint8 *moves,
-		  int from, int turn, int dc)
+static inline void probe(MoveListT *mvlist, BoardT *board, uint8 *moves,
+			 int from, int turn, int dc, int mypiece)
 {
     int i;
     for (; *moves != FLAG; moves++)
     {
-	if ((i = check(board->coord[*moves], turn)) > 0)
+	if ((i = CHECK(board->coord[*moves], turn)) == 1 ||
+	    (i == 2 && !mvlist->capOnly))
 	    /* enemy or unoccupied */
-	    addmove(mvlist, board, from, *moves, 0, dc);
+	    addmove(mvlist, board, from, *moves, dc,
+		    (mypiece == BQUEEN ?
+		     QUEENCHK(board, *moves, from, mvlist->ekcoord) :
+		     mypiece == BBISHOP ?
+		     BISHOPCHK(board, *moves, from, mvlist->ekcoord) :
+		     ROOKCHK(board, *moves, from, mvlist->ekcoord)));
 	if (i < 2) /* Occupied.  Can't probe further. */
 	    break;
     }
 }
 
 
-static void brmove(struct mlist *mvlist, BoardT *board, int from, int turn,
-		   int pintype, int start, int dc)
+static void brmove(MoveListT *mvlist, BoardT *board, int from, int turn,
+		   int pintype, const int *dirs, int dc)
 {
-    while (start < 8)
+    int mypiece = board->coord[from] | 1;
+    do
     {
-	if (pintype < 0 || pintype == (start & 3))
+	if (pintype == FLAG || pintype == ((*dirs) & 3))
 	    /* piece pinned in this dir, or not pinned */
-	    probe(mvlist, board, board->moves[from] [start], from, turn, dc);
-	start += 2;
-    }
+	    probe(mvlist, board, gPreCalc.moves[from] [*dirs], from, turn, dc,
+		  mypiece);
+    } while (*(++dirs) != FLAG);
 }
 
 
-static void kingmove(struct mlist *mvlist, BoardT *board, int from, int turn,
+static void kingmove(MoveListT *mvlist, BoardT *board, int from, int turn,
 		     int dc)
 {
-    int i;
+    const int *idx;
+    int chk;
     uint8 to;
     struct srclist attlist; /* filler */
-    char *coord = board->coord;
+    uint8 *coord = board->coord;
 
-    for (i = 0; i < 8; i++)
+    static const int preferredKDirs[2] [9] =
+	/* prefer increase rank for White... after that, favor center,
+	   queenside, and kingside moves, in that order.  Similar for Black,
+	   but decrease rank.
+	*/
+	{{1, 0, 2, 7, 3, 5, 6, 4, FLAG},
+	 {5, 6, 4, 7, 3, 1, 0, 2, FLAG}};
+
+    if (board->ncheck[turn] == FLAG)
     {
-	to = *(board->moves[from] [i]);
-	if (to != FLAG &&
-	    check(coord[to], turn) > 0 &&
-	    !attacked(&attlist, board, to, turn, turn, 1))
-	    addmove(mvlist, board, from, to, 0,
-		    dc == FLAG ? FLAG :
-		    board->dir[from] [dc] == board->dir[to] [dc] ? FLAG :
-		    dc);
+	/* check for kingside castle */
+	if (((board->cbyte >> turn) & 1) &&
+	    !coord[from + 1] && !coord[from + 2] &&
+	    !attacked(&attlist, board, from + 1, turn, turn, 1) &&
+	    !attacked(&attlist, board, from + 2, turn, turn, 1))
+	    addmove(mvlist, board, from, from + 2, FLAG,
+		    ROOKCHK(board, from + 1, from, mvlist->ekcoord));
+	/* check queenside castle */
+	if (((board->cbyte >> (turn + 2)) & 1) &&
+	    !coord[from - 1] && !coord[from - 2] && !coord[from - 3] &&
+	    !attacked(&attlist, board, from - 1, turn, turn, 1) &&
+	    !attacked(&attlist, board, from - 2, turn, turn, 1))
+	    addmove(mvlist, board, from, from - 2, FLAG,
+		    ROOKCHK(board, from - 1, from, mvlist->ekcoord));
     }
-    /* check for kingside castle */
-    if ((board->cbyte >> (6 - (turn << 1))) & 1 && !coord[from + 1] &&
-	!coord[from + 2] &&
-	!attacked(&attlist, board, from + 2, turn, turn, 1) &&
-	!attacked(&attlist, board, from + 1, turn, turn, 1) &&
-	!attacked(&attlist, board, from, turn, turn, 1)
-	/* not in check */ )
-	addmove(mvlist, board, from, from + 2, 0, FLAG);
-    /* check queenside castle */
-    if ((board->cbyte >> (7 - (turn << 1))) & 1 && !coord[from - 1] &&
-	!coord[from - 2] && !coord[from - 3] &&
-	!attacked(&attlist, board, from - 1, turn, turn, 1) &&
-	!attacked(&attlist, board, from - 2, turn, turn, 1) &&
-	!attacked(&attlist, board, from, turn, turn, 1))
-	addmove(mvlist, board, from, from - 2, 0, FLAG);
+
+    for (idx = preferredKDirs[turn]; *idx != FLAG; idx++)
+    {
+	to = *(gPreCalc.moves[from] [*idx]);
+	if (to != FLAG &&
+	    ((chk = CHECK(coord[to], turn)) == 1 ||
+	     (chk == 2 && !mvlist->capOnly)) &&
+	    /* I could optimize a few of these calls out if I already
+	       did this while figuring out the castling moves. */
+	    !attacked(&attlist, board, to, turn, turn, 1))
+	    addmove(mvlist, board, from, to,
+		    CALCDC(board, dc, from, to),
+		    FLAG);
+    }
 }
 
 
@@ -443,13 +554,13 @@ static void kingmove(struct mlist *mvlist, BoardT *board, int from, int turn,
 static int enpassdc(BoardT *board, int capPawnCoord)
 {
     int turn = board->ply & 1;
-    int ekcoord = board->playlist['K' | ((turn ^ 1) << 5)].list[0];
+    int ekcoord = board->playlist[KING | (turn ^ 1)].list[0];
     struct srclist attlist;
     int ebyte = board->ebyte; // shorthand.
     int i;
     int a;
 
-    if (board->dir[ebyte] [ekcoord] < 8 &&
+    if (gPreCalc.dir[ebyte] [ekcoord] < 8 &&
 	nopose(board, ebyte, ekcoord, FLAG))
     {
 	/* This is semi-lazy (we could do something more akin to findpins())
@@ -460,9 +571,11 @@ static int enpassdc(BoardT *board, int capPawnCoord)
 	for (i = 0; i < attlist.lgh; i++)
 	{
 	    a = attlist.list[i];
-	    if (board->dir[a] [ebyte] == board->dir[ebyte] [ekcoord] &&
+	    if (gPreCalc.dir[a] [ebyte] == gPreCalc.dir[ebyte] [ekcoord] &&
 		nopose(board, a, ebyte, capPawnCoord))
+	    {
 		return a;
+	    }
 	}
     }
 
@@ -470,44 +583,52 @@ static int enpassdc(BoardT *board, int capPawnCoord)
 }
 
 
-static void pawnmove(struct mlist *mvlist, BoardT *board, uint8 *moves[],
-		     int from, int turn, int pintype, int dc)
+static void pawnmove(MoveListT *mvlist, BoardT *board, int from, int turn,
+		     int pintype, int dc)
 {
     int toind = (turn << 2);
     int to, to2;
-    char *coord = board->coord;
-    int enpass = 0;
+    uint8 *coord = board->coord;
+    int enpass;
+    uint8 **moves = gPreCalc.moves[from];
+    int mydc;
 
     /* generate captures (if any). */
     do
     {
 	to = *moves[toind];
-	if (to != FLAG && (pintype < 0 || pintype == (toind & 3)))
+	if (to != FLAG && (pintype == FLAG || pintype == (toind & 3)))
 	{
-	    
-	    if (check(coord[to], turn) == 1 /* enemy on diag */ ||
-                /* en passant */
-		(enpass = (to - 8 + (turn << 4) == board->ebyte)))
+	    enpass = (to - 8 + (turn << 4) == board->ebyte);
+	    if (CHECK(coord[to], turn) == 1 /* enemy on diag */ || enpass)
 	    {
 		/* can we promote? */
 		if (to > 55 || to < 8)
 		    promo(mvlist, board, from, to, turn,
-			  dc == FLAG ? FLAG :
-			  board->dir[from] [dc] == board->dir[to] [dc] ?
-			  FLAG : dc);
+			  CALCDC(board, dc, from, to));
 		else
 		{
-		    if (enpass && dc == FLAG)
+		    if (enpass)
 		    {
-			/* with en passant, must take into account check
-			   created when captured pawn was pinned.  Setting 'dc'
-			   is slightly hacky but it works. */
-			dc = enpassdc(board, from);
+			mydc = dc == FLAG ?
+			    /* with en passant, must take into account check
+			       created when captured pawn was pinned.  Setting
+			       'dc' is slightly hacky but it works. */
+			    enpassdc(board, from) :
+			    CALCDC(board, dc, from, to);
+			addmovePromote(mvlist, board, from, to,
+				       board->coord[board->ebyte],
+				       mydc,
+				       PAWNCHK(board, to, mvlist->ekcoord,
+					       turn));
 		    }
-		    addmove(mvlist, board, from, to, 0,
-			    dc == FLAG ? FLAG :
-			    board->dir[from] [dc] == board->dir[to] [dc] ?
-			    FLAG : dc);
+		    else
+		    {
+			/* normal capture. */
+			addmove(mvlist, board, from, to,
+				CALCDC(board, dc, from, to),
+				PAWNCHK(board, to, mvlist->ekcoord, turn));
+		    }
 		}
 	    }
 	}
@@ -517,44 +638,56 @@ static void pawnmove(struct mlist *mvlist, BoardT *board, uint8 *moves[],
     /* generate pawn pushes. */
     toind -= 3;
     to = *moves[toind];
-    if (check(coord[to], turn) == 2 && (pintype < 0 ||
+    if (CHECK(coord[to], turn) == 2 && (pintype == FLAG ||
 					pintype == (toind & 3)))
 	/* space ahead */
     {	/* can we promote? */
 	if (to > 55 || to < 8)
 	    promo(mvlist, board, from, to, turn,
-		  dc == FLAG ? FLAG :
-		  board->dir[from] [dc] == board->dir[to] [dc] ? FLAG :
-		  dc);
-	else
+		  CALCDC(board, dc, from, to));
+	else if (!mvlist->capOnly)
 	{
 	    /* check e2e4-like moves */
 	    if ((from < 16 || from > 47) &&
-		check(coord[(to2 = *(moves[toind]+1))], turn) == 2)
-		addmove(mvlist, board, from, to2, 0,
-			dc == FLAG ? FLAG :
-			board->dir[from] [dc] == board->dir[to2] [dc] ?
-			FLAG : dc);
+		CHECK(coord[(to2 = *(moves[toind]+1))], turn) == 2)
+		addmove(mvlist, board, from, to2,
+			CALCDC(board, dc, from, to2),
+			PAWNCHK(board, to2, mvlist->ekcoord, turn));
 	    /* add e2e3-like moves. */
-	    addmove(mvlist, board, from, to, 0,
-		    dc == FLAG ? FLAG :
-		    board->dir[from] [dc] == board->dir[to] [dc] ? FLAG :
-		    dc);
+	    addmove(mvlist, board, from, to,
+		    CALCDC(board, dc, from, to),
+		    PAWNCHK(board, to, mvlist->ekcoord, turn));
 	}
     }
 }
 
 
-void genmlist(struct mlist *mvlist, BoardT *board, int turn)
+void mlistGenerate(MoveListT *mvlist, BoardT *board, int capOnly)
 {
     int x, i;
-    int mask = turn << 5;
-    struct srclist dclist;
-    union plist pinlist;
-    int kcoord = board->playlist['K' | mask].list[0];
-    int ekcoord = board->playlist['K' | (!turn << 5)].list[0];
+    int turn = board->ply & 1;
+    PListT dclist, pinlist;
+    int kcoord = board->playlist[KING | turn].list[0];
+    int ekcoord = board->playlist[KING | (turn ^ 1)].list[0];
+
     mvlist->lgh = 0;
     mvlist->insrt = 0;
+    mvlist->ekcoord = ekcoord;
+    mvlist->capOnly = capOnly;
+
+    static const int preferredQDirs[2] [9] =
+	/* prefer increase rank for White... after that, favor center,
+	   kingside, and queenside moves, in that order.  Similar for Black,
+	   but decrease rank.
+	*/
+	{{1, 2, 0, 3, 7, 5, 4, 6, FLAG},
+	 {5, 4, 6, 3, 7, 1, 2, 0, FLAG}};
+    static const int preferredBDirs[2] [5] =
+	{{2, 0, 4, 6, FLAG},
+	 {4, 6, 2, 0, FLAG}};
+    static const int preferredRDirs[2] [5] =
+	{{1, 3, 7, 5, FLAG},
+	 {5, 3, 7, 1, FLAG}};
 
     /* generate list of pieces that can potentially give
        discovered check. A very short list. Non-sorted.*/
@@ -574,56 +707,124 @@ void genmlist(struct mlist *mvlist, BoardT *board, int turn)
     {
 	/* we're not in check at this point. */
 	/* generate pawn moves. */
-	for (i = 0; i < board->playlist['P' | mask].lgh; i++)
+	for (i = 0; i < board->playlist[PAWN | turn].lgh; i++)
 	{
-	    x = board->playlist['P' | mask].list[i];
-	    pawnmove(mvlist, board, board->moves[x], x,
-		     turn, pinlist.c[x], findcoord(&dclist, x));
+	    x = board->playlist[PAWN | turn].list[i];
+	    pawnmove(mvlist, board, x, turn, pinlist.c[x], dclist.c[x]);
 	}
 	/* generate queen moves. */
 	/* Note it is never possible for qmove to result in discovered
 	   check.  We can optimize for this. */
-	for (i = 0; i < board->playlist['Q' | mask].lgh; i++)
+	for (i = 0; i < board->playlist[QUEEN | turn].lgh; i++)
 	{
-	    x = board->playlist['Q' | mask].list[i];
-	    brmove(mvlist, board, x, turn, pinlist.c[x], 1, FLAG);
-	    brmove(mvlist, board, x, turn, pinlist.c[x], 0, FLAG);
+	    x = board->playlist[QUEEN | turn].list[i];
+	    brmove(mvlist, board, x, turn, pinlist.c[x], preferredQDirs[turn],
+		   FLAG);
 	}
 	/* generate bishop moves. */
-	for (i = 0; i < board->playlist['B' | mask].lgh; i++)
+	for (i = 0; i < board->playlist[BISHOP | turn].lgh; i++)
 	{
-	    x = board->playlist['B' | mask].list[i];
-	    brmove(mvlist, board, x, turn, pinlist.c[x], 0,
-		   findcoord(&dclist, x));
+	    x = board->playlist[BISHOP | turn].list[i];
+	    brmove(mvlist, board, x, turn, pinlist.c[x], preferredBDirs[turn],
+		   dclist.c[x]);
 	}
 	/* generate night moves. */
-	for (i = 0; i < board->playlist['N' | mask].lgh; i++)
+	for (i = 0; i < board->playlist[NIGHT | turn].lgh; i++)
 	{
-	    x = board->playlist['N' | mask].list[i];
+	    x = board->playlist[NIGHT | turn].list[i];
 	    nightmove(mvlist, board, x, turn, pinlist.c[x],
-		      findcoord(&dclist, x));
+		      dclist.c[x]);
 	}
 	/* generate rook moves. */
-	for (i = 0; i < board->playlist['R' | mask].lgh; i++)
+	for (i = 0; i < board->playlist[ROOK | turn].lgh; i++)
 	{
-	    x = board->playlist['R' | mask].list[i];
-	    brmove(mvlist, board, x, turn, pinlist.c[x], 1,
-		   findcoord(&dclist, x));
+	    x = board->playlist[ROOK | turn].list[i];
+	    brmove(mvlist, board, x, turn, pinlist.c[x], preferredRDirs[turn],
+		   dclist.c[x]);
 	}
     } /* end 'no check' else */
 
     /* generate valid king moves. */
-    kingmove(mvlist, board, kcoord, turn, findcoord(&dclist, kcoord));
+    kingmove(mvlist, board, kcoord, turn, dclist.c[kcoord]);
 
     /* Selection Sorting the captures does no good, empirically. */
     /* But probably will do good when we extend captures. */
 }
 
 
-int check(char piece, int turn)
-/* returns 0 if friend, 1 if enemy, 2 if unoccupied */
-/* White's turn = 0. Black's is 1. */
-/* ASCII-dependent. */
+/* Force 'comstr' as first move in 'mvlist'.  Does not need to be fast. */
+void mlistFirstMove(MoveListT *mvlist, BoardT *board, uint8 *comstr)
 {
-    return !piece ? 2 : (((piece >> 5) & 1) != turn);
+    int i;
+
+    /* Find the move in question. */
+    for (i = 0; i < mvlist->lgh; i++)
+    {
+	if (!memcmp(mvlist->list[i], comstr, 4))
+	{
+	    break;
+	}
+	if (!memcmp(mvlist->list[i], comstr, 2))
+	{
+	    LOG_DEBUG("similar move: %d, %d %d vs %d(%c) %d\n",
+		      i,
+		      mvlist->list[i] [2], mvlist->list[i] [3],
+		      comstr[2], comstr[2], comstr[3]);
+	}
+    }
+
+    if (i >= mvlist->lgh)
+    {
+	LOG_EMERG("Missing move!: ebyte %d, move ", board->ebyte);
+	LogMove(eLogEmerg, board, comstr);
+	assert(0);
+    }
+
+    if (i >= mvlist->insrt)
+    {
+	mvlist->insrt++; /* count this as a 'cool' move */
+    }
+
+    /* move the rest of the moves out of the way... */
+    for (; i > 0; i--)
+    {
+	memcpy(mvlist->list[i], mvlist->list[i - 1], 4);
+    }
+
+    /* ... and replace the first move. */
+    memcpy(mvlist->list[i], comstr, 4);
+}
+
+
+void mlistSortByCap(MoveListT *mvlist, BoardT *board)
+{
+    int i, j, besti;
+    int maxWorth, myWorth;
+    uint8 comstr[4];
+
+    /* perform selection sort (by capture worth).  I don't bother caching
+       capture worth, but if it shows up badly on gprof I can try it. */
+    for (i = 0; i < mvlist->insrt - 1; i++)
+    {
+	/* find the best-worth move... */
+	for (j = i, besti = i, maxWorth = 0;
+	     j < mvlist->insrt;
+	     j++)
+	{
+	    myWorth = calcCapWorth(board, mvlist->list[j]);
+	    if (myWorth > maxWorth)
+	    {
+		maxWorth = myWorth;
+		besti = j;
+	    }
+	}
+
+	/* ... and if it's not the first move, swap w/it. */
+	if (besti != i)
+	{
+	    memcpy(comstr, mvlist->list[i], 4);
+	    memcpy(mvlist->list[i], mvlist->list[besti], 4);
+	    memcpy(mvlist->list[besti], comstr, 4);
+	}
+    }
 }
