@@ -1,7 +1,49 @@
-#include <stddef.h> /* NULL */
+/***************************************************************************
+                   makemov.c - make/unmake a move on BoardT
+                             -------------------
+    copyright            : (C) 2007 by Lucian Landry
+    email                : lucian_b_landry@yahoo.com
+ ***************************************************************************/
+
+/***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU Library General Public License as       *
+ *   published by the Free Software Foundation; either version 2 of the    *
+ *   License, or (at your option) any later version.                       *
+ *                                                                         *
+ ***************************************************************************/
+
+
+#include <stddef.h> // NULL
+#include <time.h>   // time(2)
 #include "ref.h"
 
-static void newcbyte(BoardT *board)
+
+void addpiece(BoardT *board, uint8 piece, int coord)
+{
+    board->playptr[coord] =
+	&board->playlist[piece].list[board->playlist[piece].lgh++];
+    *board->playptr[coord] = coord;
+    board->totalStrgh += WORTH(piece);
+    board->playerStrgh[piece & 1] += WORTH(piece);
+}
+
+
+void delpiece(BoardT *board, uint8 piece, int coord)
+{
+    board->playerStrgh[piece & 1] -= WORTH(piece);
+    board->totalStrgh -= WORTH(piece);
+
+    /* change coord in playlist and dec playlist lgh. */
+    *board->playptr[coord] = board->playlist[piece].list
+	[--board->playlist[piece].lgh];
+    /* set the end playptr. */
+    board->playptr[*board->playptr[coord]] = board->playptr[coord];
+}
+
+
+void newcbyte(BoardT *board)
 /* updates castle status. */
 {
     uint8 *coord = board->coord;
@@ -28,6 +70,9 @@ static void newcbyte(BoardT *board)
     }
 }
 
+
+/* Bitboard.  Defines the castling bits we care about. */
+#define CASTLEBB 0x9100000000000091LL
 
 void makemove(BoardT *board, uint8 comstr[], UnMakeT *unmake)
 {
@@ -99,7 +144,10 @@ void makemove(BoardT *board, uint8 comstr[], UnMakeT *unmake)
     }
     COORDUPDATEZ(board, comstr[0], 0);
 
-    newcbyte(board); /* update castle status. */
+#if 0 /* not a win on x86-32, at least. */
+    if ((((1LL << comstr[0]) | (1LL << comstr[1])) & CASTLEBB))
+#endif
+	newcbyte(board); /* update castle status. */
 
     /* update en passant status */
     newebyte = Abs(comstr[1] - comstr[0]) == 16 &&
@@ -118,7 +166,7 @@ void makemove(BoardT *board, uint8 comstr[], UnMakeT *unmake)
     board->zobrist ^= gPreCalc.zobrist.turn;
     board->ncheck[board->ply & 1] = comstr[3];
 
-    /* concheck(board, "makemove"); */
+    /* concheck(board, "makemove", 1); */
 }
 
 
@@ -199,9 +247,71 @@ void unmakemove(BoardT *board, uint8 comstr[], UnMakeT *unmake)
     }
 
 #if 0
-    if (concheck(board, "unmakemove"))
+    if (concheck(board, "unmakemove", unmake != NULL))
     {
 	LogMove(eLogDebug, board, comstr);
     }
 #endif
+}
+
+
+void commitmove(BoardT *board, uint8 *comstr, ThinkContextT *th,
+		GameStateT *gameState, int declaredDraw)
+{
+    long tmvalue;
+    MoveListT mvlist;
+    int turn;
+
+    /* Give computer a chance to re-evaluate the position, if we insist
+       on changing the board. */
+    gameState->bDone[0] = gameState->bDone[1] = 0;
+
+    if (comstr != NULL)
+    {
+	PositionSave(board);
+	makemove(board, comstr, NULL);
+    }
+    concheck(board, "commitmove", 1);
+
+    turn = board->ply & 1;
+    tmvalue = time(NULL);
+    gUI->boardRefresh(board);
+    gUI->statusDraw(board, tmvalue - gameState->lastTime);
+    gameState->lastTime = tmvalue;
+    mlistGenerate(&mvlist, board, 0);
+
+    if (drawInsufficientMaterial(board))
+    {
+	gUI->notifyDraw("insufficient material");
+	gameState->bDone[turn] = 1;
+    }
+    else if (!mvlist.lgh)
+    {
+	if (board->ncheck[turn] == FLAG)
+	{
+	    gUI->notifyDraw("stalemate");
+	}
+	else
+	{
+	    gUI->notifyCheckmated(turn);
+	}
+	gameState->bDone[turn] = 1;
+    }
+    else if (declaredDraw)
+    {
+	/* Some draws are not automatic, and need to be notified separately. */
+	gameState->bDone[turn] = 1;
+    }
+
+    CopyBoard(&gameState->boardCopy, board);
+
+    if (gameState->control[turn] && !gameState->bDone[turn])
+    {
+	/* Computer needs to make next move; let it do so. */
+	ThinkerThink(th);
+    }
+    else
+    {
+	gUI->notifyReady();
+    }
 }

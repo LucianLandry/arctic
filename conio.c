@@ -388,7 +388,10 @@ int kbhit (void)
    nodelay(conio_scr,TRUE);
    i=wgetch(conio_scr);
    nodelay(conio_scr,FALSE);
-   if (i==-1) i=0;
+   if (i==ERR) i=0;
+#if 1 /* blandry: added */
+   else ungetch(i);
+#endif
    return(i);
 }
 

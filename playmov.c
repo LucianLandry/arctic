@@ -1,12 +1,46 @@
+/***************************************************************************
+             playmov.c - player loop and generic support functions
+                             -------------------
+    copyright            : (C) 2007 by Lucian Landry
+    email                : lucian_b_landry@yahoo.com
+ ***************************************************************************/
+
+/***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU Library General Public License as       *
+ *   published by the Free Software Foundation; either version 2 of the    *
+ *   License, or (at your option) any later version.                       *
+ *                                                                         *
+ ***************************************************************************/
+
+
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
-#include <stdlib.h> /* exit() */
+#include <stdlib.h> /* exit(3) */
 #include <assert.h>
+#include <pthread.h> /* pthread_create(3) */
 #include "ref.h"
 
 
-static char *searchlist(MoveListT *mvlist, char *comstr, int howmany)
+/* (one extra space for \0.) */
+static char gPieceUITable[BQUEEN + 2] = "  KkPpNnBbRrQq";
+
+int nativeToAscii(uint8 piece)
+{
+    return piece > BQUEEN ? ' ' : gPieceUITable[piece];
+}
+
+
+int asciiToNative(uint8 ascii)
+{
+    char *mychr = strchr(gPieceUITable, ascii);
+    return mychr != NULL ? mychr - gPieceUITable : 0;
+}
+
+
+char *searchlist(MoveListT *mvlist, char *comstr, int howmany)
 {
     int i;
     for (i = 0; i < mvlist->lgh; i++)
@@ -16,129 +50,88 @@ static char *searchlist(MoveListT *mvlist, char *comstr, int howmany)
 }
 
 
-/* assumes computer won't be thinking on player's time.  For MS-DOS, I'm
-thinking rerouting interrupts would be required.  For Unix, perhaps processes
-could send signals to each other? */
-/* this particular version also assumes it's player's turn. */
-/* means:  you can't quit or restart when it's computer's turn... :( */
-
-/* this function intended to get player input and adjust variables
- accordingly */
-void playermove(BoardT *board, int *autopass, int control[])
+// Note: Not a full sanity check!  Only intended for sanity checking edited
+// positions.
+int BoardSanityCheck(BoardT *board)
 {
-    char *ptr;
-    uint8 chr;
-    MoveListT movelist;
-    uint8 comstr[80];
-    getopt(comstr);
-    switch(comstr[0])
+    /* There are other tests we can add, when necessary:
+       -- pawn on 1st/8th ranks
+       -- bad ebyte
+       -- bad cbyte
+    */
+    int diff;
+    int i;
+
+    /* Check: pawns must not be on 1st or 8th rank. */
+    for (i = 0; i < 64; i++)
     {
-    case 'Q':    /* bail */
-	UIExit();
-	printf("bye.\n");
-	exit(0);
-	break;
-    case 'P':     /* nada.  Useful for pitting comp against itself. */
-	return;
-    case 'N':     /* new game */
-	newgame(board);
-	return;
-    case 'L':     /* switch computer level */
-	while ((board->level = barf("Set to what level? >") - '0') < 0 ||
-	       board->level > 9)
-	    ;	/* do nothing */
-	return;
-    case 'H':     /* change history window */
-	while ((board->hiswin = barf("Set to x moves (0-9)? >") - '0') < 0 ||
-	       board->hiswin > 9)
-	    ;	/* do nothing */
-	board->hiswin <<= 1;	/* convert moves to plies. */
-	return;
-    case 'W':     /* switch white control */
-	control[0] = !control[0];
-	return;
-    case 'B':     /* black control */
-	control[1] = !control[1];
-	return;
-    case 'A':
-	control[0] = control[1] = 1;
-	*autopass = 1;
-	return;
-    case 'C':     /* change w/b colors */
-	UIPlayerColorChange();
-	return;
-    case 'F':     /* flip board. */
-	UIBoardFlip(board);
-	return;
-    case 'D':     /* change debug logging level. */
-	UISetDebugLoggingLevel();
-	return;
-    case 'S':
-	barf(GameSave(board) < 0 ?
-	     "Game save failed." :
-	     "Game save succeeded.");
-	return;
-    case 'R':
-	if (GameRestore(board) < 0)
+	if (i == 8) i = 56; /* skip to the 8th rank */
+	if (ISPAWN(board->coord[i]))
 	{
-	    barf("Game restore failed.");
+	    gUI->notifyError("Error: Pawn detected on 1st or 8th rank.");
+	    return -1;
 	}
-	else
-	{
-	    barf("Game restore succeeded.");
-	    UIBoardUpdate(board);
-	}
-	return;
-    default:
-	break;
+    }
+    /* Check: only one king (of each color) on board. */
+    if (board->playlist[KING].lgh != 1 ||
+	board->playlist[BKING].lgh != 1)
+    {
+	gUI->notifyError("Error: Need one king of each color.");
+	return -1;
+    }
+    /* Check: the side *not* on move must not be in check. */
+    if (calcNCheck(board, board->playlist[BKING ^ (board->ply & 1)].list[0],
+		   "BoardSanityCheck") != FLAG)
+    {
+	gUI->notifyError("Error: Side not on move is in check.");
+	return -1;
+    }
+    /* Check: Kings must not be adjacent to each other (calcNCheck() does not
+       take this into account). */
+    diff = board->playlist[KING].list[0] - board->playlist[BKING].list[0];
+    if (diff == 1 || diff == 7 || diff == 8 || diff == 9 ||
+	diff == -1 || diff == -7 || diff == -8 || diff == -9)
+    {
+	gUI->notifyError("Error: Side not on move is in check by king.");
+	return -1;
     }
 
-    /* at this point must be a move or request for moves. */
-    /* get valid moves. */
-    mlistGenerate(&movelist, board, 0);
-    if (comstr[0] == 'M')	/* display moves */
-    {
-	UIMovelistShow(&movelist);
-	UIBoardDraw();
-	UITicksDraw();
-	UIBoardUpdate(board);
-     	return;
-    }
+    return 0;
+}
 
-    /* search movelist for comstr */
-    ptr = searchlist(&movelist, comstr, 2);
-    if (ptr != NULL)
-    {
-	/* do we need to promote? */
-	if (ISPAWN(board->coord[comstr[0]]) &&
-	    (comstr[1] > 55 || comstr[1] < 8))
-	{
-	    while ((chr = barf("Promote piece to (q, r, b, n)? >")) != 'q' &&
-		   chr != 'r' && chr != 'b' && chr != 'n')
-		; /* do nothing */
-	    /* convert the answer to board representation. */
-	    switch(chr)
-	    {
-	    case 'q': chr = QUEEN; break;
-	    case 'r': chr = ROOK; break;
-	    case 'b': chr = BISHOP; break;
-	    case 'n': chr = NIGHT; break;
-	    default: assert(0); break;
-	    }
-	    comstr[2] = chr | (board->ply & 1);
 
-	    ptr = searchlist(&movelist, comstr, 3);
-	    assert(ptr != NULL);
-	}
-	else
-	{
-	    comstr[2] = ptr[2];
-	}
-	comstr[3] = ptr[3];
-	SavePosition(board);
-	makemove(board, comstr, NULL);
-    }
-    else barf("Sorry, invalid move.");
-    UIBoardDraw();
-    UIBoardUpdate(board);
+typedef struct {
+    sem_t *mySem;
+    BoardT *board;
+    ThinkContextT *th;
+    SwitcherContextT *sw;
+    GameStateT *gameState;
+} PlayerArgsT;
+
+
+static void playerThread(PlayerArgsT *args)
+{
+    PlayerArgsT myArgs = *args;
+    sem_post(args->mySem);
+
+    myArgs.gameState->playCookie = SwitcherGetCookie(myArgs.sw);
+    while(1)
+    {
+	gUI->playerMove(myArgs.board, myArgs.th, myArgs.sw, myArgs.gameState);
+    }    
+}
+
+void playerThreadInit(BoardT *board, ThinkContextT *th, SwitcherContextT *sw,
+		      GameStateT *gameState)
+{
+    int err;
+    sem_t mySem;
+    PlayerArgsT args = {&mySem, board, th, sw, gameState};
+    pthread_t myThread;
+
+    sem_init(&mySem, 0, 0);
+    err = pthread_create(&myThread, NULL, (PTHREAD_FUNC) playerThread, &args);
+    assert(err == 0);
+    sem_wait(&mySem);
+    sem_destroy(&mySem);
 }

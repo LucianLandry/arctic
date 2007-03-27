@@ -1,10 +1,27 @@
-#include <string.h> /* memcpy() */
-#include <stdlib.h> /* qsort(3), random(3) */
+/***************************************************************************
+              init.c - game initialization (gPreCalc, hash, board)
+                             -------------------
+    copyright            : (C) 2007 by Lucian Landry
+    email                : lucian_b_landry@yahoo.com
+ ***************************************************************************/
+
+/***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU Library General Public License as       *
+ *   published by the Free Software Foundation; either version 2 of the    *
+ *   License, or (at your option) any later version.                       *
+ *                                                                         *
+ ***************************************************************************/
+
+#include <string.h> /* memcpy(), memset() */
+#include <stdlib.h> /* qsort(3), random(3), malloc(3) */
 #include <assert.h>
 #include "ref.h"
 
 GPreCalcT gPreCalc;
 
+HashPositionT *gHash = NULL;
 
 static char gAllNormalMoves[512 /* yes, this is the exact size needed */] =  {
     /* 0 (northwest) direction */
@@ -205,11 +222,11 @@ static int dirf(int from, int to)
 }
 
 
-/* returns 0 if friend, 1 if enemy, 2 if unoccupied */
+/* returns FRIEND, ENEMY, or UNOCCD */
 /* White's turn = 0. Black's is 1. */
 static int checkf(char piece, int turn)
 {
-    return piece < KING ? 2 : (piece & 1) ^ turn;
+    return piece < KING ? UNOCCD : ((piece & 1) ^ turn) << 1;
 }
 
 
@@ -217,11 +234,11 @@ static int worthf(char piece)
 {
     switch(piece | 1)
     {
-    case BPAWN:   return 1;
+    case BPAWN:   return EVAL_PAWN;
     case BBISHOP:
-    case BNIGHT:  return 3;
-    case BROOK:   return 5;
-    case BQUEEN:  return 9;
+    case BNIGHT:  return EVAL_BISHOP;
+    case BROOK:   return EVAL_ROOK;
+    case BQUEEN:  return EVAL_QUEEN;
     case BKING:   return -1; /*error condition. */
     default:      break;
     }
@@ -229,7 +246,24 @@ static int worthf(char piece)
 }
 
 
-static void rowinit(int d, int start, int finc, int sinc, uint8 *moves[] [10],
+static int distancef(uint8 coord1, uint8 coord2)
+{
+    return abs(Rank(coord1) - Rank(coord2)) +
+	abs(File(coord1) - File(coord2));
+}
+
+
+static int centerDistancef(uint8 coord1)
+{
+    int dist = distancef(coord1, 27);
+    dist = MIN(dist, distancef(coord1, 28));
+    dist = MIN(dist, distancef(coord1, 35));
+    dist = MIN(dist, distancef(coord1, 36));
+    return dist;
+}
+
+
+static void rowinit(int d, int start, int finc, int sinc, uint8 *moves[] [16],
 		    char *ptr)
 {
     int temp, i;
@@ -249,7 +283,7 @@ static void rowinit(int d, int start, int finc, int sinc, uint8 *moves[] [10],
 }
 
 
-static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [10],
+static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [16],
 		     char *ptr)
 {
     int temp, i, j;
@@ -273,9 +307,9 @@ static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [10],
 
 
 /* initialize gPreCalc. */
-void initPreCalc(void)
+void preCalcInit(int numHashEntries)
 {
-    int i, d, j;
+    int i, d, j, num;
     char *ptr = gAllNormalMoves;
 
     /* initialize moves array. */
@@ -308,17 +342,24 @@ void initPreCalc(void)
     }
     assert(ptr = gAllNightMoves + sizeof(gAllNightMoves));
 
-    /* initialize direction array. */
-    for(i = 0; i < 64; i++)
+    /* initialize direction, distance, and centerDistance arrays. */
+    for (i = 0; i < 64; i++)
+    {
         for (j = 0; j < 64; j++)
+	{
             gPreCalc.dir[i] [j] = dirf(i, j);
+	    gPreCalc.distance[i] [j] = distancef(i, j);
+	}
+	gPreCalc.centerDistance[i] = centerDistancef(i);
+    }
+
 
     /* initialize check array. */
-    for (i = 0; i < 2; i++)
+    for (i = 0; i < BQUEEN + 1; i++)
     {
-	for (j = 0; j < BQUEEN + 1; j++)
+	for (j = 0; j < 2; j++)
 	{
-	    gPreCalc.check[i] [j] = checkf(j, i);
+	    gPreCalc.check[i] [j] = checkf(i, j);
 	}
     }
 
@@ -328,20 +369,71 @@ void initPreCalc(void)
 	gPreCalc.worth[i] = worthf(i);
     }
 
+    /* initialize attacks array. */
+    for (i = 0; i < DIRFLAG + 1; i++)
+    {
+	/* (the other elements are static and therefore already '0') */
+	for (j = BISHOP; j < BQUEEN + 1; j++)
+	{
+	    switch(j | 1)
+	    {
+	    case BBISHOP:
+		gPreCalc.attacks[i] [j] = !(i & 0x9);
+		break;
+	    case BROOK:
+		gPreCalc.attacks[i] [j] = i & 1;
+		break;
+	    case BQUEEN:
+		gPreCalc.attacks[i] [j] = i < 8;
+		break;
+	    default:
+		assert(0);
+		break;
+	    }
+	}
+    }
+
+
     /* initialize zobrist hashing. */
     for (i = 0; i < 63; i++)
     {
 	for (j = 0; j < BQUEEN + 1; j++)
 	{
-	    gPreCalc.zobrist.coord[i] [j] = random();
+	    gPreCalc.zobrist.coord[j] [i] = random();
 	}
-	gPreCalc.zobrist.ebyte[i] = random();
+
+	num = random();
+	if (i >= 24 && i < 40)
+	{
+	    /* every (useful) ebyte zobrist needs 5 unique bits.  The least
+	       significant is hardwired to '1' to distinguish this from the
+	       "no enpassant" case. */
+	    num &= ~0x1f0;
+	    num |= (((24 - i) << 5) | 0x10);
+	}
+	gPreCalc.zobrist.ebyte[i] = num;
+	
 	if (i < 16)
 	{
-	    gPreCalc.zobrist.cbyte[i] = random();
+	    num = random();
+	    /* make sure every cbyte zobrist has 4 unique bits. */
+	    num &= ~0xf;
+	    num |= i;
+	    gPreCalc.zobrist.cbyte[i] = num;
 	}
     }
-    gPreCalc.zobrist.turn = random();
+    num = random();
+    /* 'turn' also needs a unique bit. */
+    num |= 0x200;
+    gPreCalc.zobrist.turn = num;
+
+    /* Note: Having 10 unique bits means we need a transposition table
+       at least 2^10 (1024k) in size for proper hashing, if we do not want
+       to store castle bytes, ebytes, and turn as part of the position. */
+
+    /* remember transposition table size. */
+    gPreCalc.numHashEntries = numHashEntries;
+    gPreCalc.hashMask = numHashEntries - 1;
 }
 
 
@@ -353,7 +445,7 @@ int calcZobrist(BoardT *board)
     int i;
     for (i = 0; i < 63; i++)
     {
-	retVal ^= gPreCalc.zobrist.coord[i] [board->coord[i]];
+	retVal ^= gPreCalc.zobrist.coord[board->coord[i]] [i];
     }
     retVal ^= gPreCalc.zobrist.cbyte[board->cbyte];
     if (board->ply & 1)
@@ -364,26 +456,43 @@ int calcZobrist(BoardT *board)
 }
 
 
-void newgame(BoardT *board)
+static void hashInit(void)
+{
+    int size = gPreCalc.numHashEntries * sizeof(HashPositionT);
+    int i = 0;
+
+    if (size == 0)
+	return; /* degenerate case. */
+
+    if (gHash == NULL /* should only be true once */ &&
+	(gHash = malloc(size)) == NULL)
+    {
+	LOG_EMERG("Failed to init hash (numEntries %d, size %d)\n",
+		  gPreCalc.numHashEntries, size);
+	exit(0);
+    }
+
+    for (i = 0; i < gPreCalc.numHashEntries; i++)
+    {
+	gHash[i].depth = HASH_NOENTRY;
+    }
+}
+
+
+void newgameEx(BoardT *board, uint8 pieces[], int cbyte, int ebyte, int ply)
 {
     int x, y, i;
-    uint8 whitePieces[16] =
-	{ROOK, NIGHT, BISHOP, QUEEN, KING, BISHOP, NIGHT, ROOK,
-	 PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN};
-    uint8 blackPieces[16] =
-	{BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN,
-	 BROOK, BNIGHT, BBISHOP, BQUEEN, BKING, BBISHOP, BNIGHT, BROOK};
-    int saveLevel = board->level, saveHiswin = board->hiswin;
+    int saveLevel = board->maxLevel, saveHiswin = board->hiswin;
 
     /* blank everything. */
     memset(board, 0, sizeof(BoardT));
 
     /* restore saved variables. */
-    board->level = saveLevel;
+    board->maxLevel = saveLevel;
     board->hiswin = saveHiswin;
 
-    memcpy(board->coord, whitePieces, 16);	  /* white */
-    memcpy(&(board->coord[48]), blackPieces, 16); /* black */
+    /* copy all of the pieces over. */
+    memcpy(board->coord, pieces, 64);
 
     /* init playlist/playptr. */
     for (i = 0; i < 64; i++)
@@ -400,36 +509,53 @@ void newgame(BoardT *board)
 		board->hist[i] [x] [y] = -50;
 	    }
 
-    board->cbyte = ALLCASTLE;		       /* All can castle */
-    board->ebyte = FLAG;		       /* no enpassant */
-    board->ncheck[0] = FLAG;		       /* no one's in check. */
-    board->ncheck[1] = FLAG;
-    board->totalStrgh += 2; /* compensate for kings' "worth" */
-    for (i = 0; i < 63; i++)
+    /* cbyte handling. */
+    board->cbyte = cbyte;
+    newcbyte(board);
+
+    /* ebyte handling. */
+    assert(ebyte == FLAG || ISPAWN(board->coord[ebyte]));
+    board->ebyte = ebyte;
+
+    /* ncheck handling. */
+    for (i = 0; i < 2; i++)
+    {
+	/* must be 1 K of each kind. */
+	assert(board->playlist[KING | i].lgh == 1);
+	calcNCheck(board, board->playlist[KING | i].list[0], "newgameEx");
+    }
+
+    /* ply handling. */
+    assert(ply == 0 /* the normal situation */ ||
+	   ply == 1 /* hopefully setting up a position */);
+    board->ply = ply;
+
+    /* compensate for kings' "worth". */
+    board->totalStrgh += 2;
+    board->playerStrgh[0]++;
+    board->playerStrgh[1]++;
+
+    for (i = 0; i < 64; i++)
     {
         /* abuse this macro to setup board->hashcoord */
 	COORDUPDATE(board, i, board->coord[i]);
     }
     board->zobrist = calcZobrist(board);
-    UIBoardUpdate(board);
+    hashInit();
+    gUI->boardRefresh(board);
 }
 
 
-void addpiece(BoardT *board, uint8 piece, int coord)
+void newgame(BoardT *board)
 {
-    board->playptr[coord] =
-	&board->playlist[piece].list[board->playlist[piece].lgh++];
-    *board->playptr[coord] = coord;
-    board->totalStrgh += WORTH(piece);
-}
-
-
-void delpiece(BoardT *board, uint8 piece, int coord)
-{
-    /* change coord in playlist and dec playlist lgh. */
-    board->totalStrgh -= WORTH(piece);
-    *board->playptr[coord] = board->playlist[piece].list
-	[--board->playlist[piece].lgh];
-    /* set the end playptr. */
-    board->playptr[*board->playptr[coord]] = board->playptr[coord];
+    uint8 pieces[64] =
+	{ROOK, NIGHT, BISHOP, QUEEN, KING, BISHOP, NIGHT, ROOK,
+	 PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN,
+	 0, 0, 0, 0, 0, 0, 0, 0,
+	 0, 0, 0, 0, 0, 0, 0, 0,
+	 0, 0, 0, 0, 0, 0, 0, 0,
+	 0, 0, 0, 0, 0, 0, 0, 0,
+	 BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN,
+	 BROOK, BNIGHT, BBISHOP, BQUEEN, BKING, BBISHOP, BNIGHT, BROOK};
+    newgameEx(board, pieces, ALLCASTLE, FLAG, 0);
 }

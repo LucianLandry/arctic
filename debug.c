@@ -1,7 +1,24 @@
+/***************************************************************************
+                    debug.c - board consistency checking +
+                              other support routines
+                             -------------------
+    copyright            : (C) 2007 by Lucian Landry
+    email                : lucian_b_landry@yahoo.com
+ ***************************************************************************/
+
+/***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU Library General Public License as       *
+ *   published by the Free Software Foundation; either version 2 of the    *
+ *   License, or (at your option) any later version.                       *
+ *                                                                         *
+ ***************************************************************************/
+
 #include <stdio.h>
 #include "ref.h"
 
-int concheck(BoardT *board, char *failString)
+int concheck(BoardT *board, char *failString, int checkz)
 /* returns 0 on success, 1 on failure. */
 {
     int x, i, j;
@@ -28,10 +45,11 @@ int concheck(BoardT *board, char *failString)
 		return 1;
 	    }
 	}
-    if (board->zobrist != calcZobrist(board))
+    if (checkz && board->zobrist != calcZobrist(board))
     {
 	LOG_EMERG("concheck(%s): failure in zobrist calc (%x, %x).\n",
 		  failString, board->zobrist, calcZobrist(board));
+	printplaylist(board);
 	return 1;
     }
     return 0;
@@ -54,5 +72,5 @@ void printplaylist(BoardT *board)
 	    LOG_EMERG(".\n");
 	}
     }
-    barf("playlist results.");
+    LOG_EMERG("playlist results.\n");
 }

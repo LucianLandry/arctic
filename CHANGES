@@ -1,3 +1,24 @@
+Version 8:
+Rudimentary Makefile support.
+Implement asciiToNative() and friends.
+Edit-position functionality.
+Fractional eval capability.
+Implement transposition table.
+Don't think if only one move to make.
+Fix capture-king bug (en-passant captured pawn discovered check, while *in*
+	check)
+Fix capture-king bug (en-passant capture from same rank as K could put K in
+	check by R or Q)
+Add depth to displayed PV.
+concheck: don't calc zobrist during unmakemove rook-move.
+optimization: CHECK calc change, 2d array least indexes to pow2, findpins(),
+	pawnmove(), mlistGenerate(), addsrccoord -> inline, genslide(),
+	nightmove().  About 10% improvement.
+Improved endgame (KR vs k, KQ vs k, KBB vs k)
+Separate UI thread (so I can move now/quit immediately etc)
+Implemented move-now functionality.
+Chess UI interface (xboard).
+
 Version 7:
 Implement autopass.
 optimization via gprof (->CHECK(), TOLOWER(), optimize kingmove(),
@@ -16,7 +37,7 @@ move unmakemove info to its own structure.
 worth is precalced now.
 Detect draw due to insufficient material.
 Detect draw due to fifty-move rule.
-Converted PpRrNnBbQqKk to squashed representation.
+Converted PpRrNnBbQqKk to more compact representation (PAWN, BKING, etc)
 Fixed beginning-of-game hiswin bug (-1 doesn't work if hiswin > 1)
 Fixed probable bug on playermove promote (indexing into wrong move).
 Fix castling bug (newcbyte() before coord update in makemove())

@@ -1,3 +1,19 @@
+/***************************************************************************
+                        log.c - debugging log support.
+                             -------------------
+    copyright            : (C) 2007 by Lucian Landry
+    email                : lucian_b_landry@yahoo.com
+ ***************************************************************************/
+
+/***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU Library General Public License as       *
+ *   published by the Free Software Foundation; either version 2 of the    *
+ *   License, or (at your option) any later version.                       *
+ *                                                                         *
+ ***************************************************************************/
+
 #include <stdarg.h>
 #include <stdio.h>
 #include "ref.h"
@@ -76,15 +92,16 @@ void LogMove(int level, BoardT *board, uint8 *comstr)
     }
     if (cappiece)
     {
-	sprintf(capstr, "(x%c)", cappiece);
+	sprintf(capstr, "(x%c)", nativeToAscii(cappiece));
     }
     if (comstr[2] && !ISPAWN(comstr[2]))
     {
-	sprintf(promostr, "(->%c)", comstr[2]);
+	sprintf(promostr, "(->%c)", nativeToAscii(comstr[2]));
     }
     if (comstr[3] != FLAG)
     {
-	sprintf(chkstr, "(chk-%d)", comstr[3]);
+	sprintf(chkstr, "(chk-%c%c)",
+		File(comstr[3]) + 'a', Rank(comstr[3]) + '1');
     }
     LogPrint(level, "%c%c%c%c%s%s%s\n",
 	     File(comstr[0]) + 'a',
@@ -92,4 +109,24 @@ void LogMove(int level, BoardT *board, uint8 *comstr)
 	     File(comstr[1]) + 'a',
 	     Rank(comstr[1]) + '1',
 	     capstr, promostr, chkstr);
+}
+
+
+void LogMoveShow(int level, BoardT *board, uint8 *comstr, char *caption)
+{
+    int ascii, i, j;
+
+    LogPrint(level, "%s:\nMove was %c%c%c%c\n", caption,
+	     File(comstr[0]) + 'a', Rank(comstr[0]) + '1',
+	     File(comstr[1]) + 'a', Rank(comstr[1]) + '1');
+
+    for (i = 7; i >= 0; i--)
+    {
+	for (j = 0; j < 8; j++)
+	{
+	    ascii = nativeToAscii(board->coord[(i * 8) + j]);
+	    LogPrint(level, "%c", ascii == ' ' ? '.' : ascii);
+	}
+	LogPrint(level, "\n");
+    }
 }

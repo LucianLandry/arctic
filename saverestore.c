@@ -1,3 +1,20 @@
+/***************************************************************************
+          saverestore.c - (primitive) game save/restore functionality.
+                             -------------------
+    copyright            : (C) 2007 by Lucian Landry
+    email                : lucian_b_landry@yahoo.com
+ ***************************************************************************/
+
+/***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU Library General Public License as       *
+ *   published by the Free Software Foundation; either version 2 of the    *
+ *   License, or (at your option) any later version.                       *
+ *                                                                         *
+ ***************************************************************************/
+
+
 #include <stdio.h>
 #include <string.h>
 #include "ref.h"
@@ -26,11 +43,37 @@ int GameSave(BoardT *board)
 }
 
 
+
+void CopyBoard(BoardT *dest, BoardT *src)
+{
+    /* We attempt to copy every variable prior to 'board->depth'. */
+    int i, j, piece, len = (void *) &src->depth - (void *) src;
+
+    /* have something good to load, so copy it over. */
+    memcpy(dest, src, len);
+    /* we need to rebuild the playptr list. */
+    for (i = 0; i < 64; i++)
+    {
+	dest->playptr[i] = NULL;
+	if ((piece = dest->coord[i]))
+	{
+	    for (j = 0; j < dest->playlist[piece].lgh; j++)
+	    {
+		if (dest->playlist[piece].list[j] == i)
+		{
+		    dest->playptr[i] = &dest->playlist[piece].list[j];
+		}
+	    }
+	}
+    }
+}
+
+
 /* returns: 0, if save successful, otherwise -1. */
 int GameRestore(BoardT *board)
 {
     FILE *myFile = fopen("arctic.sav", "r");
-    int i, j, piece, len = (void *) &board->depth - (void *) board;
+    int i, len = (void *) &board->depth - (void *) board;
     int chr;
     BoardT myBoard;
 
@@ -54,23 +97,7 @@ int GameRestore(BoardT *board)
     }
 
     /* have something good to load, so copy it over. */
-    memcpy(board, &myBoard, len);
-    /* we need to rebuild the playptr list.  The addresses do not necessarily
-       stick if the program is executed later. */
-    for (i = 0; i < 64; i++)
-    {
-	board->playptr[i] = NULL;
-	if ((piece = board->coord[i]))
-	{
-	    for (j = 0; j < board->playlist[piece].lgh; j++)
-	    {
-		if (board->playlist[piece].list[j] == i)
-		{
-		    board->playptr[i] = &board->playlist[piece].list[j];
-		}
-	    }
-	}
-    }
+    CopyBoard(board, &myBoard);
 
     return 0;
 }
