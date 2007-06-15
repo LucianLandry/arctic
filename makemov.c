@@ -16,7 +16,6 @@
 
 
 #include <stddef.h> // NULL
-#include <time.h>   // time(2)
 #include "ref.h"
 
 
@@ -29,11 +28,40 @@ void addpiece(BoardT *board, uint8 piece, int coord)
     board->playerStrgh[piece & 1] += WORTH(piece);
 }
 
+/* Smarter (but slower): will not mangle board strgh when we add a king. */
+void addpieceSmart(BoardT *board, uint8 piece, int coord)
+{
+    board->playptr[coord] =
+	&board->playlist[piece].list[board->playlist[piece].lgh++];
+    *board->playptr[coord] = coord;
+    if (!ISKING(piece))
+    {
+	board->totalStrgh += WORTH(piece);
+	board->playerStrgh[piece & 1] += WORTH(piece);
+    }
+}
+
 
 void delpiece(BoardT *board, uint8 piece, int coord)
 {
     board->playerStrgh[piece & 1] -= WORTH(piece);
     board->totalStrgh -= WORTH(piece);
+
+    /* change coord in playlist and dec playlist lgh. */
+    *board->playptr[coord] = board->playlist[piece].list
+	[--board->playlist[piece].lgh];
+    /* set the end playptr. */
+    board->playptr[*board->playptr[coord]] = board->playptr[coord];
+}
+
+
+void delpieceSmart(BoardT *board, uint8 piece, int coord)
+{
+    if (!ISKING(piece))
+    {
+	board->playerStrgh[piece & 1] -= WORTH(piece);
+	board->totalStrgh -= WORTH(piece);
+    }
 
     /* change coord in playlist and dec playlist lgh. */
     *board->playptr[coord] = board->playlist[piece].list
@@ -76,12 +104,18 @@ void newcbyte(BoardT *board)
 
 void makemove(BoardT *board, uint8 comstr[], UnMakeT *unmake)
 {
-    int enpass = comstr[2] && ISPAWN(comstr[2]);
-    int promote = comstr[2] && !ISPAWN(comstr[2]);
+    int enpass = ISPAWN(comstr[2]);
+    int promote = comstr[2] && !enpass;
+    uint8 src = comstr[0];
+    uint8 dst = comstr[1];
     uint8 *coord = board->coord;
-    uint8 mypiece = coord[comstr[0]];
-    uint8 cappiece = coord[comstr[1]];
+    uint8 mypiece = coord[src];
+    uint8 cappiece = coord[dst];
     uint8 newebyte;
+    int savedPly;
+
+    ListT *myList;
+    ListPositionT *myElem;
 
     if (unmake != NULL)
     {
@@ -91,33 +125,33 @@ void makemove(BoardT *board, uint8 comstr[], UnMakeT *unmake)
 	unmake->ebyte = board->ebyte;
 	unmake->ncpPlies = board->ncpPlies;
 	unmake->zobrist = board->zobrist;
+	unmake->repeatPly = board->repeatPly;
     }
 
-    /* adjust ncpPlies appropriately. */
-    if (ISPAWN(mypiece) || cappiece)
-	board->ncpPlies = 0;
-    else
-	board->ncpPlies++;
-
     /* king castling move? */
-    if (ISKING(mypiece) && Abs(comstr[1] - comstr[0]) == 2)
+    if (ISKING(mypiece) && Abs(dst - src) == 2)
     {
-	if (comstr[1] == 6)
-	    makemove(board, "\7\5\0", NULL);     /* move wkrook */
-	else if (comstr[1] == 2)
-	    makemove(board, "\0\3\0", NULL);     /* move wqrook */
-	else if (comstr[1] == 62)
-	    makemove(board, "\x3f\x3d\0", NULL); /* move bkrook */
+	savedPly = board->repeatPly;
+	if (dst == 6)
+	    makemove(board, (uint8 *) "\7\5\0", NULL);     /* move wkrook */
+	else if (dst == 2)
+	    makemove(board, (uint8 *) "\0\3\0", NULL);     /* move wqrook */
+	else if (dst == 62)
+	    makemove(board, (uint8 *) "\x3f\x3d\0", NULL); /* move bkrook */
 	else
-	    makemove(board, "\x38\x3b\0", NULL); /* move bqrook */
+	    makemove(board, (uint8 *) "\x38\x3b\0", NULL); /* move bqrook */
+
+	/* unclobber appropriate variables. */
 	board->ply--;	/* 'cause we're not switching sides... */
+	board->ncpPlies--;
+	board->repeatPly = savedPly;
 	board->zobrist ^= gPreCalc.zobrist.turn;
     }
 
     /* capture? better dump the captured piece from the playlist.. */
     if (cappiece)
     {
-	delpiece(board, cappiece, comstr[1]);
+	delpiece(board, cappiece, dst);
     }
     else if (enpass)
     {
@@ -126,33 +160,33 @@ void makemove(BoardT *board, uint8 comstr[], UnMakeT *unmake)
     }
 
     /* now modify the pointer info in playptr. */
-    board->playptr[comstr[1]] = board->playptr[comstr[0]];
+    board->playptr[dst] = board->playptr[src];
     /* now modify coords in the playlist. */
-    *board->playptr[comstr[1]] = comstr[1];
+    *board->playptr[dst] = dst;
 
     /* el biggo question: did a promotion take place? Need to update
        stuff further then.  Can be ineff cause almost never occurs. */
     if (promote)
     {
-	delpiece(board, mypiece, comstr[1]);
-	addpiece(board, comstr[2], comstr[1]);
-	COORDUPDATEZ(board, comstr[1], comstr[2]);
+	delpiece(board, mypiece, dst);
+	addpiece(board, comstr[2], dst);
+	COORDUPDATEZ(board, dst, comstr[2]);
     }
     else
     {
-	COORDUPDATEZ(board, comstr[1], mypiece);
+	COORDUPDATEZ(board, dst, mypiece);
     }
-    COORDUPDATEZ(board, comstr[0], 0);
+    COORDUPDATEZ(board, src, 0);
 
 #if 0 /* not a win on x86-32, at least. */
-    if ((((1LL << comstr[0]) | (1LL << comstr[1])) & CASTLEBB))
+    if ((((1LL << src) | (1LL << dst)) & CASTLEBB))
 #endif
 	newcbyte(board); /* update castle status. */
 
     /* update en passant status */
-    newebyte = Abs(comstr[1] - comstr[0]) == 16 &&
+    newebyte = Abs(dst - src) == 16 &&
 	ISPAWN(mypiece) ? /* pawn moved 2 */
-	comstr[1] : FLAG;
+	dst : FLAG;
     if (newebyte != board->ebyte)
     {
 	if (board->ebyte != FLAG)
@@ -166,6 +200,26 @@ void makemove(BoardT *board, uint8 comstr[], UnMakeT *unmake)
     board->zobrist ^= gPreCalc.zobrist.turn;
     board->ncheck[board->ply & 1] = comstr[3];
 
+    /* adjust ncpPlies appropriately. */
+    if (ISPAWN(mypiece) || cappiece)
+    {
+	board->ncpPlies = 0;
+	board->repeatPly = -1;
+    }
+    else if (++board->ncpPlies >= 4 && board->repeatPly == -1)
+    {
+	/* We might need to set repeatPly. */
+	myList = &board->posList[board->zobrist & 127];
+	LIST_DOFOREACH(myList, myElem) /* hopefully a short loop. */
+	{
+	    if (PositionHit(board, &myElem->p))
+	    {
+		board->repeatPly = board->ply;
+		break;
+	    }
+	}
+    }
+
     /* concheck(board, "makemove", 1); */
 }
 
@@ -174,8 +228,10 @@ void unmakemove(BoardT *board, uint8 comstr[], UnMakeT *unmake)
 /* undoes the command 'comstr'. */
 {
     int turn;
-    int enpass = comstr[2] && ISPAWN(comstr[2]);
-    int promote = comstr[2] && !ISPAWN(comstr[2]);
+    int enpass = ISPAWN(comstr[2]);
+    int promote = comstr[2] && !enpass;
+    uint8 src = comstr[0];
+    uint8 dst = comstr[1];
     uint8 cappiece;
 
     board->ply--;
@@ -192,6 +248,7 @@ void unmakemove(BoardT *board, uint8 comstr[], UnMakeT *unmake)
 					 function. */
 	board->ncpPlies = unmake->ncpPlies;
 	board->zobrist = unmake->zobrist;
+	board->repeatPly = unmake->repeatPly;
     }
     else
     {
@@ -200,17 +257,17 @@ void unmakemove(BoardT *board, uint8 comstr[], UnMakeT *unmake)
     }
 
     /* king castling move? */
-    if (ISKING(board->coord[comstr[1]]) &&
-	Abs(comstr[1] - comstr[0]) == 2)
+    if (ISKING(board->coord[dst]) &&
+	Abs(dst - src) == 2)
     {
-	if (comstr[1] == 6)
-	    unmakemove(board, "\7\5\0", NULL);     /* move wkrook */
-	else if (comstr[1] == 2)
-	    unmakemove(board, "\0\3\0", NULL);     /* move wqrook */
-	else if (comstr[1] == 62)
-	    unmakemove(board, "\x3f\x3d\0", NULL); /* move bkrook */
+	if (dst == 6)
+	    unmakemove(board, (uint8 *) "\7\5\0", NULL);     /* move wkrook */
+	else if (dst == 2)
+	    unmakemove(board, (uint8 *) "\0\3\0", NULL);     /* move wqrook */
+	else if (dst == 62)
+	    unmakemove(board, (uint8 *) "\x3f\x3d\0", NULL); /* move bkrook */
 	else
-	    unmakemove(board, "\x38\x3b\0", NULL); /* move bqrook */
+	    unmakemove(board, (uint8 *) "\x38\x3b\0", NULL); /* move bqrook */
 	board->ply++;		/* since it wasn't really a move. */
     }
 
@@ -218,27 +275,27 @@ void unmakemove(BoardT *board, uint8 comstr[], UnMakeT *unmake)
        'depromote' then.  Can be ineff cause almost never occurs. */
     if (promote)
     {
-	delpiece(board, comstr[2], comstr[1]);
-	addpiece(board, PAWN | turn, comstr[1]);
-	COORDUPDATE(board, comstr[0], PAWN | turn);
+	delpiece(board, comstr[2], dst);
+	addpiece(board, PAWN | turn, dst);
+	COORDUPDATE(board, src, PAWN | turn);
     }
     else
     {
-	COORDUPDATE(board, comstr[0], board->coord[comstr[1]]); 
+	COORDUPDATE(board, src, board->coord[dst]); 
     }
-    COORDUPDATE(board, comstr[1], cappiece);
+    COORDUPDATE(board, dst, cappiece);
 
     /* modify the pointer array. */
-    board->playptr[comstr[0]] =
-	board->playptr[comstr[1]];
+    board->playptr[src] =
+	board->playptr[dst];
     /* modify coords in playlist. */
-    *(board->playptr[comstr[0]]) = *comstr;
+    *(board->playptr[src]) = *comstr;
 
     /* if capture, we need to
        add deleted record back to list. */
     if (cappiece)
     {
-	addpiece(board, cappiece, comstr[1]);
+	addpiece(board, cappiece, dst);
     }
     else if (enpass)
     {
@@ -258,35 +315,61 @@ void unmakemove(BoardT *board, uint8 comstr[], UnMakeT *unmake)
 void commitmove(BoardT *board, uint8 *comstr, ThinkContextT *th,
 		GameStateT *gameState, int declaredDraw)
 {
-    long tmvalue;
     MoveListT mvlist;
-    int turn;
+    int turn = board->ply & 1;
+    ClockT *myClock;
+    int origturn = turn;
 
     /* Give computer a chance to re-evaluate the position, if we insist
        on changing the board. */
     gameState->bDone[0] = gameState->bDone[1] = 0;
 
+    myClock = gameState->clocks[turn];
+    ClockStop(myClock);
+
     if (comstr != NULL)
     {
+	ClockApplyIncrement(myClock, board);
 	PositionSave(board);
+	LOG_DEBUG("commiting move (%d %d): ",
+		  board->ply >> 1, board->ply & 1);
+	LogMove(eLogDebug, board, comstr);
 	makemove(board, comstr, NULL);
     }
     concheck(board, "commitmove", 1);
 
-    turn = board->ply & 1;
-    tmvalue = time(NULL);
+#if 0 /* bldbg */
+    if (board->ply == 29)
+	LogSetLevel(eLogDebug);
+    if (board->ply == 30)
+	LogSetLevel(eLogEmerg);
+#endif
+
+    turn = board->ply & 1; /* needs reset. */
+
     gUI->boardRefresh(board);
-    gUI->statusDraw(board, tmvalue - gameState->lastTime);
-    gameState->lastTime = tmvalue;
+    gUI->statusDraw(board, gameState);
+
+    ClockStart(gameState->clocks[turn]);
+    if (origturn != turn)
+    {
+	// switched sides to another player.  Calc the time
+	// we want to make the next move at.
+	GoaltimeCalc(gameState, board);
+    }
+
+
     mlistGenerate(&mvlist, board, 0);
 
     if (drawInsufficientMaterial(board))
     {
+	ClocksStop(gameState);
 	gUI->notifyDraw("insufficient material");
 	gameState->bDone[turn] = 1;
     }
     else if (!mvlist.lgh)
     {
+	ClocksStop(gameState);
 	if (board->ncheck[turn] == FLAG)
 	{
 	    gUI->notifyDraw("stalemate");
@@ -303,12 +386,13 @@ void commitmove(BoardT *board, uint8 *comstr, ThinkContextT *th,
 	gameState->bDone[turn] = 1;
     }
 
-    CopyBoard(&gameState->boardCopy, board);
+    BoardCopy(&gameState->savedBoard, board);
 
     if (gameState->control[turn] && !gameState->bDone[turn])
     {
 	/* Computer needs to make next move; let it do so. */
-	ThinkerThink(th);
+	gUI->notifyThinking();
+	ThinkerCmdThink(th);
     }
     else
     {

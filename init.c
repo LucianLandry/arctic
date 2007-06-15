@@ -17,13 +17,27 @@
 #include <string.h> /* memcpy(), memset() */
 #include <stdlib.h> /* qsort(3), random(3), malloc(3) */
 #include <assert.h>
+#include <unistd.h>
+#include <pthread.h>
 #include "ref.h"
 
 GPreCalcT gPreCalc;
 
-HashPositionT *gHash = NULL;
+GDynamicT gVars;
 
-static char gAllNormalMoves[512 /* yes, this is the exact size needed */] =  {
+static uint8 gNormalStartingPieces[64] = 
+{ROOK, NIGHT, BISHOP, QUEEN, KING, BISHOP, NIGHT, ROOK,
+ PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN,
+ 0, 0, 0, 0, 0, 0, 0, 0,
+ 0, 0, 0, 0, 0, 0, 0, 0,
+ 0, 0, 0, 0, 0, 0, 0, 0,
+ 0, 0, 0, 0, 0, 0, 0, 0,
+ BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN,
+ BROOK, BNIGHT, BBISHOP, BQUEEN, BKING, BBISHOP, BNIGHT, BROOK
+};
+
+
+static uint8 gAllNormalMoves[512 /* yes, this is the exact size needed */] =  {
     /* 0 (northwest) direction */
     FLAG,
     8, FLAG,
@@ -136,7 +150,7 @@ static char gAllNormalMoves[512 /* yes, this is the exact size needed */] =  {
 
 /* This is split equally between best night moves for white from a given
    coord, and best moves for black. */
-static char gAllNightMoves[800];
+static uint8 gAllNightMoves[800];
 
 
 static int whiteGoodNightMove(uint8 *el1, uint8 *el2)
@@ -207,6 +221,8 @@ static int dirf(int from, int to)
     int res;
     int rdiff = Rank(to) - Rank(from);
     int fdiff = File(to) - File(from);
+    if (from == to)
+	return DIRFLAG;                         /* This is undefined. */
     if (!rdiff)
         res = 3;                                /* - move */
     else if (!fdiff)
@@ -239,7 +255,7 @@ static int worthf(char piece)
     case BNIGHT:  return EVAL_BISHOP;
     case BROOK:   return EVAL_ROOK;
     case BQUEEN:  return EVAL_QUEEN;
-    case BKING:   return -1; /*error condition. */
+    case BKING:   return EVAL_KING; /*error condition. */
     default:      break;
     }
     return 0;
@@ -264,11 +280,10 @@ static int centerDistancef(uint8 coord1)
 
 
 static void rowinit(int d, int start, int finc, int sinc, uint8 *moves[] [16],
-		    char *ptr)
+		    uint8 *ptr)
 {
     int temp, i;
     int row = 0;
-    char *oldptr = ptr;
     for (i = temp = start; row < 8;)
     {
 	moves[i] [d] = ptr++;
@@ -279,15 +294,13 @@ static void rowinit(int d, int start, int finc, int sinc, uint8 *moves[] [16],
 	}
 	else i += finc;
     }
-    i = ((int) ptr) - ((int) oldptr);
 }
 
 
 static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [16],
-		     char *ptr)
+		     uint8 *ptr)
 {
     int temp, i, j;
-    char *oldptr = ptr;
     for (i = start; Abs(i - start) < 8; i += finc)
 	for (j = i; ; j += sinc - finc)
 	{
@@ -302,7 +315,6 @@ static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [16],
 	    if (*moves[j] [d] == FLAG)
 		break;
 	}
-    j = ((int) ptr) - ((int) oldptr);
 }
 
 
@@ -310,7 +322,7 @@ static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [16],
 void preCalcInit(int numHashEntries)
 {
     int i, d, j, num;
-    char *ptr = gAllNormalMoves;
+    uint8 *ptr = gAllNormalMoves;
 
     /* initialize moves array. */
     for (d = 0; d < 8; d++) /* d signifies direction */
@@ -395,7 +407,7 @@ void preCalcInit(int numHashEntries)
 
 
     /* initialize zobrist hashing. */
-    for (i = 0; i < 63; i++)
+    for (i = 0; i < 64; i++)
     {
 	for (j = 0; j < BQUEEN + 1; j++)
 	{
@@ -434,6 +446,15 @@ void preCalcInit(int numHashEntries)
     /* remember transposition table size. */
     gPreCalc.numHashEntries = numHashEntries;
     gPreCalc.hashMask = numHashEntries - 1;
+
+    /* initialize number of (known) processors. */
+    if ((gPreCalc.numProcs = sysconf(_SC_NPROCESSORS_ONLN)) > MAX_NUM_PROCS)
+    {
+	gPreCalc.numProcs = MAX_NUM_PROCS;
+    }
+    /* gPreCalc.numProcs = 1; bldbg */
+    gPreCalc.totalMemory = sysconf(_SC_PHYS_PAGES);
+    gPreCalc.totalMemory *= getpagesize();
 }
 
 
@@ -443,7 +464,7 @@ int calcZobrist(BoardT *board)
 {
     int retVal = 0;
     int i;
-    for (i = 0; i < 63; i++)
+    for (i = 0; i < 64; i++)
     {
 	retVal ^= gPreCalc.zobrist.coord[board->coord[i]] [i];
     }
@@ -456,40 +477,59 @@ int calcZobrist(BoardT *board)
 }
 
 
-static void hashInit(void)
+void histInit(void)
+{
+    int i, j, k;
+
+    /* reset history table. */
+    for (i = 0; i < 2; i++)
+	for (j = 0; j < 64; j++)
+	    for (k = 0; k < 64; k++)
+	    {
+		/* -50, not -1, because -1 might trigger accidentally if
+		   we expand the history window beyond killer moves. */
+		gVars.hist[i] [j] [k] = -50;
+	    }
+}
+
+void hashInit(void)
 {
     int size = gPreCalc.numHashEntries * sizeof(HashPositionT);
     int i = 0;
+    int retVal;
 
     if (size == 0)
 	return; /* degenerate case. */
 
-    if (gHash == NULL /* should only be true once */ &&
-	(gHash = malloc(size)) == NULL)
+    if (gVars.hash == NULL)
     {
-	LOG_EMERG("Failed to init hash (numEntries %d, size %d)\n",
-		  gPreCalc.numHashEntries, size);
-	exit(0);
+	/* should only be true once */
+	if ((gVars.hash = malloc(size)) == NULL)
+	{
+	    LOG_EMERG("Failed to init hash (numEntries %d, size %d)\n",
+		      gPreCalc.numHashEntries, size);
+	    exit(0);
+	}
+	for (i = 0; i < NUM_HASH_LOCKS; i++)
+	{
+	    retVal = pthread_mutex_init(&gVars.hashLocks[i], NULL);
+	    assert(retVal == 0);
+	}
     }
 
     for (i = 0; i < gPreCalc.numHashEntries; i++)
     {
-	gHash[i].depth = HASH_NOENTRY;
+	gVars.hash[i].depth = HASH_NOENTRY;
     }
 }
 
 
 void newgameEx(BoardT *board, uint8 pieces[], int cbyte, int ebyte, int ply)
 {
-    int x, y, i;
-    int saveLevel = board->maxLevel, saveHiswin = board->hiswin;
+    int i;
 
     /* blank everything. */
     memset(board, 0, sizeof(BoardT));
-
-    /* restore saved variables. */
-    board->maxLevel = saveLevel;
-    board->hiswin = saveHiswin;
 
     /* copy all of the pieces over. */
     memcpy(board->coord, pieces, 64);
@@ -497,17 +537,7 @@ void newgameEx(BoardT *board, uint8 pieces[], int cbyte, int ebyte, int ply)
     /* init playlist/playptr. */
     for (i = 0; i < 64; i++)
 	if (board->coord[i])
-	    addpiece(board, board->coord[i], i);
-
-    /* reset history table. */
-    for (i = 0; i < 2; i++)
-	for (x = 0; x < 63; x++)
-	    for (y = 0; y < 63; y++)
-	    {
-		/* -50, not -1, because -1 might trigger accidentally if
-		   we expand the history window beyond killer moves. */
-		board->hist[i] [x] [y] = -50;
-	    }
+	    addpieceSmart(board, board->coord[i], i);
 
     /* cbyte handling. */
     board->cbyte = cbyte;
@@ -529,11 +559,7 @@ void newgameEx(BoardT *board, uint8 pieces[], int cbyte, int ebyte, int ply)
     assert(ply == 0 /* the normal situation */ ||
 	   ply == 1 /* hopefully setting up a position */);
     board->ply = ply;
-
-    /* compensate for kings' "worth". */
-    board->totalStrgh += 2;
-    board->playerStrgh[0]++;
-    board->playerStrgh[1]++;
+    board->repeatPly = -1;
 
     for (i = 0; i < 64; i++)
     {
@@ -542,20 +568,19 @@ void newgameEx(BoardT *board, uint8 pieces[], int cbyte, int ebyte, int ply)
     }
     board->zobrist = calcZobrist(board);
     hashInit();
+    histInit();
     gUI->boardRefresh(board);
 }
 
 
 void newgame(BoardT *board)
 {
-    uint8 pieces[64] =
-	{ROOK, NIGHT, BISHOP, QUEEN, KING, BISHOP, NIGHT, ROOK,
-	 PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN,
-	 0, 0, 0, 0, 0, 0, 0, 0,
-	 0, 0, 0, 0, 0, 0, 0, 0,
-	 0, 0, 0, 0, 0, 0, 0, 0,
-	 0, 0, 0, 0, 0, 0, 0, 0,
-	 BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN,
-	 BROOK, BNIGHT, BBISHOP, BQUEEN, BKING, BBISHOP, BNIGHT, BROOK};
-    newgameEx(board, pieces, ALLCASTLE, FLAG, 0);
+    newgameEx(board, gNormalStartingPieces, ALLCASTLE, FLAG, 0);
+}
+
+
+int isNormalStartingPosition(BoardT *board)
+{
+    return board->cbyte == ALLCASTLE && board->ebyte == FLAG &&
+	memcmp(board->coord, gNormalStartingPieces, 64) == 0;
 }

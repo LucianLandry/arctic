@@ -32,6 +32,7 @@
 
 #define ENTER 13
 #define ESC   27
+#define BACKSPACE 263
 
 #define SQUARE_WIDTH 5   /* width of chess square, in characters */
 #define OPTIONS_X (SQUARE_WIDTH * 8 + 2) /* 1 since one-based, 1 for ticks) */
@@ -45,14 +46,6 @@ static struct {
 } gBoardIf;
 
 
-static int nativeToBoardAscii(uint8 piece)
-{
-    int ascii = nativeToAscii(piece);
-    return ISPAWN(piece) ? tolower(ascii) :
-	(piece & 1) ? toupper(ascii) : ascii;
-}
-
-
 static void UIPrintBoardStatus(BoardT *board)
 {
     /* all shorthand. */
@@ -63,7 +56,7 @@ static void UIPrintBoardStatus(BoardT *board)
     textcolor(LIGHTGRAY);
 
     /* print castle status. */
-    gotoxy(OPTIONS_X, 15);
+    gotoxy(OPTIONS_X, 14);
     cprintf("castle QKqk: %c%c%c%c",
 	    cbyte & WHITEQCASTLE ? 'y' : 'n',
 	    cbyte & WHITEKCASTLE ? 'y' : 'n',
@@ -71,7 +64,7 @@ static void UIPrintBoardStatus(BoardT *board)
 	    cbyte & BLACKKCASTLE ? 'y' : 'n');
 
     /* print en passant status. */
-    gotoxy(OPTIONS_X, 16);
+    gotoxy(OPTIONS_X, 15);
     cprintf("enpass: ");
     if (ebyte == FLAG)
     {
@@ -83,11 +76,11 @@ static void UIPrintBoardStatus(BoardT *board)
     }
 
     /* print check status. */
-    gotoxy(OPTIONS_X, 17);
+    gotoxy(OPTIONS_X, 16);
     cprintf("chk: ");
     if (ncheck == FLAG)
 	cprintf("   ");
-    else if (ncheck == DISCHKFLAG)
+    else if (ncheck == DOUBLE_CHECK)
     {
 	cprintf("dis");
     }
@@ -98,16 +91,40 @@ static void UIPrintBoardStatus(BoardT *board)
 }
 
 
-void UIStatusDraw(BoardT *board, int timeTaken)
+void UINotifyTick(GameStateT *gameState)
+{
+    ClockT *myClock;
+    char timeStr[TIME_STR_LEN];
+    int i;
+
+    // Display clocks.
+    textcolor(LIGHTGRAY);
+    gotoxy(OPTIONS_X, 18);
+    for (i = 0; i < 2; i++)
+    {
+	myClock = gameState->clocks[i];
+
+	cprintf("%s%s ",
+		TimeStringFromBigtime(timeStr, ClockCurrentTime(myClock)),
+		ClockIsRunning(myClock) ? "r" : "s");
+    }
+    cprintf("        ");
+}
+
+
+void UIStatusDraw(BoardT *board, GameStateT *gameState)
 {
     int turn = board->ply & 1;
+    bigtime_t timeTaken;
 
     UIPrintBoardStatus(board);
-    textcolor(LIGHTGRAY);
-    gotoxy(OPTIONS_X, 19);
-    cprintf("time: %d   ", timeTaken);
+    UINotifyTick(gameState);
+
     gotoxy(OPTIONS_X, 20);
-    cprintf("move: %d   ", (board->ply >> 1) + 1);
+    timeTaken = ClockTimeTaken(gameState->clocks[turn ^ 1]);
+    cprintf("move: %d (%.2f sec)     ",
+	    (board->ply >> 1) + 1,
+	    ((double) timeTaken) / 1000000);
     gotoxy(OPTIONS_X, 21);
     textcolor(SYSTEMCOL);
     cprintf("%s\'s turn", turn ? "black" : "white");
@@ -116,41 +133,25 @@ void UIStatusDraw(BoardT *board, int timeTaken)
 }
 
 
-void UINotifyPV(PvT *pv)
+void UINotifyPV(BoardT *board, PvT *pv)
 /* prints out expected move sequence at the bottom of the screen. */
 {
-    static int lasthowmany = 0;
-    /* pv->depth includes quiescing, whereas pv->level does not. */
-    int howmany = pv->depth + 1;
-    uint8 *moves = pv->pv;
     char spaces[80];
-    int numspaces;
-    int i;
+    char mySanString[79 - 14];
 
-    gotoxy(1, 25);
-    textcolor(SYSTEMCOL);
+    // Get a suitable string of moves to print.
+    buildSanString(board, mySanString, sizeof(mySanString), pv);
 
     // blank out the last pv.
-    numspaces = lasthowmany * 5 + 14;
-    assert(numspaces < 80);
-    for (i = 0; i < numspaces; i++)
-    {
-	sprintf(&spaces[i], " ");
-    }
+    memset(spaces, ' ', 79);
+    spaces[79] = '\0';
+    gotoxy(1, 25);
+    textcolor(SYSTEMCOL);
     cprintf(spaces);
-
-    lasthowmany = howmany;
 
     // print the new pv.
     gotoxy(1, 25);
-    cprintf("pv: d%d %+d", pv->level, pv->eval / 100);
-    for (; howmany > 0; howmany--)
-    {
-	cprintf(" %c%c%c%c", File(moves[0]) + 'a', Rank(moves[0]) + '1',
-		File(moves[1]) + 'a', Rank(moves[1]) + '1');
-	moves += 2;
-    }
-    cprintf(".");
+    cprintf("pv: d%d %+d%s.", pv->level, pv->eval / 100, mySanString);
 }
 
 
@@ -177,33 +178,42 @@ static void UICursorDraw(int coord, int blink, int undo)
 }
 
 
-static void prettyprint(int y, char *option, char *option2)
+static void prettyprint(int y, char *option, char *option2, ...)
 /* spews user option to screen, highlighting the first char. */
 {
     int i, j, didHighlight = 0;
     char *myopt;
 
+    va_list ap;
+    char myBuf[80];
+
     for (i = 0; i < 2; i++)
     {
 	if ((myopt = i ? option2 : option) == NULL)
 	    return;
+
+	/* Hacky; assumes only one option has any arguments. */
+	va_start(ap, option2);
+	vsprintf(myBuf, myopt, ap);
+	va_end(ap);
+
 	gotoxy(i ? OPTIONS_X2 : OPTIONS_X, y);
 	textcolor(LIGHTGRAY);
 
 	for (j = 0, didHighlight = 0;
-	     j < strlen(myopt);
+	     j < strlen(myBuf);
 	     j++)
 	{
-	    if (!didHighlight && isupper(myopt[j]))
+	    if (!didHighlight && isupper(myBuf[j]))
 	    {
 		textcolor(WHITE);
 		didHighlight = 1;
-		cprintf("%c", myopt[j]);
+		cprintf("%c", myBuf[j]);
 		textcolor(LIGHTGRAY);
 		continue;
 	    }
 
-	    cprintf("%c", myopt[j]);
+	    cprintf("%c", myBuf[j]);
 	}
     }
 }
@@ -230,22 +240,25 @@ static void UIWindowClear(int startx, int starty, int width, int height)
 }
 
 
-static void UIOptionsDraw(void)
+static void UIOptionsDraw(GameStateT *gameState)
 {
     UIWindowClear(OPTIONS_X, 1, SCREEN_WIDTH - OPTIONS_X, 12);
     gotoxy(OPTIONS_X, 1);
     textcolor(SYSTEMCOL);
     cprintf("Options:");
-    prettyprint(2,  "New game",       "Level");
-    prettyprint(3,  "Save game",      "White control");
-    prettyprint(4,  "Restore game",   "Black control");
+    prettyprint(2,  "New game",       "Level (%d)", gVars.maxLevel);
+    prettyprint(3,  "Save game",      "White control (%s)",
+		gameState->control[0] ? "C" : "P");
+    prettyprint(4,  "Restore game",   "Black control (%s)",
+		gameState->control[1] ? "C" : "P");
     prettyprint(5,  "Edit position",  "Move now");
-    prettyprint(6,  "Quit",           NULL);
+    prettyprint(6,  "Quit",           "rAndom moves (%s)",
+		gVars.randomMoves ? "On" : "Off");
 
-    prettyprint(8,  "Flip board",     NULL);
+    prettyprint(8,  "Flip board",     "Time control");
     prettyprint(9,  "Color",          NULL);
     prettyprint(10, "Debug logging",  NULL);
-    prettyprint(11, "History window", NULL);
+    prettyprint(11, "History window (%d)", NULL, gVars.hiswin >> 1);
     prettyprint(12, "Generate Moves", NULL);
 }
 
@@ -259,8 +272,38 @@ static void UIEditOptionsDraw(void)
     prettyprint(2, "Wipe board",     NULL);
     prettyprint(3, "Enpassant mark", NULL);
     prettyprint(4, "Castle mark",    NULL);
-    prettyprint(5, "Turn",           NULL);
+    prettyprint(5, "Switch turn",    NULL);
     prettyprint(6, "Done",           NULL);
+}
+
+
+static void UITimeOptionsDraw(GameStateT *gameState, int applyToggle)
+{
+    char t1[TIME_STR_LEN], t2[TIME_STR_LEN];
+
+    UIWindowClear(OPTIONS_X, 1, SCREEN_WIDTH - OPTIONS_X, 12);
+    gotoxy(OPTIONS_X, 1);
+    textcolor(SYSTEMCOL);
+    cprintf("Options:");
+    prettyprint(2, "Start time(s) (%s %s)", NULL,
+		TimeStringFromBigtime(t1, ClockCurrentTime
+				      (&gameState->origClocks[0])),
+		TimeStringFromBigtime(t2, ClockCurrentTime
+				      (&gameState->origClocks[1])));
+    prettyprint(3, "Increment(s) (%s %s)",  NULL,
+		TimeStringFromBigtime(t1, ClockGetInc
+				      (&gameState->origClocks[0])),
+		TimeStringFromBigtime(t2, ClockGetInc
+				      (&gameState->origClocks[1])));
+    prettyprint(4, "inc Period(s) (%d %d)", NULL,
+		ClockGetIncPeriod(&gameState->origClocks[0]),
+		ClockGetIncPeriod(&gameState->origClocks[1]));
+    prettyprint(6, "Apply to current",      NULL);
+    prettyprint(7, "Changes: (%s)", NULL,
+		applyToggle == 0 ? "white" :
+		applyToggle == 1 ? "black" :
+		"both");
+    prettyprint(9, "Done",           NULL);
 }
 
 
@@ -365,6 +408,11 @@ static int UIBarf(char *format, ...)
 
     /* Wait for input. */
     chr = getch();
+    if (chr == ESC)	/* bail on ESC */
+    {
+	UIExit();
+	exit(0);
+    }
 
     /* Now, blank the entire message. */
     gotoxy((SCREEN_WIDTH / 2) - len / 2, 25);
@@ -374,13 +422,73 @@ static int UIBarf(char *format, ...)
     }
 
     UITicksDraw();
-    if (chr == ESC)	/* bail on ESC */
-    {
-	UIExit();
-	exit(0);
-    }
     gotoxy(1, 1); /* justncase */
     return chr;
+}
+
+
+// 'myLen' == sizeof(myStr) (including terminator) and must be at least 2 bytes
+// long.
+// Returns 'myStr'.
+static char *UIBarfString(char *myStr, int myStrLen,
+			  char *validChars, char *format, ...)
+{
+    int chr, i;
+    int len;
+    char message[80];
+    int curStrLen;
+    int x;
+    int y = 25;
+    va_list ap;
+
+    assert(myStrLen >= 2);
+    memset(myStr, 0, myStrLen);
+
+    va_start(ap, format);
+    len = vsnprintf(message, 80, format, ap);
+    va_end(ap);
+    assert(len < 80);
+
+    // Display the message.
+    x = (SCREEN_WIDTH / 2) - len / 2;
+    gotoxy(x, y);
+    textcolor(MAGENTA);
+    x += cprintf(message);
+
+    // Get input.
+    for (curStrLen = 0; (chr = getch()) != ENTER;)
+    {
+	if (chr == ESC)	// bail on ESC
+	{
+	    UIExit();
+	    exit(0);
+	}
+	else if (curStrLen < myStrLen - 1 &&
+		 (validChars ? strchr(validChars, chr) != NULL : isprint(chr)))
+	{
+	    myStr[curStrLen++] = chr;
+	    x += cprintf("%c", chr);
+	}
+	else if (chr == BACKSPACE && curStrLen > 0) // backspace
+	{
+	    myStr[curStrLen--] = '\0';
+	    gotoxy(--x, y);
+	    cprintf(" ");
+	    gotoxy(x, y);
+	}
+    }
+
+    // Now, blank the entire message.
+    len += curStrLen;
+    gotoxy((SCREEN_WIDTH / 2) - len / 2, 25);
+    for (i = 0; i < len; i++)
+    {
+	cprintf(" ");
+    }
+
+    UITicksDraw();
+    gotoxy(1, 1); /* justncase */
+    return myStr;
 }
 
 
@@ -393,18 +501,20 @@ static void UINotifyError(char *reason)
 /* Edits a board.  ('ply' is set to 0, or 1, at the end of the turn.) */
 static void UIEditPosition(BoardT *board)
 {   
-    int c, chr, i, myply;
+    int c, chr, i;
     int *coord = &gBoardIf.cursCoord; // shorthand.
-    char validChars[] = "WwEeCcDdTt PpRrNnBbQqKk";
+    char validChars[] = "WwEeCcDdSs PpRrNnBbQqKk";
 
     UIEditOptionsDraw();
     UICursorDraw(*coord, 1, 0);
+    board->ply &= 1; /* erase move history. */
+
     while (1)
     {
 	UIPrintBoardStatus(board);
 	gotoxy(OPTIONS_X, 21);
 	textcolor(SYSTEMCOL);
-	cprintf("%s\'s turn", board->ply & 1 ? "black" : "white");
+	cprintf("%s\'s turn", board->ply ? "black" : "white");
 	/* I do this here just so the cursor ends up in an aesthetically
 	   pleasing spot. */
 	gotoxy(OPTIONS_X, 24);
@@ -423,7 +533,7 @@ static void UIEditPosition(BoardT *board)
 		{
 		    if (board->coord[i])
 		    {
-			delpiece(board, board->coord[i], i);
+			delpieceSmart(board, board->coord[i], i);
 			board->coord[i] = 0;
 		    }
 		}
@@ -436,9 +546,9 @@ static void UIEditPosition(BoardT *board)
 	    case 'e':
 		/* (possibly) set an enpassant square. */
 		board->ebyte =
-		    ((board->ply & 1) && board->coord[*coord] == PAWN &&
+		    (board->ply && board->coord[*coord] == PAWN &&
 		     *coord >= 24 && *coord < 32) ||
-		    (!(board->ply & 1) && board->coord[*coord] == BPAWN &&
+		    (!board->ply && board->coord[*coord] == BPAWN &&
 		     *coord >= 32 && *coord < 40) ?
 		    *coord : FLAG;
 		break;
@@ -466,19 +576,16 @@ static void UIEditPosition(BoardT *board)
 		newcbyte(board);
 		break;
 
-	    case 'T':
-	    case 't':
-		chr = UIBarf("Whose move is it (W/b)? ");
-		myply = (chr == 'B' || chr == 'b');
-		if ((myply & 1) != (board->ply & 1)) 
-		    board->ebyte = FLAG; /* because it can't be valid, now */
-		board->ply = myply;
+	    case 'S':
+	    case 's':
+		/* Switch turn. */
+		board->ply ^= 1;
+		board->ebyte = FLAG; /* because it can't be valid, now */
 		break;
 
 	    case 'D':
 	    case 'd':
 		/* bail from editing mode. */
-		board->ply &= 0x1;
 		return;
 
 	    default:
@@ -492,7 +599,7 @@ static void UIEditPosition(BoardT *board)
 
 		if (board->coord[*coord])
 		{
-		    delpiece(board, board->coord[*coord], *coord);
+		    delpieceSmart(board, board->coord[*coord], *coord);
 		    board->coord[*coord] = 0;
 		    if (board->ebyte == *coord)
 		    {
@@ -501,7 +608,7 @@ static void UIEditPosition(BoardT *board)
 		}
 		if (chr)
 		{
-		    addpiece(board, chr, *coord);
+		    addpieceSmart(board, chr, *coord);
 		    board->coord[*coord] = chr;
 		}
 		newcbyte(board);
@@ -520,6 +627,113 @@ static void UIEditPosition(BoardT *board)
 }
 
 
+
+/* Adjusts time. */
+static void UITimeMenu(BoardT *board, GameStateT *gameState)
+{   
+    int c, i;
+    int *coord = &gBoardIf.cursCoord; // shorthand.
+    char validChars[] = "SsIiPpAaCcDd";
+    char timeStr[TIME_STR_LEN];
+    int incPeriod;
+
+    // 0 -> white
+    // 1 -> black
+    // 2 -> both
+    static int applyToggle = 2;
+
+    UICursorDraw(*coord, 1, 0);
+
+    while (1)
+    {
+	UITimeOptionsDraw(gameState, applyToggle);
+	/* I do this here just so the cursor ends up in an aesthetically
+	   pleasing spot. */
+	gotoxy(OPTIONS_X, 24);
+	textcolor(LIGHTCYAN);
+	cprintf("Time    ");
+
+	c = getch();
+	if (strchr(validChars, c) != NULL)
+	{
+	    /* FIXME: implement time options. */
+	    switch(c)
+	    {
+	    case 'S':
+	    case 's':
+		do
+		{
+		    UIBarfString(timeStr, 9, /* xx:yy:zz\0 */
+				 "0123456789:inf", "Set start time to? >");
+		} while (!TimeStringIsValid(timeStr));
+
+		for (i = 0; i < 2; i++)
+		{
+		    if (applyToggle == i || applyToggle == 2)
+		    {
+			ClockSetTime(&gameState->origClocks[i],
+				     TimeStringToBigtime(timeStr));
+		    }
+		}
+		break;
+	    case 'I':
+	    case 'i':
+		do
+		{
+		    UIBarfString(timeStr, 9, /* xx:yy:zz\0 */
+				 "0123456789:", "Set increment to? >");
+		} while (!TimeStringIsValid(timeStr));
+
+		for (i = 0; i < 2; i++)
+		{
+		    if (applyToggle == i || applyToggle == 2)
+		    {
+			ClockSetInc(&gameState->origClocks[i],
+				    TimeStringToBigtime(timeStr));
+		    }
+		}
+		break;
+	    case 'P':
+	    case 'p':
+		do
+		{
+		    UIBarfString(timeStr, 9, /* xx:yy:zz\0 */
+				 "0123456789", "Set increment period to? >");
+		} while (sscanf(timeStr, "%d", &incPeriod) < 1);
+
+		for (i = 0; i < 2; i++)
+		{
+		    if (applyToggle == i || applyToggle == 2)
+		    {
+			ClockSetIncPeriod(&gameState->origClocks[i],
+					  incPeriod);
+		    }
+		}
+		break;
+	    case 'A':
+	    case 'a':
+		ClocksReset(gameState);
+		UIStatusDraw(board, gameState);
+		break;
+	    case 'C':
+	    case 'c':
+		if (++applyToggle == 3)
+		{
+		    applyToggle = 0;
+		}
+		break;
+	    case 'D':
+	    case 'd':
+		/* bail from time menu. */
+		return;
+	    default:
+		break;
+	    }
+	}
+    }	/* end while */
+}
+
+
 /* Gets user input and translates it to valid command.  Returns: command, or
    two numbers signaling source and destination.  */
 static void UIGetCommand(uint8 command[], SwitcherContextT *sw,
@@ -528,7 +742,7 @@ static void UIGetCommand(uint8 command[], SwitcherContextT *sw,
     int c;
     int gettingsrc = 1;
     int *coord = &gBoardIf.cursCoord; // shorthand.
-    char validChars[] = "NSRLWBFQDHCMEG";
+    char validChars[] = "NSRLWBFQDHCMEGAT";
 
     while (1)
     {
@@ -616,17 +830,29 @@ static void UIBoardFlip(BoardT *board)
     gBoardIf.flipped ^= 1;
     UITicksDraw();   // update ticks
     UIBoardRefresh(board); // update player positions
+    UICursorDraw(gBoardIf.cursCoord, 1, 0);
 }
 
 
 static void UIPlayerColorChange(void)
 {
-    while ((gBoardIf.col[0] = UIBarf("White color? >") - '0') < 1 ||
-	   gBoardIf.col[0] > 15)
-	;
-    while ((gBoardIf.col[1] = UIBarf("Black color? >") - '0') < 1 ||
-	   gBoardIf.col[1] > 15 || gBoardIf.col[1] == gBoardIf.col[0])
-	;
+    char *colors[2] = {"White", "Black"};
+    int i;
+
+    char myStr[3];
+    int myColor;
+
+    for (i = 0; i < 2; i++)
+    {
+	do
+	{
+	    UIBarfString(myStr, 3, "0123456789", "%s color? >", colors[i]);
+	    
+	} while (sscanf(myStr, "%d", &myColor) < 1 ||
+		 myColor < 1 || myColor > 15 ||
+		 (i == 1 && myColor == gBoardIf.col[0]));
+	gBoardIf.col[i] = myColor;
+    }
 }
 
 
@@ -661,8 +887,10 @@ void UINotifyComputerStats(CompStatsT *stats)
 {
     gotoxy(1, 1);
     textcolor(SYSTEMCOL);
-    cprintf("%d %d %d ",
-	    stats->funcCallCount, stats->moveCount, stats->hashHitGood);
+    cprintf("%d %d %d %d %d ",
+	    stats->funcCallCount, stats->moveCount,
+	    stats->hashHitGood, stats->hashHitPartial,
+	    stats->filler);
 }
 
 
@@ -686,18 +914,26 @@ void UINotifyResign(int turn)
 
 static void UIMovelistShow(MoveListT *mvlist)
 {
-    int x;
+    int i;
     textcolor(SYSTEMCOL);
     gotoxy(1, 1);
-    for (x = 0; x < mvlist->lgh; x++)
-	cprintf("%c%c%c%c%c%c%c ",
-		File(mvlist->list[x] [0]) + 'a',
-		Rank(mvlist->list[x] [0]) + '1',
-		File(mvlist->list[x] [1]) + 'a',
-		Rank(mvlist->list[x] [1]) + '1',
-		mvlist->list[x] [2] ? mvlist->list[x] [2] : '0',
-		File(mvlist->list[x] [3]) + 'a',
-		Rank(mvlist->list[x] [3]) + '1');
+    uint8 *comstr;
+    for (i = 0; i < mvlist->lgh; i++)
+    {
+	comstr = mvlist->list[i];
+	cprintf("%c%c%c%c.%d.%c%c ",
+		File(comstr[0]) + 'a',
+		Rank(comstr[0]) + '1',
+		File(comstr[1]) + 'a',
+		Rank(comstr[1]) + '1',
+		comstr[2],
+		(comstr[3] == FLAG ? 'F' :
+		 comstr[3] == DOUBLE_CHECK ? 'D' :
+		 File(comstr[3]) + 'a'),
+		(comstr[3] == FLAG ? 'F' :
+		 comstr[3] == DOUBLE_CHECK ? 'D' :
+		 Rank(comstr[3]) + '1'));
+    }
     UIBarf("possible moves.");
 }
 
@@ -707,7 +943,7 @@ static void UIMovelistShow(MoveListT *mvlist)
 static void UIPlayerMove(BoardT *board, ThinkContextT *th,
 			 SwitcherContextT *sw, GameStateT *gameState)
 {
-    char *ptr;
+    uint8 *ptr;
     uint8 chr;
     MoveListT movelist;
     uint8 myPieces[64];
@@ -721,90 +957,119 @@ static void UIPlayerMove(BoardT *board, ThinkContextT *th,
     switch(comstr[0])
     {
     case 'Q':    /* bail */
-	ThinkerBail(th);
+	ThinkerCmdBail(th);
 	UIExit();
 	printf("bye.\n");
 	exit(0);
 	break;
     case 'N':     /* new game */
-	ThinkerBail(th);
+	ThinkerCmdBail(th);
+	ClocksReset(gameState);
 	newgame(board);
+	GoaltimeCalc(gameState, board);
 	commitmove(board, NULL, th, gameState, 0);
 	return;
     case 'L':     /* switch computer level */
 	while ((myLevel = UIBarf("Set to what level? >") - '0') < 0 ||
 	       myLevel > 9)
 	    ;	/* do nothing */
-	if (board->level > (board->maxLevel = myLevel))
+	if (board->level > (gVars.maxLevel = myLevel))
 	{
-	    ThinkerMoveNow(th);
+	    ThinkerCmdMoveNow(th);
 	}
+	UIOptionsDraw(gameState);
 	return;
     case 'H':     /* change history window */
 	while ((myHiswin = UIBarf("Set to x moves (0-9)? >") - '0') < 0 ||
 	       myHiswin > 9)
 	    ;	/* do nothing */
-	board->hiswin = myHiswin << 1;	/* convert moves to plies. */
+	gVars.hiswin = myHiswin << 1;	/* convert moves to plies. */
+	UIOptionsDraw(gameState);
 	return;
     case 'W':     /* toggle computer control */
     case 'B':
 	player = (comstr[0] == 'B');
 	on = (gameState->control[player] ^= 1);
 	/* Are we affecting the control of the side to move? */
-	if ((gameState->boardCopy.ply & 1) == player)
+	if ((gameState->savedBoard.ply & 1) == player)
 	{
 	    /* Yes. */
 	    if (on)
-		ThinkerThink(th);
+	    {
+		GoaltimeCalc(gameState, board);
+		gUI->notifyThinking();
+		ThinkerCmdThink(th);
+	    }
 	    else
 	    {
-		ThinkerBail(th);
+		ThinkerCmdBail(th);
+		GoaltimeCalc(gameState, board);
 		UINotifyReady();
 	    }
 	}
+	UIOptionsDraw(gameState);
 	return;
     case 'M':
-	ThinkerMoveNow(th);
+	ThinkerCmdMoveNow(th);
 	return;
     case 'C':     /* change w/b colors */
 	UIPlayerColorChange();
-	UIBoardRefresh(&gameState->boardCopy);
+	UIBoardRefresh(&gameState->savedBoard);
 	return;
     case 'F':     /* flip board. */
-	UIBoardFlip(&gameState->boardCopy);
+	UIBoardFlip(&gameState->savedBoard);
 	return;
     case 'D':     /* change debug logging level. */
 	UISetDebugLoggingLevel();
 	return;
     case 'S':
-	UIBarf(GameSave(&gameState->boardCopy) < 0 ?
+	UIBarf(GameSave(&gameState->savedBoard) < 0 ?
 	       "Game save failed." :
 	       "Game save succeeded.");
 	return;
     case 'R':
 	/* restore to copy at first, so computer does not need to re-think if
 	   the restore fails. */
-	if (GameRestore(&gameState->boardCopy) < 0)
+	if (GameRestore(&gameState->savedBoard) < 0)
 	{
 	    UIBarf("Game restore failed.");
 	}
 	else
 	{
-	    ThinkerBail(th);
+	    ThinkerCmdBail(th);
 	    UIBarf("Game restore succeeded.");
-	    CopyBoard(board, &gameState->boardCopy);
+	    hashInit();
+	    histInit();
+	    BoardCopy(board, &gameState->savedBoard);
 	    commitmove(board, NULL, th, gameState, 0);
 	}
 	return;
     case 'E':
-	ThinkerBail(th);
+	ThinkerCmdBail(th);
+	ClocksStop(gameState);
 	do {
 	    UIEditPosition(board);
 	} while (BoardSanityCheck(board));
-	UIOptionsDraw();
+	UIOptionsDraw(gameState);
 
 	memcpy(myPieces, board->coord, sizeof(myPieces));
+	ClocksReset(gameState);
 	newgameEx(board, myPieces, board->cbyte, board->ebyte, board->ply);
+	GoaltimeCalc(gameState, board);
+	commitmove(board, NULL, th, gameState, 0);
+	return;
+    case 'A': /* toggle randomize moves. */
+	gVars.randomMoves ^= 1;
+	UIOptionsDraw(gameState);
+	return;
+    case 'T':
+        // I'm pretty sure I want the computer to stop thinking, if I'm swiping
+	// the time out from under it.
+	ThinkerCmdBail(th);
+	ClocksStop(gameState);
+	UITimeMenu(board, gameState);
+	UIOptionsDraw(gameState);
+	UINotifyReady();
 	commitmove(board, NULL, th, gameState, 0);
 	return;
     default:
@@ -813,21 +1078,20 @@ static void UIPlayerMove(BoardT *board, ThinkContextT *th,
 
     /* at this point must be a move or request for moves. */
     /* get valid moves. */
-    mlistGenerate(&movelist, &gameState->boardCopy, 0);
+    mlistGenerate(&movelist, &gameState->savedBoard, 0);
     if (comstr[0] == 'G')	/* display moves */
     {
 	UIMovelistShow(&movelist);
 	UIBoardDraw();
 	UITicksDraw();
-	UIOptionsDraw();
-	UIBoardRefresh(&gameState->boardCopy);
-	UIStatusDraw(board, 0);
+	UIOptionsDraw(gameState);
+	UIBoardRefresh(&gameState->savedBoard);
+	UIStatusDraw(board, gameState);
      	return;
     }
 
     /* search movelist for comstr */
-    ptr = searchlist(&movelist, comstr, 2);
-    if (ptr == NULL)
+    if ((ptr = searchlist(&movelist, comstr, 2)) == NULL)
     {
 	UIBarf("Sorry, invalid move.");
 	UITicksDraw();
@@ -835,17 +1099,17 @@ static void UIPlayerMove(BoardT *board, ThinkContextT *th,
     }
 
     /* At this point, we must have a valid move. */
-    ThinkerBail(th);
+    ThinkerCmdBail(th);
 
     /* Do we need to promote? */
-    if (ISPAWN(gameState->boardCopy.coord[comstr[0]]) &&
+    if (ISPAWN(gameState->savedBoard.coord[comstr[0]]) &&
 	(comstr[1] > 55 || comstr[1] < 8))
     {
 	while ((chr = UIBarf("Promote piece to (q, r, b, n)? >")) != 'q' &&
 	       chr != 'r' && chr != 'b' && chr != 'n')
 	    ; /* do nothing */
 	chr = asciiToNative(chr);
-	comstr[2] = (chr & ~1) | (gameState->boardCopy.ply & 1);
+	comstr[2] = (chr & ~1) | (gameState->savedBoard.ply & 1);
 
 	ptr = searchlist(&movelist, comstr, 3);
 	assert(ptr != NULL);
@@ -868,6 +1132,7 @@ static UIFuncTableT myUIFuncTable =
     .boardRefresh = UIBoardRefresh,
     .exit = UIExit,
     .statusDraw = UIStatusDraw,
+    .notifyTick = UINotifyTick,
     .notifyMove = UINotifyMove,
     .notifyError = UINotifyError,
     .notifyPV = UINotifyPV,
@@ -881,7 +1146,7 @@ static UIFuncTableT myUIFuncTable =
 
 
 /* Do any UI-specific initialization. */
-UIFuncTableT *UIInit(void)
+UIFuncTableT *UIInit(GameStateT *gameState)
 {
     initconio();
     /* set cursor invisible (ncurses).  Hacky, but geez. */
@@ -897,7 +1162,7 @@ UIFuncTableT *UIInit(void)
 
     UIBoardDraw();
     UITicksDraw();
-    UIOptionsDraw();    
+    UIOptionsDraw(gameState);    
 
     return &myUIFuncTable;
 }

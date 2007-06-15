@@ -15,7 +15,6 @@
  ***************************************************************************/
 
 
-#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/poll.h> // poll(2)
@@ -48,6 +47,10 @@ void playloop(BoardT *board, ThinkContextT *th, SwitcherContextT *sw,
 {
     struct pollfd pfds[2];
     int res;
+    int pollTimeout;
+    int moveNowOnTimeout; // bool.
+    bigtime_t myTime;
+    int turn;
 
     union {
 	CompStatsT stats;
@@ -59,16 +62,57 @@ void playloop(BoardT *board, ThinkContextT *th, SwitcherContextT *sw,
     /* setup the pollfd array. */
     pfds[0].fd = fileno(stdin);
     pfds[0].events = POLLIN;
-    pfds[1].fd = th->mainSock;
+    pfds[1].fd = th->masterSock;
     pfds[1].events = POLLIN;
 
     while(1)
     {
-	/* poll for input from either stdin, or the computer. */
-	res = poll(pfds, 2, -1);
+	pollTimeout = -1;
+	turn = gameState->savedBoard.ply & 1;
+	moveNowOnTimeout = 0;
+	if (ClockIsRunning(gameState->clocks[turn]) &&
+	    (myTime = ClockCurrentTime(gameState->clocks[turn])) !=
+	    CLOCK_TIME_INFINITE)
+	{
+	    // Try to keep the UI time display refreshed.
+	    pollTimeout = myTime % 1000000; // usec
+	    pollTimeout /= 1000; // msec
+	    pollTimeout += 1; // adjust for truncation
+
+	    // Do we need to move before the next polltimeout?
+	    if (gameState->control[turn] &&
+		gameState->goalTime[turn] != CLOCK_TIME_INFINITE &&
+		(myTime - gameState->goalTime[turn]) / 1000 < pollTimeout)
+	    {
+		// Yes.
+		moveNowOnTimeout = 1;
+		pollTimeout = (myTime - gameState->goalTime[turn]) / 1000;
+		pollTimeout = MAX(pollTimeout, 0);
+	    }
+	}
+
+	// poll for input from either stdin, or the computer, or timeout.
+	res = poll(pfds, 2, pollTimeout);
+
+	if (res == 0)
+	{
+	    // poll timed out.  Do appropriate action and re-poll.
+	    if (moveNowOnTimeout)
+	    {
+		// So we do not trigger again
+		gameState->goalTime[turn] = CLOCK_TIME_INFINITE;
+		ThinkerCmdMoveNow(th);
+	    }
+	    else
+	    {
+		// Tick, tock...
+		gUI->notifyTick(gameState);
+	    }
+	    continue;
+	}
 
 	if (res == -1 && errno == EINTR) continue;
-	assert(res > 0); /* other errors, or timeout, should not happen. */
+	assert(res > 0); /* other errors should not happen. */
 	assert(!(pfds[1].revents & (POLLERR | POLLHUP | POLLNVAL)));
 
 	if (pfds[0].revents & (POLLERR | POLLHUP | POLLNVAL))
@@ -87,7 +131,7 @@ void playloop(BoardT *board, ThinkContextT *th, SwitcherContextT *sw,
 	{
 	    rsp = ThinkerRecvRsp(th, &rspBuf, sizeof(rspBuf));
 	    if (rsp != eRspStats &&
-		!gameState->control[gameState->boardCopy.ply & 1])
+		!gameState->control[gameState->savedBoard.ply & 1])
 	    {
 		LOG_EMERG("bad rsp %d\n", rsp);
 		assert(0);
@@ -98,7 +142,7 @@ void playloop(BoardT *board, ThinkContextT *th, SwitcherContextT *sw,
 		gUI->notifyComputerStats(&rspBuf.stats);
 		break;
 	    case eRspPv:
-		gUI->notifyPV(&rspBuf.pv);
+		gUI->notifyPV(&gameState->savedBoard, &rspBuf.pv);
 		break;
 	    case eRspDraw:
 		if (rspBuf.comstr[0] != FLAG)
@@ -106,6 +150,7 @@ void playloop(BoardT *board, ThinkContextT *th, SwitcherContextT *sw,
 		    commitmove(board, rspBuf.comstr, th, gameState, 1);
 		}
 
+		ClocksStop(gameState);
 		gameState->bDone[board->ply & 1] = 1;
 		gUI->notifyReady();
 
@@ -125,10 +170,14 @@ void playloop(BoardT *board, ThinkContextT *th, SwitcherContextT *sw,
 	    case eRspMove:
 		gUI->notifyMove(rspBuf.comstr);
 		commitmove(board, rspBuf.comstr, th, gameState, 0);
+		LogFlush();
 		break;
 	    case eRspResign:
+		ClocksStop(gameState);
 		gameState->bDone[board->ply & 1] = 1;
 		gUI->notifyReady();
+		LOG_DEBUG("%d resigns\n", board->ply & 1);
+		LogFlush();
 		gUI->notifyResign(board->ply & 1);
 		break;
 	    default:
@@ -147,6 +196,19 @@ int main(int argc, char *argv[])
     ThinkContextT th;
     SwitcherContextT sw;
     GameStateT gameState;
+
+#if 0 /* bldbg */
+    FILE *errFile = fopen("errlog", "w");
+    assert(errFile != NULL);
+    LogSetFile(errFile);
+    setbuf(errFile, NULL); // turn off buffering
+    LogSetLevel(eLogDebug);
+#endif
+
+    /* some structure sanity checks we probably should not rely on. */
+    assert(offsetof(BoardT, zobrist) + 4 == offsetof(BoardT, hashcoord));
+    assert(offsetof(BoardT, zobrist) + 4 + 32 == offsetof(BoardT, cbyte));
+    assert(offsetof(BoardT, zobrist) + 4 + 32 + 1 == offsetof(BoardT, ebyte));
 
     /* parse any cmd-line args. */
     for (i = 1; i < argc; i++)
@@ -167,29 +229,42 @@ int main(int argc, char *argv[])
 	}
     }
 
-    memset(&gameState, 0, sizeof(GameStateT));
-
-    gUI = isatty(fileno(stdin)) && isatty(fileno(stdout)) ?
-	UIInit() : xboardInit();
-
+    // must be done before seeding, if we want reproducable results.
     preCalcInit(numHashEntries * 1024);
+
+    srandom(getBigTime() / 1000000);
+
     ThinkerInit(&th);
     SwitcherInit(&sw);
 
+    gVars.maxLevel = 0;
+    gVars.hiswin = 2;	/* set for killer move heuristic */
+
+    memset(&gameState, 0, sizeof(GameStateT));
     gameState.mainCookie = SwitcherGetCookie(&sw);
-    gameState.lastTime = time(NULL);
+    for (i = 0; i < 2; i++)
+    {
+	gameState.goalTime[i] = CLOCK_TIME_INFINITE;
+	gameState.clocks[i] = &gameState.actualClocks[i];
+    }
+    ClockSetInfinite(&gameState.origClocks[0]);
+    ClockSetInfinite(&gameState.origClocks[1]);
+    
+    gUI = isatty(fileno(stdin)) && isatty(fileno(stdout)) ?
+	UIInit(&gameState) : xboardInit();
 
-    board.maxLevel = 0;
-    board.hiswin = 1;	/* set for killer move heuristic */
+    ClocksReset(&gameState);
     newgame(&board);
-
     commitmove(&board, NULL, &th, &gameState, 0);
 
     compThreadInit(&board, &th);
     playerThreadInit(&board, &th, &sw, &gameState);
 
     gUI->notifyReady();
+    ClockStart(gameState.clocks[0]);
+
     playloop(&board, &th, &sw, &gameState);
+
     gUI->exit();
     return 0;
 }

@@ -43,29 +43,39 @@ int GameSave(BoardT *board)
 }
 
 
-
-void CopyBoard(BoardT *dest, BoardT *src)
+static void copyHelper(BoardT *dest, BoardT *src, int len)
 {
-    /* We attempt to copy every variable prior to 'board->depth'. */
-    int i, j, piece, len = (void *) &src->depth - (void *) src;
+    int i;
+    ListPositionT *myElem;
 
     /* have something good to load, so copy it over. */
     memcpy(dest, src, len);
+
     /* we need to rebuild the playptr list. */
-    for (i = 0; i < 64; i++)
+    BoardUpdatePlayPtrs(dest);
+
+    /* Must also rebuild the posList hash.  We could cheat and manipulate
+       pointers, but if we really need that, we should just look at skipping
+       the whole thing. */
+    for (i = 0; i < 128; i++)
     {
-	dest->playptr[i] = NULL;
-	if ((piece = dest->coord[i]))
-	{
-	    for (j = 0; j < dest->playlist[piece].lgh; j++)
-	    {
-		if (dest->playlist[piece].list[j] == i)
-		{
-		    dest->playptr[i] = &dest->playlist[piece].list[j];
-		}
-	    }
-	}
+	ListInit(&dest->posList[i]);
+	ListElementInit(&dest->positions[i].el);
     }
+    /* (note: the current position is not put into the hash until a later
+       PositionSave() call.) */
+    for (i = 0; i < dest->ncpPlies; i++)
+    {
+	myElem = &dest->positions[(dest->ply - dest->ncpPlies) & 127];
+	ListPush(&dest->posList[myElem->p.zobrist & 127], myElem);
+    }
+}
+
+
+void BoardCopy(BoardT *dest, BoardT *src)
+{
+    /* We attempt to copy every variable prior to 'board->depth'. */
+    copyHelper(dest, src, (void *) &src->depth - (void *) src);
 }
 
 
@@ -97,7 +107,7 @@ int GameRestore(BoardT *board)
     }
 
     /* have something good to load, so copy it over. */
-    CopyBoard(board, &myBoard);
+    BoardCopy(board, &myBoard);
 
     return 0;
 }

@@ -275,8 +275,8 @@ static void addmove(MoveListT *mvlist, BoardT *board, int from, int to,
 
     if (board->coord[to] || dc != FLAG || chk != FLAG ||
 	(board->level - board->depth > 1 &&
-	 Abs(board->hist[board->ply & 1] [from] [to]
-	     - board->ply) < board->hiswin))
+	 Abs(gVars.hist[board->ply & 1] [from] [to]
+	     - board->ply) < gVars.hiswin))
 	/* capture, promo, check, or history move w/ depth?  Want good
 	   spot. */
     {
@@ -288,8 +288,8 @@ static void addmove(MoveListT *mvlist, BoardT *board, int from, int to,
     comstr[1] = to;
     comstr[2] = 0;
     comstr[3] = dc == FLAG ? chk :
-	chk == FLAG ? dc : DISCHKFLAG;
-    /* actually follows FLAG:coord:DISCHKFLAG convention.
+	chk == FLAG ? dc : DOUBLE_CHECK;
+    /* actually follows FLAG:coord:DOUBLE_CHECK convention.
        Read: no check, check, doublecheck. */
 }
 
@@ -301,8 +301,8 @@ static void addmovePromote(MoveListT *mvlist, BoardT *board, int from,
 
     if (board->coord[to] || promote || dc != FLAG || chk != FLAG ||
 	(board->level - board->depth > 1 &&
-	 Abs(board->hist[board->ply & 1] [from] [to]
-	     - board->ply) < board->hiswin))
+	 Abs(gVars.hist[board->ply & 1] [from] [to]
+	     - board->ply) < gVars.hiswin))
 	/* capture, promo, check, or history move w/ depth?  Want good
 	   spot. */
     {
@@ -314,8 +314,8 @@ static void addmovePromote(MoveListT *mvlist, BoardT *board, int from,
     comstr[1] = to;
     comstr[2] = promote;
     comstr[3] = dc == FLAG ? chk :
-	chk == FLAG ? dc : DISCHKFLAG;
-    /* actually follows FLAG:coord:DISCHKFLAG convention.
+	chk == FLAG ? dc : DOUBLE_CHECK;
+    /* actually follows FLAG:coord:DOUBLE_CHECK convention.
        Read: no check, check, doublecheck. */
 }
 
@@ -375,6 +375,8 @@ static void promo(MoveListT *mvlist, BoardT *board, int from, int to,
 }
 
 
+/* Attempt to calculate any discovered check on an enemy king by doing an
+   enpassant capture. */
 static int enpassdc(BoardT *board, int capPawnCoord)
 {
     int turn = board->ply & 1;
@@ -385,7 +387,7 @@ static int enpassdc(BoardT *board, int capPawnCoord)
     int a;
 
     if (gPreCalc.dir[ebyte] [ekcoord] < 8 &&
-	nopose(board, ebyte, ekcoord, FLAG))
+	nopose(board, ebyte, ekcoord, capPawnCoord))
     {
 	/* This is semi-lazy (we could do something more akin to findpins())
 	   but it will get the job done and it does not need to be quick.
@@ -409,7 +411,8 @@ static int enpassdc(BoardT *board, int capPawnCoord)
 
 /* Make sure an en passant capture will not put us in check.
    Normally this is indicated by 'findpins()', but if the king is on the
-   same rank as the capturing (and captured) pawn, it will not work. */
+   same rank as the capturing (and captured) pawn, that routine is not
+   sufficient. */
 static int enpassLegal(BoardT *board, int capPawnCoord)
 {
     int turn = board->ply & 1;
@@ -453,7 +456,7 @@ static void cappose(MoveListT *mvlist, BoardT *board, uint8 attcoord,
 		    PListT *dclist)
 /* king in check by one piece.  Find moves that capture or interpose. */
 {
-    char *j;
+    uint8 *j;
     int i, pintype;
     CoordListT attlist;
     uint8 src, dest;
@@ -476,6 +479,10 @@ static void cappose(MoveListT *mvlist, BoardT *board, uint8 attcoord,
 	    if (ISPAWN(board->coord[src]) &&
 		Rank(src) == Rank(attcoord)) 	/* spec case: en passant */
 	    {
+		/* It is worth noting that with a pawn-push discovered
+		   check, we can never use en passant to get out of it.
+		   So there is never occasion to need enpassLegal().
+		*/
 		assert(dest == board->ebyte);
 		enpass = board->coord[dest];
 		dest += (-2 * turn + 1) << 3;
@@ -492,12 +499,15 @@ static void cappose(MoveListT *mvlist, BoardT *board, uint8 attcoord,
 	    {
 		dc = dclist->c[src];
 		dc = CALCDC(board, dc, src, dest);
+                /* The friendly king prevents the three-check-vector problem
+		   described in pawnmove() (because it interposes at least one
+		   of the discovered checks), so the below code is sufficient.
+		*/
 		if (enpass && dc == FLAG)
 		{
 		    dc = enpassdc(board, attcoord);
 		}
-		if (ISPAWN(board->coord[src]) &&
-		    (dest < 8 || dest > 55))
+		if (ISPAWN(board->coord[src]) && (dest < 8 || dest > 55))
 		    promo(mvlist, board, src, dest, turn, dc);
 		else addmoveCalcChk(mvlist, board, src, dest, enpass, dc);
 	    }
@@ -556,6 +566,57 @@ static void nightmove(MoveListT *mvlist, BoardT *board, int from, int turn,
 }
 
 
+static void kingmove(MoveListT *mvlist, BoardT *board, int from, int turn,
+		     int dc)
+{
+    const int *idx;
+    uint8 to;
+    CoordListT attlist; /* filler */
+    uint8 *coord = board->coord;
+
+    static const int preferredKDirs[2] [9] =
+	/* prefer increase rank for White... after that, favor center,
+	   queenside, and kingside moves, in that order.  Similar for Black,
+	   but decrease rank.
+	*/
+	{{1, 0, 2, 7, 3, 5, 6, 4, FLAG},
+	 {5, 6, 4, 7, 3, 1, 0, 2, FLAG}};
+
+    if (!mvlist->capOnly && board->ncheck[turn] == FLAG)
+    {
+	/* check for kingside castle */
+	if (((board->cbyte >> turn) & 1) &&
+	    !coord[from + 1] && !coord[from + 2] &&
+	    !attacked(&attlist, board, from + 1, turn, turn, 1) &&
+	    !attacked(&attlist, board, from + 2, turn, turn, 1))
+	    addmove(mvlist, board, from, from + 2, FLAG,
+		    ROOKCHK(board, from + 1, from, mvlist->ekcoord));
+	/* check queenside castle */
+	if (((board->cbyte >> (turn + 2)) & 1) &&
+	    !coord[from - 1] && !coord[from - 2] && !coord[from - 3] &&
+	    !attacked(&attlist, board, from - 1, turn, turn, 1) &&
+	    !attacked(&attlist, board, from - 2, turn, turn, 1))
+	    addmove(mvlist, board, from, from - 2, FLAG,
+		    ROOKCHK(board, from - 1, from, mvlist->ekcoord));
+    }
+
+    for (idx = preferredKDirs[turn]; *idx != FLAG; idx++)
+    {
+	to = *(gPreCalc.moves[from] [*idx]);
+
+	if (to != FLAG &&
+	    CHECK(coord[to], turn) > mvlist->capOnly &&
+	    /* I could optimize a few of these calls out if I already
+	       did this while figuring out the castling moves. ... but I doubt
+	       it's a win. */
+	    !attacked(&attlist, board, to, turn, turn, 1))
+	    addmove(mvlist, board, from, to,
+		    CALCDC(board, dc, from, to),
+		    FLAG);
+    }
+}
+
+
 /* probes sliding moves.  Piece should not be pinned in this direction. */
 static inline void probe(MoveListT *mvlist, BoardT *board, uint8 *moves,
 			 int from, int turn, int dc, int mypiece)
@@ -602,56 +663,6 @@ static void brmove(MoveListT *mvlist, BoardT *board, int from, int turn,
 }
 
 
-static void kingmove(MoveListT *mvlist, BoardT *board, int from, int turn,
-		     int dc)
-{
-    const int *idx;
-    uint8 to;
-    CoordListT attlist; /* filler */
-    uint8 *coord = board->coord;
-
-    static const int preferredKDirs[2] [9] =
-	/* prefer increase rank for White... after that, favor center,
-	   queenside, and kingside moves, in that order.  Similar for Black,
-	   but decrease rank.
-	*/
-	{{1, 0, 2, 7, 3, 5, 6, 4, FLAG},
-	 {5, 6, 4, 7, 3, 1, 0, 2, FLAG}};
-
-    if (board->ncheck[turn] == FLAG)
-    {
-	/* check for kingside castle */
-	if (((board->cbyte >> turn) & 1) &&
-	    !coord[from + 1] && !coord[from + 2] &&
-	    !attacked(&attlist, board, from + 1, turn, turn, 1) &&
-	    !attacked(&attlist, board, from + 2, turn, turn, 1))
-	    addmove(mvlist, board, from, from + 2, FLAG,
-		    ROOKCHK(board, from + 1, from, mvlist->ekcoord));
-	/* check queenside castle */
-	if (((board->cbyte >> (turn + 2)) & 1) &&
-	    !coord[from - 1] && !coord[from - 2] && !coord[from - 3] &&
-	    !attacked(&attlist, board, from - 1, turn, turn, 1) &&
-	    !attacked(&attlist, board, from - 2, turn, turn, 1))
-	    addmove(mvlist, board, from, from - 2, FLAG,
-		    ROOKCHK(board, from - 1, from, mvlist->ekcoord));
-    }
-
-    for (idx = preferredKDirs[turn]; *idx != FLAG; idx++)
-    {
-	to = *(gPreCalc.moves[from] [*idx]);
-	if (to != FLAG &&
-	    CHECK(coord[to], turn) > mvlist->capOnly &&
-	    /* I could optimize a few of these calls out if I already
-	       did this while figuring out the castling moves. ... but I doubt
-	       it's a win. */
-	    !attacked(&attlist, board, to, turn, turn, 1))
-	    addmove(mvlist, board, from, to,
-		    CALCDC(board, dc, from, to),
-		    FLAG);
-    }
-}
-
-
 static void pawnmove(MoveListT *mvlist, BoardT *board, int from, int turn,
 		     int pintype, int dc)
 {
@@ -659,47 +670,54 @@ static void pawnmove(MoveListT *mvlist, BoardT *board, int from, int turn,
     int to, to2;
     uint8 *coord = board->coord;
     uint8 **moves = gPreCalc.moves[from];
-    int mydc;
-    int enemy;
+    int dc1, dc2, pawnchk;
     int promote;
-
+    
     /* generate captures (if any). */
     do
     {
 	to = *moves[toind];
-	if (to != FLAG &&
-	    (pintype == FLAG || pintype == (toind & 3)) &&
-	    /* enemy on diag? */
-	    ((enemy = (CHECK(coord[to], turn) == ENEMY)) ||
-	     /* en passant? */
-	     ((to - 8 + (turn << 4) == board->ebyte) &&
-	      enpassLegal(board, from))))
+	if (to != FLAG && (pintype == FLAG || pintype == (toind & 3)))
 	{
-	    /* can we promote? */
-	    if (to > 55 || to < 8)
-		promo(mvlist, board, from, to, turn,
-		      CALCDC(board, dc, from, to));
-	    else if (enemy)
+	    /* enemy on diag? */
+	    if (CHECK(coord[to], turn) == ENEMY)
 	    {
-		/* normal capture. */
-		addmove(mvlist, board, from, to,
-			CALCDC(board, dc, from, to),
-			PAWNCHK(board, to, mvlist->ekcoord, turn));
+		/* can we promote? */
+		if (to > 55 || to < 8)
+		    promo(mvlist, board, from, to, turn,
+			  CALCDC(board, dc, from, to));
+		else
+		{
+		    /* normal capture. */
+		    addmove(mvlist, board, from, to,
+			    CALCDC(board, dc, from, to),
+			    PAWNCHK(board, to, mvlist->ekcoord, turn));
+		}
 	    }
-	    else
+	    /* en passant? */
+	    else if (to - 8 + (turn << 4) == board->ebyte &&
+		     enpassLegal(board, from))
 	    {
-		/* must be en passant. */
-		mydc = dc == FLAG ?
-		    /* with en passant, must take into account check created
-		       when captured pawn was pinned.  Setting 'dc' is slightly
-		       hacky but it works. */
-		    enpassdc(board, from) :
-		    CALCDC(board, dc, from, to);
+		/* yes. */
+		dc1 = CALCDC(board, dc, from, to);
+		dc2 = enpassdc(board, from);
+		pawnchk = PAWNCHK(board, to, mvlist->ekcoord, turn);
+
+		/* with en passant, must take into account check created
+		   when captured pawn was pinned.  So, there are actually
+		   2 potential discovered check vectors + the normal check
+		   vector.  Triple check is impossible with normal pieces,
+		   but if any two vectors have check, we need to make sure
+		   we handle it 'correctly' (if hackily). */
+		if (dc1 == FLAG && dc2 != FLAG)
+		    dc1 = dc2;
+		else if (pawnchk == FLAG && dc2 != FLAG)
+		    pawnchk = dc2;
+
 		addmovePromote(mvlist, board, from, to,
 			       board->coord[board->ebyte],
-			       mydc,
-			       PAWNCHK(board, to, mvlist->ekcoord,
-				       turn));
+			       dc1,
+			       pawnchk);
 	    }
 	}
 	toind += 2;
@@ -710,7 +728,7 @@ static void pawnmove(MoveListT *mvlist, BoardT *board, int from, int turn,
     promote = (to > 55 || to < 8);
     if (promote >= mvlist->capOnly &&
 	CHECK(coord[to], turn) == UNOCCD &&
-	(pintype == FLAG || pintype == (toind & 3)))
+	(pintype == FLAG || pintype == 1))
 	/* space ahead */
     {	/* can we promote? */
 	if (promote)
@@ -815,7 +833,7 @@ void mlistGenerate(MoveListT *mvlist, BoardT *board, int capOnly)
 		   dclist.c[x]);
 	}
     }
-    else if (board->ncheck[turn] != DISCHKFLAG)
+    else if (board->ncheck[turn] != DOUBLE_CHECK)
     {
 	/* In check by 1 piece (only), so capture or interpose. */
 	cappose(mvlist, board, board->ncheck[turn], &pinlist, turn, kcoord,
@@ -878,7 +896,7 @@ void mlistSortByCap(MoveListT *mvlist, BoardT *board)
 {
     int i, j, besti;
     int maxWorth, myWorth;
-    uint8 comstr[4];
+    uint8 tmpComstr[4];
 
     /* perform selection sort (by capture worth).  I don't bother caching
        capture worth, but if it shows up badly on gprof I can try it. */
@@ -890,6 +908,7 @@ void mlistSortByCap(MoveListT *mvlist, BoardT *board)
 	     j++)
 	{
 	    myWorth = calcCapWorth(board, mvlist->list[j]);
+
 	    if (myWorth > maxWorth)
 	    {
 		maxWorth = myWorth;
@@ -900,9 +919,9 @@ void mlistSortByCap(MoveListT *mvlist, BoardT *board)
 	/* ... and if it's not the first move, swap w/it. */
 	if (besti != i)
 	{
-	    memcpy(comstr, mvlist->list[i], 4);
+	    memcpy(tmpComstr, mvlist->list[i], 4);
 	    memcpy(mvlist->list[i], mvlist->list[besti], 4);
-	    memcpy(mvlist->list[besti], comstr, 4);
+	    memcpy(mvlist->list[besti], tmpComstr, 4);
 	}
     }
 }
@@ -925,7 +944,7 @@ int calcNCheck(BoardT *board, int kcoord, char *context)
 
     attacked(&attlist, board, kcoord, myturn, myturn, 0);
     board->ncheck[myturn] =
-	attlist.lgh >= 2 ? DISCHKFLAG :
+	attlist.lgh >= 2 ? DOUBLE_CHECK :
 	attlist.lgh == 1 ? attlist.list[0] :
 	FLAG;
     return board->ncheck[myturn];

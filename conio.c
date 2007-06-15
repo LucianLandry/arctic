@@ -224,15 +224,17 @@ void clrscr (void)
 int cprintf (char *format, ... )
 {
    int i;
+   int len; /* blandry: added; return string length on success */
    char buffer[BUFSIZ]; /* Well, BUFSIZ is from ncurses...  */
    va_list argp;
    if (initialized==0) initconio();
    va_start(argp,format);
    vsprintf(buffer,format,argp);
    va_end(argp);
+   len = strlen(buffer);
    i=waddstr(conio_scr,buffer);
    wrefresh(conio_scr);
-   return(i);
+   return(i == ERR ? -1 : len);
 }
 
 void cputs (char *str)

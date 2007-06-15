@@ -40,6 +40,9 @@
    eRspResign
    eRspStats<CompStatsT>
    eRspPv<PvT>
+
+   Extended this for multiple computer threads:
+   eRspSearchDone
 */   
 
 #define MAXBUFLEN 80
@@ -55,8 +58,8 @@ void ThinkerInit(ThinkContextT *th)
     err = socketpair(PF_UNIX, SOCK_STREAM, 0, socks);
     assert(err == 0);
 
-    th->mainSock = socks[0];
-    th->compSock = socks[1];
+    th->masterSock = socks[0];
+    th->slaveSock = socks[1];
 }
 
 
@@ -84,14 +87,14 @@ static void compSend(int sock, eThinkMsgT msg, ThinkContextT *th,
 
 static void compSendCmd(ThinkContextT *th, eThinkMsgT cmd)
 {
-    compSend(th->mainSock, cmd, th, NULL, 0);
+    compSend(th->masterSock, cmd, th, NULL, 0);
 }
 
 
 static void compSendRsp(eThinkMsgT rsp, ThinkContextT *th,
 			void *buffer, int bufLen)
 {
-    compSend(th->compSock, rsp, th, buffer, bufLen);
+    compSend(th->slaveSock, rsp, th, buffer, bufLen);
 }
 
 
@@ -138,7 +141,8 @@ static eThinkMsgT compRecv(int sock, ThinkContextT *th,
 	}
     }
 
-    if (msg == eRspDraw || msg == eRspMove || msg == eRspResign)
+    if (msg == eRspDraw || msg == eRspMove || msg == eRspResign ||
+	msg == eRspSearchDone)
 	th->isThinking = th->moveNow = 0;
     return msg;
 }
@@ -146,22 +150,31 @@ static eThinkMsgT compRecv(int sock, ThinkContextT *th,
 
 eThinkMsgT ThinkerRecvRsp(ThinkContextT *th, void *buffer, int bufLen)
 {
-    return compRecv(th->mainSock, th, buffer, bufLen);
+    return compRecv(th->masterSock, th, buffer, bufLen);
+}
+
+
+eThinkMsgT ThinkerRecvCmd(ThinkContextT *th, void *buffer, int bufLen)
+{
+    return compRecv(th->slaveSock, th, buffer, bufLen);
 }
 
 
 /* only to be used when we know the machine is idle. */
-void ThinkerThink(ThinkContextT *th)
+void ThinkerCmdThink(ThinkContextT *th)
 {
     assert(!th->isThinking);
     th->isThinking = 1;
-    gUI->notifyThinking();
     compSendCmd(th, eCmdThink);
 }
 
 
-/* Force the computer to move in the very near future. */
-void ThinkerMoveNow(ThinkContextT *th)
+/* Force the computer to move in the very near future.
+   This is currently asynchronous, but I think it could be made synchronous
+   with a little bit of effort (synchronicity would probably be required to
+   implement the UCI interface).
+ */
+void ThinkerCmdMoveNow(ThinkContextT *th)
 {
     if (th->isThinking)
     {
@@ -171,41 +184,48 @@ void ThinkerMoveNow(ThinkContextT *th)
 }
 
 
-void ThinkerBail(ThinkContextT *th)
+void ThinkerCmdBail(ThinkContextT *th)
 {
     eThinkMsgT rsp;
     if (th->isThinking)
     {
-	ThinkerMoveNow(th);
+	ThinkerCmdMoveNow(th);
 
 	/* Wait for, and discard, the computer's move. */
 	do
 	{
-	    rsp = compRecv(th->mainSock, th, NULL, 0);
-	} while (rsp != eRspDraw && rsp != eRspMove && rsp != eRspResign);
+	    rsp = compRecv(th->masterSock, th, NULL, 0);
+	} while (rsp != eRspDraw && rsp != eRspMove && rsp != eRspResign &&
+		 rsp != eRspSearchDone);
     }
 }
 
 
-void ThinkerCompDraw(ThinkContextT *th, uint8 *comstr)
+void ThinkerRspDraw(ThinkContextT *th, uint8 *comstr)
 {
     compSendRsp(eRspDraw, th, comstr, 4);
 }
 
 
-void ThinkerCompMove(ThinkContextT *th, uint8 *comstr)
+void ThinkerRspMove(ThinkContextT *th, uint8 *comstr)
 {
     compSendRsp(eRspMove, th, comstr, 4);
 }
 
 
-void ThinkerCompResign(ThinkContextT *th)
+void ThinkerRspResign(ThinkContextT *th)
 {
     compSendRsp(eRspResign, th, NULL, 0);
 }
 
 
-void ThinkerCompNotifyStats(ThinkContextT *th, CompStatsT *stats)
+void ThinkerRspSearchDone(ThinkContextT *th)
+{
+    compSendRsp(eRspSearchDone, th, NULL, 0);
+}
+
+
+void ThinkerRspNotifyStats(ThinkContextT *th, CompStatsT *stats)
 {
     compSendRsp(eRspStats, th, stats, sizeof(CompStatsT));
 }
@@ -213,7 +233,7 @@ void ThinkerCompNotifyStats(ThinkContextT *th, CompStatsT *stats)
 
 /* Warning: this has the potential to overflow the buffer. ... Of course,
    it should block in that case. */
-void ThinkerCompNotifyPv(ThinkContextT *th, PvT *Pv)
+void ThinkerRspNotifyPv(ThinkContextT *th, PvT *Pv)
 {
     compSendRsp(eRspPv, th, Pv, sizeof(PvT));
 }
@@ -226,7 +246,7 @@ void ThinkerCompWaitThink(ThinkContextT *th)
     LOG_DEBUG("ThinkerCompWaitThink: start\n");
     do
     {
-	cmd = compRecv(th->compSock, th, NULL, 0);
+	cmd = ThinkerRecvCmd(th, NULL, 0);
 	LOG_DEBUG("ThinkerCompWaitThink: recvd cmd %d\n", cmd);
     } while (cmd != eCmdThink);
 }

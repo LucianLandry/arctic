@@ -19,13 +19,24 @@
 #include "ref.h"
 
 static int gLogLevel = eLogEmerg;
-
+static FILE *gLogFile = NULL;
 
 void LogSetLevel(int level)
 {
     gLogLevel = level;
 }
 
+
+void LogSetFile(FILE *logFile)
+{
+    gLogFile = logFile;
+}
+
+
+void LogFlush(void)
+{
+    if (gLogFile) fflush(gLogFile);
+}
 
 int LogPrint(int level, const char *format, ...)
 {
@@ -35,7 +46,7 @@ int LogPrint(int level, const char *format, ...)
     if (level <= gLogLevel)
     {
 	va_start(ap, format);
-	rv = vfprintf(stderr, format, ap);
+	rv = vfprintf(gLogFile ? gLogFile : stderr, format, ap);
 	va_end(ap);
     }
 
@@ -86,6 +97,7 @@ void LogMove(int level, BoardT *board, uint8 *comstr)
     promostr[0] = '\0';
     chkstr[0] = '\0';
 
+    LogPrint(level, "d%02d", board->depth);
     for (moveDepth = MIN(board->depth, 20); moveDepth > 0; moveDepth--)
     {
 	LogPrint(level, "    ");

@@ -1,16 +1,21 @@
 # Simple makefile for (normally) building.
 # make myargs="-pg" for profiling.
 
-CFLAGS = -Wall $(myargs) -O2 -D_REENTRANT
+# Normal flags.
+CFLAGS = -Wall -Werror $(myargs) -O2 -fomit-frame-pointer -D_REENTRANT
+# Debug flags.
+#CFLAGS = -Wall -Werror $(myargs) -g -D_REENTRANT
+
 LDFLAGS = $(CFLAGS)
 LDLIBS = -lncurses -lpthread
-OBJECTS = comp.o conio.o debug.o init.o log.o main.o makemov.o movgen.o \
-	playmov.o saverestore.o ui.o thinker.o switcher.o intfXboard.o
+OBJECTS = clock.o comp.o conio.o debug.o init.o intfXboard.o list.o log.o \
+	main.o makemov.o movgen.o playmov.o saverestore.o switcher.o \
+	thinker.o ui.o
 
 arctic : $(OBJECTS)
 	$(CC) -o arctic $(LDFLAGS) $(OBJECTS) $(LDLIBS)
 
-$(OBJECTS) : ref.h
+$(OBJECTS) : ref.h list.h
 
 clean :
 	rm -f *.o arctic

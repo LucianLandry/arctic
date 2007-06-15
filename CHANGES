@@ -1,7 +1,70 @@
+Out-there (maybe, maybe not)
+neural net evaluation.
+search shallower for wider branches, deeper for narrower?
+more search time if eval fluctuates (maybe just goes down)
+Use a PV.
+more efficient smp search (propagate alpha-beta up the pv? finish search w/multiple threads?)
+preserve per-thread pv, use it for move ordering?
+optimize pawnmove?
+razoring variation?
+adapative back-propagating opening book?
+1-dimensional movelist?
+pgn save/restore.
+move takeback; examineback/forward (during or after game).
+# sort moves based on last eval? (not even worth trying, probably too compute-intensize)
+# try any hashed move first... maybe even before normal movgen.  ... discarded,
+	slightly slower. (version 9)
+# movgen coroutine discarded, slightly slower (version 7).
+# try lva quiescent move ordering. (seemed not a win or lose; code slightly
+	more complex) (version 9)
+# partial hashhit, slowed code down by 2% and -- with our coarse evaluations
+	only came into play about .0002% (extreme max) of the time.  Could
+	possibly be tried later.
+
+Version 10:
+TODO:
+Implement undo (1 move).
+Implement analyze (think on position w/out making move) support for xboard.
+Implement pondering.
+Implement UCI interface.
+General compute optimization/profiling.
+Better Makefile.
+Split ref.h up into functional units.
+If checkmate, use the shortest mate sequence possible.
+
+
+Version 9:
+alpha-search -> alpha-beta search (oops)
+hashing: -- Use highbound/lowbound instead of eval+alpha.
+	 -- Always update entire entry (could change out from under us due to
+		hp->ply)
+	 -- mightDraw optimization. (hash in more positions)
+Prettier PV (Na3 instead of b1a3, etc.)
+Time display accurate to (some) hundredths of a sec.
+Move immediately if we found a mate.
+Bugfix: dirf(from, to), from == to, should be DIRFLAG, affects genslide())
+Don't consider castle during quiesce.
+Implement random-move support (decreases playing strength, pv not followed?)
+Console UI: -- added status (random, level, black+white, hiswin)
+            -- Bugfix: Blink cursor after board flip
+            -- Implemented UIBarfString()
+	    -- piece color: allow all 16 colors
+Warning fixes for gcc 4.1.2. (sarge -> etch is about 10% speedup, 2% even before recompile).
+Computer moves immediately on 1st ply (in normal game)
+Implemented basic clock support.
+Bugfix: calcCapWorth(): evaluate promotions correctly.
+Implemented multiple-computer-thread support. (~25% improvement?)
+Fix capture-king bug (en-passant capture from same rank as K, our pawn
+	interposes between captured pawn and enemy king, king put into check)
+Fix capture-king bug (en-passant capture: was not accounting for double-
+	discovered check)
+Bugfix: several "< 63" off-by-one errors in init.c (history table, zobrist)
+
+
 Version 8:
 Rudimentary Makefile support.
 Implement asciiToNative() and friends.
-Edit-position functionality.
+Implement edit-position functionality.
 Fractional eval capability.
 Implement transposition table.
 Don't think if only one move to make.
@@ -10,7 +73,7 @@ Fix capture-king bug (en-passant captured pawn discovered check, while *in*
 Fix capture-king bug (en-passant capture from same rank as K could put K in
 	check by R or Q)
 Add depth to displayed PV.
-concheck: don't calc zobrist during unmakemove rook-move.
+concheck: don't calc zobrist during unmakemove castling rook-move.
 optimization: CHECK calc change, 2d array least indexes to pow2, findpins(),
 	pawnmove(), mlistGenerate(), addsrccoord -> inline, genslide(),
 	nightmove().  About 10% improvement.
@@ -18,6 +81,7 @@ Improved endgame (KR vs k, KQ vs k, KBB vs k)
 Separate UI thread (so I can move now/quit immediately etc)
 Implemented move-now functionality.
 Chess UI interface (xboard).
+
 
 Version 7:
 Implement autopass.
@@ -43,6 +107,7 @@ Fixed probable bug on playermove promote (indexing into wrong move).
 Fix castling bug (newcbyte() before coord update in makemove())
 Detect draw due to threefold repetition.
 
+
 Version 6:
 Port to linux (get conio running, 40-chr screen to 80-chr, fix warnings
 	(char -> uint8), etc)
@@ -59,6 +124,7 @@ Implement flip-board functionality.
 Try pawn e2e4 moves before e2e3 moves.
 Try king moves last instead of first.
 hiswin went to short, so it will not rollover.
+
 
 Version 5:
 Last version recovered from DOS environment.

@@ -17,6 +17,10 @@
 /* Note: I am deliberately trying to avoid reliance on version 2 of the xboard
    protocol, in order to interop w/other chess GUIs that might only utilize
    version 1.
+
+   I will not try to fully document here what every xboard command does (unless
+   we deviate from the spec).  Basically, I read Tim Mann's engine-intf.html,
+   and if the code does something different, it's wrong.
 */
 
 #include <stdio.h>
@@ -31,9 +35,13 @@
 #define MAXBUFLEN 160
 
 static struct {
-    int post;
-    int badPosition;
+    int post;        // controls display of PV
+    int badPosition; // can be triggered by editing a bad position
+    int newgame;     // turned on every "new", turned off every "go"
 } gXboardState;
+
+#define OPPONENT_CLOCK (&gameState->actualClocks[0])
+#define ENGINE_CLOCK (&gameState->actualClocks[1])
 
 
 static int matches(char *str, char *needle)
@@ -54,7 +62,7 @@ static int toCoord(char *inputStr)
 }
 
 
-static int isMove(char *inputStr, char *comstr)
+static int isMove(char *inputStr, uint8 *comstr)
 {
     
     if (toCoord(inputStr) != FLAG && toCoord(&inputStr[2]) != FLAG)
@@ -112,7 +120,7 @@ static void xboardEditPosition(BoardT *board)
 	    {
 		if (board->coord[i])
 		{
-		    delpiece(board, board->coord[i], i);
+		    delpieceSmart(board, board->coord[i], i);
 		    board->coord[i] = 0;
 		}
 	    }
@@ -150,7 +158,7 @@ static void xboardEditPosition(BoardT *board)
 	    /* Clear any existing piece. */
 	    if (board->coord[coord])
 	    {
-		delpiece(board, board->coord[coord], coord);
+		delpieceSmart(board, board->coord[coord], coord);
 		board->coord[coord] = 0;
 	    }
 
@@ -159,7 +167,7 @@ static void xboardEditPosition(BoardT *board)
 	    /* Add the new piece. */
 	    piece = asciiToNative(inputStr[0]);
 	    piece |= myColor;
-	    addpiece(board, piece, coord);
+	    addpieceSmart(board, piece, coord);
 	    board->coord[coord] = piece;
 	    break;
 	default:
@@ -178,17 +186,27 @@ static void xboardPlayerMove(BoardT *board, ThinkContextT *th,
     char inputStr[MAXBUFLEN];
     int protoVersion, myLevel, turn;
     static int firstCall = 1;
+    int i, err;
 
     /* Move-related stuff. */
     uint8 chr;
     uint8 comstr[4];
     uint8 myPieces[64];
-    char *ptr;
+    uint8 *ptr;
     MoveListT movelist;
+
+    /* These are for time controls. */
+    int centiSeconds, mps;
+    char baseStr[20];
+    int base;
+    bigtime_t baseTime;
+    int inc;
 
     if (firstCall)
     {
-	board->maxLevel = 5; /* Use a sensible default for xboard. */
+	/* In practice, with a normal search, we search at least depth 9 in the
+	   endgame. */
+	gVars.maxLevel = 15;
 	firstCall = 0;
     }
 
@@ -198,7 +216,6 @@ static void xboardPlayerMove(BoardT *board, ThinkContextT *th,
     if (matches(inputStr, "xboard") ||
 	matches(inputStr, "accepted") ||
 	matches(inputStr, "rejected") ||
-	matches(inputStr, "random") ||
 	matches(inputStr, "hint") ||
 	matches(inputStr, "hard") ||
 	matches(inputStr, "easy") ||
@@ -208,13 +225,7 @@ static void xboardPlayerMove(BoardT *board, ThinkContextT *th,
 	matches(inputStr, "computer") ||
 
         /* (we don't accept draw offers yet) */
-	matches(inputStr, "draw") ||
-
-        /* (these are time commands.) */
-	matches(inputStr, "level") ||
-	matches(inputStr, "st") ||
-	matches(inputStr, "time") ||
-	matches(inputStr, "otim"))
+	matches(inputStr, "draw"))
     {
 	LOG_DEBUG("ignoring cmd: %s", inputStr);
     }
@@ -235,7 +246,10 @@ static void xboardPlayerMove(BoardT *board, ThinkContextT *th,
              /* (bughouse commands.) */
 	     matches(inputStr, "partner") ||
 	     matches(inputStr, "ptell") ||
-	     matches(inputStr, "holding"))
+	     matches(inputStr, "holding") ||
+
+	     /* (this is a time command.) */
+	     matches(inputStr, "st"))
     {
 	printf("Error (unimplemented command): %s", inputStr);
     }
@@ -243,12 +257,14 @@ static void xboardPlayerMove(BoardT *board, ThinkContextT *th,
     else if (matches(inputStr, "edit"))
     {
 	gXboardState.badPosition = 0; /* hope for the best. */
-	ThinkerBail(th);
+	ThinkerCmdBail(th);
 	xboardEditPosition(board);
 	if (BoardSanityCheck(board) == 0)
 	{
 	    memcpy(myPieces, board->coord, sizeof(myPieces));
+	    ClocksReset(gameState);
 	    newgameEx(board, myPieces, board->cbyte, board->ebyte, board->ply);
+	    GoaltimeCalc(gameState, board);
 	    commitmove(board, NULL, th, gameState, 0);
 	}
 	else
@@ -261,13 +277,20 @@ static void xboardPlayerMove(BoardT *board, ThinkContextT *th,
 
     else if (matches(inputStr, "new"))
     {
-	/* New game, computer is Black.  Use sensible search depth. */
+	/* New game, computer is Black. */
 	gXboardState.badPosition = 0; /* hope for the best. */
-	ThinkerBail(th);
+	ThinkerCmdBail(th);
+	ClocksStop(gameState);
+	ClocksReset(gameState);
+	/* associate clocks correctly. */
+	gameState->clocks[0] = OPPONENT_CLOCK;
+	gameState->clocks[1] = ENGINE_CLOCK;
 	newgame(board);
 	commitmove(board, NULL, th, gameState, 0);
 	gameState->control[0] = 0;
 	gameState->control[1] = 1;
+	gVars.randomMoves = 0;
+	gXboardState.newgame = 1;
     }
 
     else if (sscanf(inputStr, "protover %d", &protoVersion) == 1 &&
@@ -275,22 +298,81 @@ static void xboardPlayerMove(BoardT *board, ThinkContextT *th,
     {
 	/* Note: we do not care if these features are accepted or rejected.
 	   We try to handle all input as best as possible. */
-	printf("feature analyze=0 myname=arctic0.8 variants=normal "
+	printf("feature analyze=0 myname=arctic0.9 variants=normal "
 	       "colors=0 done=1\n");
     }
 
     else if (matches(inputStr, "quit"))
     {
-	ThinkerBail(th);
+	ThinkerCmdBail(th);
 	exit(0);
+    }
+
+    else if (matches(inputStr, "random"))
+    {
+#if 1 // bldbg: goes out for debugging
+	gVars.randomMoves ^= 1; // toggle random moves.
+#endif
     }
 
     else if (matches(inputStr, "force"))
     {
 	/* Stop everything. */
-	ThinkerBail(th);
+	ThinkerCmdBail(th);
+	ClocksStop(gameState);
 	gameState->control[0] = 0;
 	gameState->control[1] = 0;
+    }
+
+    else if (sscanf(inputStr, "level %d %20s %d", &mps, baseStr, &inc) == 3)
+    {
+	err = 0;
+	if (mps != 0 && inc != 0)
+	{
+	    printf("Error (unimplemented mps+inc): %s", inputStr);
+	    err = 1;
+	}
+	else if ((strchr(baseStr, ':') && !TimeStringIsValid(baseStr)) ||
+		 (!strchr(baseStr, ':') && sscanf(baseStr, "%d", &base) != 1))
+	{
+	    printf("Error (bad parameter '%s'): %s", baseStr, inputStr);
+	    err = 1;
+	}
+	else if (!strchr(baseStr, ':'))
+	{
+	    // 'base' is in minutes (and is already filled out).
+	    baseTime = ((bigtime_t) base) * 60 * 1000000;
+	}
+	else
+	{
+	    // base is in more-or-less standard time format.
+	    baseTime = TimeStringToBigtime(baseStr);
+	}
+
+	for (i = 0; !err && i < 2; i++)
+	{
+	    ClockSetTime(&gameState->origClocks[i], baseTime);
+	    if (mps != 0)
+	    {
+		/* Conventional time control. */
+		ClockSetInc(&gameState->origClocks[i], baseTime);
+		ClockSetIncPeriod(&gameState->origClocks[i], mps);
+	    }
+	    else
+	    {
+		/* Incremental time control. */
+		ClockSetInc(&gameState->origClocks[i],
+			    ((bigtime_t) inc) * 1000000);
+		ClockSetIncPeriod(&gameState->origClocks[i], 1);
+	    }
+	}
+	if (gXboardState.newgame)
+	{
+	    /* Game has not started yet.  Under xboard this means "set
+	       clocks in addition to time controls" */
+	    ClocksReset(gameState);
+	}
+	/* ClocksPrint(gameState, "level"); */
     }
 
     else if (matches(inputStr, "white") ||
@@ -299,20 +381,21 @@ static void xboardPlayerMove(BoardT *board, ThinkContextT *th,
 	/* Stop everything.  Engine plays the other color.  This is not
 	   exactly as specified.  Too bad, I'm not going to change whose
 	   turn it is to move! */
-	ThinkerBail(th);
+	ThinkerCmdBail(th);
 	turn = matches(inputStr, "white");
 	gameState->control[turn] = 0;
 	gameState->control[turn ^ 1] = 1;
+	ClocksStop(gameState);
     }
 
     else if (sscanf(inputStr, "sd %d", &myLevel) == 1)
     {
 	/* Set depth. */
-	if (myLevel >= 0 && myLevel <= 9)
+	if (myLevel >= 0 && myLevel <= 100)
 	{
-	    if (board->level > (board->maxLevel = myLevel))
+	    if (board->level > (gVars.maxLevel = myLevel))
 	    {
-		ThinkerMoveNow(th);
+		ThinkerCmdMoveNow(th);
 	    }
 	}
 	else
@@ -321,16 +404,30 @@ static void xboardPlayerMove(BoardT *board, ThinkContextT *th,
 	}
     }
 
+    else if (sscanf(inputStr, "time %d", &centiSeconds) == 1)
+    {
+	/* Set engine clock. */
+	ClockSetTime(ENGINE_CLOCK, ((bigtime_t) centiSeconds) * 10000);
+	/* ClocksPrint(gameState, "time"); */
+    }
+
+    else if (sscanf(inputStr, "otim %d", &centiSeconds) == 1)
+    {
+	/* Set opponent clock. */
+	ClockSetTime(OPPONENT_CLOCK, ((bigtime_t) centiSeconds) * 10000);
+	/* ClocksPrint(gameState, "otim"); */
+    }
+
     else if (matches(inputStr, "?"))
     {
 	/* Move now. */
-	ThinkerMoveNow(th);
+	ThinkerCmdMoveNow(th);
     }
 
     else if (matches(inputStr, "result"))
     {
 	/* We don't care if we won, lost, or drew.  Just stop thinking. */
-	ThinkerBail(th);
+	ThinkerCmdBail(th);
     }
 
     else if (matches(inputStr, "post"))
@@ -353,18 +450,26 @@ static void xboardPlayerMove(BoardT *board, ThinkContextT *th,
     else if (matches(inputStr, "go"))
     {
 	/* Play the color on move, and start thinking. */
-	ThinkerBail(th); /* Just in case. */
+	gXboardState.newgame = 0;
+	ThinkerCmdBail(th);       /* Just in case. */
+	ClocksStop(gameState); /* Just in case. */
+
 	turn = board->ply & 1;
 	gameState->control[turn] = 1;
 	gameState->control[turn ^ 1] = 0;
-	ThinkerThink(th);
+	gameState->clocks[turn] = ENGINE_CLOCK;
+	gameState->clocks[turn ^ 1] = OPPONENT_CLOCK;
+	ClockStart(ENGINE_CLOCK);
+	/* ClocksPrint(gameState, "go"); */
+	GoaltimeCalc(gameState, board);
+	ThinkerCmdThink(th);
     }
 
     else if (isMove(inputStr, comstr))
     {
 	/* Move processing.
 	   Currently we can only handle algebraic notation. */
-	mlistGenerate(&movelist, &gameState->boardCopy, 0);
+	mlistGenerate(&movelist, &gameState->savedBoard, 0);
 
 	/* search movelist for comstr */
 	ptr = searchlist(&movelist, comstr, 2);
@@ -375,7 +480,7 @@ static void xboardPlayerMove(BoardT *board, ThinkContextT *th,
 	}
 
 	/* Do we need to promote? */
-	if (ISPAWN(gameState->boardCopy.coord[comstr[0]]) &&
+	if (ISPAWN(gameState->savedBoard.coord[comstr[0]]) &&
 	    (comstr[1] > 55 || comstr[1] < 8))
 	{
 	    chr = inputStr[4];
@@ -386,7 +491,7 @@ static void xboardPlayerMove(BoardT *board, ThinkContextT *th,
 	    }
 
 	    chr = asciiToNative(chr);
-	    comstr[2] = (chr & ~1) | (gameState->boardCopy.ply & 1);
+	    comstr[2] = (chr & ~1) | (gameState->savedBoard.ply & 1);
 	    
 	    ptr = searchlist(&movelist, comstr, 3);
 	    assert(ptr != NULL);
@@ -398,7 +503,9 @@ static void xboardPlayerMove(BoardT *board, ThinkContextT *th,
 	comstr[3] = ptr[3];
 
 	/* At this point, we must have a valid move. */
-	ThinkerBail(th);
+	ThinkerCmdBail(th);
+	ClockStop(OPPONENT_CLOCK);
+	ClockStart(ENGINE_CLOCK);
 	commitmove(board, comstr, th, gameState, 0);
     }
 
@@ -447,25 +554,16 @@ void xboardNotifyCheckmated(int turn)
 }
 
 
-void xboardNotifyPV(PvT *pv)
+void xboardNotifyPV(BoardT *board, PvT *pv)
 {
-    char outputStr[MAXBUFLEN];
-    char *myStr = outputStr;
-    int howmany = pv->depth + 1;
-    uint8 *moves = pv->pv;
+    char mySanString[65];
 
     if (!gXboardState.post)
 	return;
 
-    myStr += sprintf(myStr, "%d %d 0 0", pv->level, pv->eval);
-    for (; howmany > 0; howmany--)
-    {
-	myStr += sprintf(myStr, " %c%c%c%c",
-			 File(moves[0]) + 'a', Rank(moves[0]) + '1',
-			 File(moves[1]) + 'a', Rank(moves[1]) + '1');
-	moves += 2;
-    }
-    printf("%s.\n", outputStr);
+    buildSanString(board, mySanString, sizeof(mySanString), pv);
+
+    printf("%d %d 0 0%s.\n", pv->level, pv->eval, mySanString);
 }
 
 
@@ -474,14 +572,16 @@ void xboardNotifyPV(PvT *pv)
 void xboardNotifyComputerStats(CompStatsT *stats) { }
 void xboardBoardRefresh(BoardT *board) { }
 void xboardNoop(void) { }
-void xboardStatusDraw(BoardT *board, int timeTaken) { }
+void xboardStatusDraw(BoardT *board, GameStateT *gameState) { }
+void xboardNotifyTick(GameStateT *gameState) { }
 
 static UIFuncTableT xboardUIFuncTable =
 {
     .playerMove = xboardPlayerMove,
     .boardRefresh = xboardBoardRefresh,
-    .statusDraw = xboardStatusDraw,
     .exit = xboardNoop,
+    .statusDraw = xboardStatusDraw,
+    .notifyTick = xboardNotifyTick,
     .notifyMove = xboardNotifyMove,
     .notifyError = xboardNotifyError,
     .notifyPV = xboardNotifyPV,

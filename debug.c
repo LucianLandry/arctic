@@ -16,6 +16,7 @@
  ***************************************************************************/
 
 #include <stdio.h>
+#include <stdlib.h>
 #include "ref.h"
 
 int concheck(BoardT *board, char *failString, int checkz)
@@ -30,6 +31,7 @@ int concheck(BoardT *board, char *failString, int checkz)
 			  failString,
 			  File(i) + 'a', Rank(i) + '1');
 		printplaylist(board);
+		exit(0);
 		return 1;
 	    }
     for (i = 0; i < BQUEEN + 1; i++)
@@ -39,9 +41,10 @@ int concheck(BoardT *board, char *failString, int checkz)
 	    if (board->coord[x] != i ||
 		board->playptr[x] != &board->playlist[i].list[j])
 	    {
-		LOG_EMERG("concheck(%s): failure in list at %c%d.\n",
+		LOG_EMERG("concheck(%s): failure in list at %d-%d.\n",
 			  failString, i, j);
 		printplaylist(board);
+		exit(0);
 		return 1;
 	    }
 	}
@@ -50,6 +53,7 @@ int concheck(BoardT *board, char *failString, int checkz)
 	LOG_EMERG("concheck(%s): failure in zobrist calc (%x, %x).\n",
 		  failString, board->zobrist, calcZobrist(board));
 	printplaylist(board);
+	exit(0);
 	return 1;
     }
     return 0;
@@ -63,7 +67,7 @@ void printplaylist(BoardT *board)
     {
 	if (board->playlist[i].lgh)
 	{
-	    LOG_EMERG("%c:", i);
+	    LOG_EMERG("%d:", i);
 	    for (j = 0; j < board->playlist[i].lgh; j++)
 	    {
 		LOG_EMERG("%c%c", File(board->playlist[i].list[j]) + 'a',

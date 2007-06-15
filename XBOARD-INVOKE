@@ -1,9 +1,9 @@
 Nifty commands:
-# play against arctic (black)
-xboard -size medium -debug -thinking -depth 5 -fcp ./arctic
+# human play against arctic (black)
+xboard -size medium -debug -thinking -fcp ./arctic
 
 # play arctic (black) against gnu chess (white)
-xboard -size medium -debug -thinking -depth 5 -mode TwoMachines -xponder -scp ./arctic
+xboard -size medium -debug -thinking -mode TwoMachines -xponder -scp ./arctic
 
 # play arctic (white) against gnu chess (black)
 # (note: cannot use '-depth' argument, gnuchessx now gets confused and thinks
@@ -14,4 +14,7 @@ xboard -size medium -debug -thinking -mode TwoMachines -xponder -fcp ./arctic
 xboard -size medium -debug -thinking -depth 5 -mode TwoMachines
 
 # play arctic against itself
-xboard -size medium -debug -thinking -depth 5 -mode TwoMachines -fcp ./arctic -scp ./arctic
+xboard -size medium -debug -thinking -depth 2 -mode TwoMachines -fcp ./arctic -scp ./arctic
+
+# play arctic against older version
+xboard -size medium -debug -thinking -mode TwoMachines -fcp ./arctic -scp ../arctic8/arctic
