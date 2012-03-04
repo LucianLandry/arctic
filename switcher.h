@@ -14,54 +14,22 @@
  *                                                                         *
  ***************************************************************************/
 
+#ifndef SWITCHER_H
+#define SWITCHER_H
 
-#include <assert.h>
-#include <string.h>
-#include "switcher.h"
+#include <semaphore.h> /* sem_t */
 
-void SwitcherInit(SwitcherContextT *sw)
-{
-    int i;
-    int retVal;
+#define SWITCHER_MAX_USERS 2
 
-    memset(sw, 0, sizeof(SwitcherContextT));
-
-    for (i = 0; i < SWITCHER_MAX_USERS; i++)
-    {
-	retVal = sem_init(&sw->sems[i], 0, 0);
-	assert(retVal == 0);
-    }
-}
+typedef struct {
+    sem_t sems[SWITCHER_MAX_USERS];
+    int currentUser;
+    int numUsers;
+} SwitcherContextT;
 
 
-void SwitcherRegister(SwitcherContextT *sw)
-{
-    /* Not thread-safe, but could fairly easily be made so. */
-    int numUsers = sw->numUsers++;
+void SwitcherInit(SwitcherContextT *sw);
+void SwitcherRegister(SwitcherContextT *sw);
+void SwitcherSwitch(SwitcherContextT *sw);
 
-    if (numUsers == SWITCHER_MAX_USERS)
-    {
-	assert(0);
-    }
-
-    if (numUsers != 0)
-    {
-	/* Every thread but the 'initial' one blocks, waiting to run. */
-	sem_wait(&sw->sems[numUsers]);
-    }
-}
-
-
-/* switch between threads, round-robin style. */
-void SwitcherSwitch(SwitcherContextT *sw)
-{
-    sem_t *mySem = &sw->sems[sw->currentUser];
-
-    /* Goto next user. */
-    if (++sw->currentUser == sw->numUsers)
-	sw->currentUser = 0;
-
-    /* Let any other threads run. */
-    sem_post(&sw->sems[sw->currentUser]);
-    sem_wait(mySem);
-}
+#endif /* SWITCHER_H */

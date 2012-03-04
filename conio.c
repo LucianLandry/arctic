@@ -16,6 +16,7 @@
  ****************************************************************************/
 
 #define _ISOC99_SOURCE /* vsscanf() */
+#define NCURSES_OPAQUE 1 /* blandry: kill gcc 4.3.2 warnings */
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -169,7 +170,7 @@ void initconio (void) /* This is needed, because ncurses needs to be initialized
 	 }
 	 else if (x == 7 && y == 0)
 	 {
-	     /* blandry: do nothing (we willll use pair "0", which is hardwired
+	     /* blandry: do nothing (we will use pair "0", which is hardwired
 		to this	color) */
 	 }
          else

@@ -1,29 +1,36 @@
-/***************************************************************************
-                        ui.c - ncurses UI for Arctic
-                             -------------------
-    copyright            : (C) 2007 by Lucian Landry
-    email                : lucian_b_landry@yahoo.com
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//                    uiNcurses.c - ncurses UI for Arctic
+//                           -------------------
+//  copyright            : (C) 2007 by Lucian Landry
+//  email                : lucian_b_landry@yahoo.com
+//--------------------------------------------------------------------------
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU Library General Public License as       *
- *   published by the Free Software Foundation; either version 2 of the    *
- *   License, or (at your option) any later version.                       *
- *                                                                         *
- ***************************************************************************/
-
+//--------------------------------------------------------------------------
+//
+//   This program is free software; you can redistribute it and/or modify
+//   it under the terms of the GNU Library General Public License as
+//   published by the Free Software Foundation; either version 2 of the
+//   License, or (at your option) any later version.
+//
+//--------------------------------------------------------------------------
 
 #include <stdio.h>
-#include <ctype.h>	/* islower() */
-#include <string.h>     /* strlen() */
-#include <stdlib.h>     /* exit() */
+#include <ctype.h>  // isupper()
+#include <string.h> // strlen()
+#include <stdlib.h> // exit()
 #include <assert.h>
 #include <curses.h>
 #include <stdarg.h>
+
+#include "clock.h"
+#include "clockUtil.h"
+#include "comp.h" // CompCurrentLevel()
 #include "conio.h"
-#include "ref.h"
+#include "gDynamic.h"
+#include "log.h"
+#include "saveGame.h"
+#include "ui.h"
+#include "uiUtil.h"
 
 
 #define SYSTEMCOL       GREEN
@@ -34,8 +41,8 @@
 #define ESC   27
 #define BACKSPACE 263
 
-#define SQUARE_WIDTH 5   /* width of chess square, in characters */
-#define OPTIONS_X (SQUARE_WIDTH * 8 + 2) /* 1 since one-based, 1 for ticks) */
+#define SQUARE_WIDTH 5   // width of chess square, in characters
+#define OPTIONS_X (SQUARE_WIDTH * 8 + 2) // 1 since one-based, + 1 for ticks
 #define OPTIONS_X2 (OPTIONS_X + 15)
 #define SCREEN_WIDTH 80
 
@@ -48,14 +55,14 @@ static struct {
 
 static void UIPrintBoardStatus(BoardT *board)
 {
-    /* all shorthand. */
-    int ncheck = board->ncheck[board->ply & 1];
+    // all shorthand.
+    int ncheck = board->ncheck[board->turn];
     int cbyte = board->cbyte;
     int ebyte = board->ebyte;
 
     textcolor(LIGHTGRAY);
 
-    /* print castle status. */
+    // print castle status.
     gotoxy(OPTIONS_X, 14);
     cprintf("castle QKqk: %c%c%c%c",
 	    cbyte & WHITEQCASTLE ? 'y' : 'n',
@@ -63,7 +70,7 @@ static void UIPrintBoardStatus(BoardT *board)
 	    cbyte & BLACKQCASTLE ? 'y' : 'n',
 	    cbyte & BLACKKCASTLE ? 'y' : 'n');
 
-    /* print en passant status. */
+    // print en passant status.
     gotoxy(OPTIONS_X, 15);
     cprintf("enpass: ");
     if (ebyte == FLAG)
@@ -72,10 +79,10 @@ static void UIPrintBoardStatus(BoardT *board)
     }
     else
     {
-	cprintf("%c%c", File(ebyte) + 'a', Rank(ebyte) + '1');
+	cprintf("%c%c", AsciiFile(ebyte), AsciiRank(ebyte));
     }
 
-    /* print check status. */
+    // print check status.
     gotoxy(OPTIONS_X, 16);
     cprintf("chk: ");
     if (ncheck == FLAG)
@@ -84,44 +91,64 @@ static void UIPrintBoardStatus(BoardT *board)
     {
 	cprintf("dis");
     }
-    else /* normal check */
+    else // normal check
     {
-	cprintf("%c%c ", File(ncheck) + 'a', Rank(ncheck) + '1');
+	cprintf("%c%c ", AsciiFile(ncheck), AsciiRank(ncheck));
     }
 }
 
 
-void UINotifyTick(GameStateT *gameState)
+static void UINotifyTick(GameT *game)
 {
     ClockT *myClock;
-    char timeStr[TIME_STR_LEN];
+    char timeStr[CLOCK_TIME_STR_LEN];
     int i;
+    bigtime_t myTime, perMoveTime;
+    int bytesWritten = 0;
+    char spaces[] = "                               ";
 
     // Display clocks.
-    textcolor(LIGHTGRAY);
     gotoxy(OPTIONS_X, 18);
-    for (i = 0; i < 2; i++)
+    for (i = 0; i < NUM_PLAYERS; i++)
     {
-	myClock = gameState->clocks[i];
+	myClock = game->clocks[i];
+	myTime = ClockGetTime(myClock);
+	perMoveTime = ClockGetPerMoveTime(myClock);
 
-	cprintf("%s%s ",
-		TimeStringFromBigtime(timeStr, ClockCurrentTime(myClock)),
-		ClockIsRunning(myClock) ? "r" : "s");
+	// The clock goes red even when the time supposedly reaches 0, probably
+	// because TimeStringFromBigTime() is rounding up.  FIXME: need to
+	// rethink that.
+	textcolor(myTime >= 0 ? LIGHTGRAY : RED);
+	bytesWritten += cprintf("%s", TimeStringFromBigTime(timeStr, myTime));
+	if (perMoveTime < CLOCK_TIME_INFINITE)
+	{
+	    textcolor(perMoveTime >= 0 ? LIGHTGRAY : RED);
+	    bytesWritten += cprintf("(%s)", TimeStringFromBigTime(timeStr,
+								  perMoveTime));
+	}
+	textcolor(LIGHTGRAY);
+	bytesWritten += cprintf("%s ", ClockIsRunning(myClock) ? "r" : "s");
     }
-    cprintf("        ");
+
+    // Prevent old longer clock-line strings from sticking around.
+    if (bytesWritten < sizeof(spaces))
+    {
+	cprintf("%s", &spaces[bytesWritten]);
+    }
 }
 
 
-void UIStatusDraw(BoardT *board, GameStateT *gameState)
+static void UIStatusDraw(GameT *game)
 {
-    int turn = board->ply & 1;
     bigtime_t timeTaken;
+    BoardT *board = &game->savedBoard; // shorthand.
+    int turn = board->turn;
 
     UIPrintBoardStatus(board);
-    UINotifyTick(gameState);
+    UINotifyTick(game);
 
     gotoxy(OPTIONS_X, 20);
-    timeTaken = ClockTimeTaken(gameState->clocks[turn ^ 1]);
+    timeTaken = ClockTimeTaken(game->clocks[turn ^ 1]);
     cprintf("move: %d (%.2f sec)     ",
 	    (board->ply >> 1) + 1,
 	    ((double) timeTaken) / 1000000);
@@ -133,31 +160,53 @@ void UIStatusDraw(BoardT *board, GameStateT *gameState)
 }
 
 
-void UINotifyPV(BoardT *board, PvT *pv)
-/* prints out expected move sequence at the bottom of the screen. */
+// prints out expected move sequence at the bottom of the screen.
+static void UINotifyPV(GameT *game, PvRspArgsT *pvArgs)
 {
     char spaces[80];
-    char mySanString[79 - 14];
+    char mySanString[79 - 18];
+    char evalString[20];
+    int len;
+    PvT *pv = &pvArgs->pv; // shorthand.
 
     // Get a suitable string of moves to print.
-    buildSanString(board, mySanString, sizeof(mySanString), pv);
+    buildMoveString(mySanString, sizeof(mySanString), pv, &game->savedBoard);
 
     // blank out the last pv.
     memset(spaces, ' ', 79);
     spaces[79] = '\0';
     gotoxy(1, 25);
     textcolor(SYSTEMCOL);
-    cprintf(spaces);
+    cprintf("%s", spaces);
+
+    if (abs(pv->eval) >= EVAL_WIN_THRESHOLD)
+    {
+	len = snprintf(evalString, sizeof(evalString), "%smate",
+		       pv->eval < 0 ? "-" : "");
+	if (abs(pv->eval) < EVAL_WIN)
+	{
+	    snprintf(&evalString[len], sizeof(evalString) - len, "%d",
+		     (EVAL_WIN - abs(pv->eval) + 1) / 2);
+	}
+    }
+    else
+    {
+	snprintf(evalString, sizeof(evalString), "%+.2f",
+		 ((double) pv->eval) / EVAL_PAWN);
+    }
 
     // print the new pv.
     gotoxy(1, 25);
-    cprintf("pv: d%d %+d%s.", pv->level, pv->eval / 100, mySanString);
+    cprintf("pv: d%d %s %s.",
+	    pv->level, evalString, mySanString);
 }
 
 
-static void UICursorDraw(int coord, int blink, int undo)
-/* draws cursor at appropriate coordinate.  Blinks if spot hasn't been
-   'selected', otherwise noblink.  'undo' 'undraws' the cursor at a spot. */
+#define CURSOR_NOBLINK 0
+#define CURSOR_BLINK 1
+#define CURSOR_HIDE 2
+/* draws cursor at appropriate coordinate, according to mode 'mode'. */
+static void UICursorDraw(int coord, int mode)
 {
     int x, y;
     /* translate coord to xy coords of upper left part of cursor. */
@@ -166,11 +215,15 @@ static void UICursorDraw(int coord, int blink, int undo)
 
     if ((Rank(coord) + File(coord)) & 1) /* we on a board-colored spot */
 	textbackground(BOARDCOL);
-    textcolor(/* BROWN */ YELLOW + (blink ? BLINK : 0));
+    textcolor(/* BROWN */ YELLOW + (mode == CURSOR_BLINK ? BLINK : 0));
     gotoxy(x, y);
-    cprintf("%s %s", undo ? "  " : "\\ ", undo ? "  " : " /");
+    cprintf("%s %s",
+	    mode == CURSOR_HIDE ? "  " : "\\ ",
+	    mode == CURSOR_HIDE ? "  " : " /");
     gotoxy(x, y + 2);
-    cprintf("%s %s", undo ? "  " : "/ ", undo ? "  " : " \\");
+    cprintf("%s %s",
+	    mode == CURSOR_HIDE ? "  " : "/ ",
+	    mode == CURSOR_HIDE ? "  " : " \\");
 
     textbackground(BLACK);	/* get rid of that annoying blink */
     textcolor(BLACK);
@@ -235,12 +288,12 @@ static void UIWindowClear(int startx, int starty, int width, int height)
     for (y = starty; y < starty + height; y++)
     {
 	gotoxy(startx, y);
-	cprintf(spaces);
+	cprintf("%s", spaces);
     }
 }
 
 
-static void UIOptionsDraw(GameStateT *gameState)
+static void UIOptionsDraw(GameT *game)
 {
     UIWindowClear(OPTIONS_X, 1, SCREEN_WIDTH - OPTIONS_X, 12);
     gotoxy(OPTIONS_X, 1);
@@ -248,18 +301,22 @@ static void UIOptionsDraw(GameStateT *gameState)
     cprintf("Options:");
     prettyprint(2,  "New game",       "Level (%d)", gVars.maxLevel);
     prettyprint(3,  "Save game",      "White control (%s)",
-		gameState->control[0] ? "C" : "P");
+		game->control[0] ? "C" : "P");
     prettyprint(4,  "Restore game",   "Black control (%s)",
-		gameState->control[1] ? "C" : "P");
-    prettyprint(5,  "Edit position",  "Move now");
-    prettyprint(6,  "Quit",           "rAndom moves (%s)",
+		game->control[1] ? "C" : "P");
+    prettyprint(5,  "Edit position",  "rAndom moves (%s)",
 		gVars.randomMoves ? "On" : "Off");
+    prettyprint(6,  "Quit",           "Ponder (%s)",
+		gVars.ponder ? "On" : "Off");
 
-    prettyprint(8,  "Flip board",     "Time control");
-    prettyprint(9,  "Color",          NULL);
-    prettyprint(10, "Debug logging",  NULL);
-    prettyprint(11, "History window (%d)", NULL, gVars.hiswin >> 1);
-    prettyprint(12, "Generate Moves", NULL);
+    prettyprint(8,  "Generate moves", "History window (%d)",
+		gVars.hiswin >> 1);
+    prettyprint(9,  "Move now",       "Time control");
+    prettyprint(10, "Flip board",     "Undo");
+    prettyprint(11, "Color",          "redO");
+#ifdef ENABLE_DEBUG_LOGGING
+    prettyprint(12, "Debug logging",  NULL);
+#endif
 }
 
 
@@ -277,33 +334,34 @@ static void UIEditOptionsDraw(void)
 }
 
 
-static void UITimeOptionsDraw(GameStateT *gameState, int applyToggle)
+static void UITimeOptionsDraw(GameT *game, int applyToggle)
 {
-    char t1[TIME_STR_LEN], t2[TIME_STR_LEN];
+    char t1[CLOCK_TIME_STR_LEN], t2[CLOCK_TIME_STR_LEN];
 
     UIWindowClear(OPTIONS_X, 1, SCREEN_WIDTH - OPTIONS_X, 12);
     gotoxy(OPTIONS_X, 1);
     textcolor(SYSTEMCOL);
     cprintf("Options:");
     prettyprint(2, "Start time(s) (%s %s)", NULL,
-		TimeStringFromBigtime(t1, ClockCurrentTime
-				      (&gameState->origClocks[0])),
-		TimeStringFromBigtime(t2, ClockCurrentTime
-				      (&gameState->origClocks[1])));
+		TimeStringFromBigTime(t1, ClockGetTime(&game->origClocks[0])),
+		TimeStringFromBigTime(t2, ClockGetTime(&game->origClocks[1])));
     prettyprint(3, "Increment(s) (%s %s)",  NULL,
-		TimeStringFromBigtime(t1, ClockGetInc
-				      (&gameState->origClocks[0])),
-		TimeStringFromBigtime(t2, ClockGetInc
-				      (&gameState->origClocks[1])));
-    prettyprint(4, "inc Period(s) (%d %d)", NULL,
-		ClockGetIncPeriod(&gameState->origClocks[0]),
-		ClockGetIncPeriod(&gameState->origClocks[1]));
-    prettyprint(6, "Apply to current",      NULL);
-    prettyprint(7, "Changes: (%s)", NULL,
+		TimeStringFromBigTime(t1, ClockGetInc(&game->origClocks[0])),
+		TimeStringFromBigTime(t2, ClockGetInc(&game->origClocks[1])));
+    prettyprint(4, "Time control period(s) (%d %d)", NULL,
+		ClockGetTimeControlPeriod(&game->origClocks[0]),
+		ClockGetTimeControlPeriod(&game->origClocks[1]));
+    prettyprint(5, "Per-move limit (%s %s)", NULL,
+		TimeStringFromBigTime
+		(t1, ClockGetPerMoveLimit(&game->origClocks[0])),
+		TimeStringFromBigTime
+		(t2, ClockGetPerMoveLimit(&game->origClocks[1])));
+    prettyprint(7, "Apply to current game", NULL);
+    prettyprint(8, "Changes: (%s)", NULL,
 		applyToggle == 0 ? "white" :
 		applyToggle == 1 ? "black" :
 		"both");
-    prettyprint(9, "Done",           NULL);
+    prettyprint(10, "Done",           NULL);
 }
 
 
@@ -313,13 +371,13 @@ static void UICursorMove(int key, int *coord)
 	(key == KEY_DOWN && gBoardIf.flipped))
     {
 	if ((*coord += 8) > 63)
-	    *coord -= 64;
+	    *coord -= NUM_SQUARES;
     }
     else if ((key == KEY_DOWN && !gBoardIf.flipped) ||
 	     (key == KEY_UP && gBoardIf.flipped))
     {
 	if ((*coord -= 8) < 0)
-	    *coord += 64;
+	    *coord += NUM_SQUARES;
     }
     else if ((key == KEY_LEFT && !gBoardIf.flipped) ||
 	     (key == KEY_RIGHT && gBoardIf.flipped))
@@ -336,11 +394,11 @@ static void UICursorMove(int key, int *coord)
 }
 
 
-static void UIBoardRefresh(BoardT *board)
+static void UIBoardRefresh(const BoardT *board)
 {
     int x, y;
     int i = 0;
-    uint8 *bcoord = board->coord;
+    const uint8 *bcoord = board->coord;
 
     for (y = 0; y < 8; y++)
 	for (x = 0; x < 8; x++, i++)
@@ -373,6 +431,12 @@ static void UITicksDraw(void)
     textcolor(TICKCOL);
     for (x = 0; x < 8; x++)
     {
+	/* Clear any garbage from 'Generate Moves' dump. */
+	gotoxy(OPTIONS_X - 1, 23-3*x - 1);
+	cprintf(" ");
+	gotoxy(OPTIONS_X - 1, 23-3*x + 1);
+	cprintf(" ");
+
 	gotoxy(OPTIONS_X - 1, 23-3*x);
 	cprintf("%d", gBoardIf.flipped ? 8 - x : x + 1);
     }
@@ -404,7 +468,7 @@ static int UIBarf(char *format, ...)
     /* Display the message. */
     gotoxy((SCREEN_WIDTH / 2) - len / 2, 25);
     textcolor(MAGENTA);
-    cprintf(message);
+    cprintf("%s", message);
 
     /* Wait for input. */
     chr = getch();
@@ -453,7 +517,7 @@ static char *UIBarfString(char *myStr, int myStrLen,
     x = (SCREEN_WIDTH / 2) - len / 2;
     gotoxy(x, y);
     textcolor(MAGENTA);
-    x += cprintf(message);
+    x += cprintf("%s", message);
 
     // Get input.
     for (curStrLen = 0; (chr = getch()) != ENTER;)
@@ -498,28 +562,31 @@ static void UINotifyError(char *reason)
 }
 
 
-/* Edits a board.  ('ply' is set to 0, or 1, at the end of the turn.) */
+/* Edits a board. */
 static void UIEditPosition(BoardT *board)
 {   
     int c, chr, i;
     int *coord = &gBoardIf.cursCoord; // shorthand.
     char validChars[] = "WwEeCcDdSs PpRrNnBbQqKk";
+    int cbyte; // tmpvars
 
     UIEditOptionsDraw();
-    UICursorDraw(*coord, 1, 0);
-    board->ply &= 1; /* erase move history. */
+    UICursorDraw(*coord, CURSOR_BLINK);
+
+    board->ply = 0;
+    board->ncpPlies = 0;
 
     while (1)
     {
 	UIPrintBoardStatus(board);
 	gotoxy(OPTIONS_X, 21);
 	textcolor(SYSTEMCOL);
-	cprintf("%s\'s turn", board->ply ? "black" : "white");
+	cprintf("%s\'s turn", board->turn ? "black" : "white");
 	/* I do this here just so the cursor ends up in an aesthetically
 	   pleasing spot. */
 	gotoxy(OPTIONS_X, 24);
 	textcolor(LIGHTCYAN);
-	cprintf("Edit    ");
+	cprintf("Edit             ");
 
 	c = getch();
 	if (strchr(validChars, c) != NULL)
@@ -528,59 +595,48 @@ static void UIEditPosition(BoardT *board)
 	    {
 	    case 'W':
 	    case 'w':
-		/* wipe board. */
-		for (i = 0; i < 64; i++)
+		// Wipe board.
+		for (i = 0; i < NUM_SQUARES; i++)
 		{
-		    if (board->coord[i])
-		    {
-			delpieceSmart(board, board->coord[i], i);
-			board->coord[i] = 0;
-		    }
+		    BoardPieceSet(board, i, 0);
 		}
-		board->ebyte = FLAG;
-		newcbyte(board);
 		UIBoardRefresh(board);
 		break;
 
 	    case 'E':
 	    case 'e':
 		/* (possibly) set an enpassant square. */
-		board->ebyte =
-		    (board->ply && board->coord[*coord] == PAWN &&
-		     *coord >= 24 && *coord < 32) ||
-		    (!board->ply && board->coord[*coord] == BPAWN &&
-		     *coord >= 32 && *coord < 40) ?
-		    *coord : FLAG;
+		BoardEbyteSet(board, *coord);
 		break;
 
 	    case 'C':
 	    case 'c':
+		cbyte = board->cbyte;
 		/* (possibly) set cbyte. */
 		switch(*coord)
 		{
 		case 0:
-		    board->cbyte |= WHITEQCASTLE; break;
+		    cbyte |= WHITEQCASTLE; break;
 		case 4:
-		    board->cbyte |= (WHITEQCASTLE | WHITEKCASTLE); break;
+		    cbyte |= (WHITEQCASTLE | WHITEKCASTLE); break;
 		case 7:
-		    board->cbyte |= WHITEKCASTLE; break;
+		    cbyte |= WHITEKCASTLE; break;
 		case 56:
-		    board->cbyte |= BLACKQCASTLE; break;
+		    cbyte |= BLACKQCASTLE; break;
 		case 60:
-		    board->cbyte |= (BLACKQCASTLE | BLACKKCASTLE); break;
+		    cbyte |= (BLACKQCASTLE | BLACKKCASTLE); break;
 		case 63:
-		    board->cbyte |= BLACKKCASTLE; break;
+		    cbyte |= BLACKKCASTLE; break;
 		default:
-		    board->cbyte = 0; break;
+		    cbyte = 0; break;
 		}
-		newcbyte(board);
+		BoardCbyteSet(board, cbyte);
 		break;
 
 	    case 'S':
 	    case 's':
 		/* Switch turn. */
-		board->ply ^= 1;
-		board->ebyte = FLAG; /* because it can't be valid, now */
+		BoardTurnSet(board, board->turn ^ 1);
 		break;
 
 	    case 'D':
@@ -597,21 +653,7 @@ static void UIEditPosition(BoardT *board)
 		    break;
 		}
 
-		if (board->coord[*coord])
-		{
-		    delpieceSmart(board, board->coord[*coord], *coord);
-		    board->coord[*coord] = 0;
-		    if (board->ebyte == *coord)
-		    {
-			board->ebyte = FLAG;
-		    }
-		}
-		if (chr)
-		{
-		    addpieceSmart(board, chr, *coord);
-		    board->coord[*coord] = chr;
-		}
-		newcbyte(board);
+		BoardPieceSet(board, *coord, chr);
 		UIBoardRefresh(board);
 		break;
 	    }
@@ -620,43 +662,42 @@ static void UIEditPosition(BoardT *board)
 	    continue;
 
 	/* At this point we have a valid direction. */
-	UICursorDraw(*coord, 0, 1);	/* Unmark current loc */
+	UICursorDraw(*coord, CURSOR_HIDE);  /* Unmark current loc */
 	UICursorMove(c, coord);
-	UICursorDraw(*coord, 1, 0);	/* Blink new loc */
+	UICursorDraw(*coord, CURSOR_BLINK); /* Blink new loc */
     }	/* end while */
 }
 
-
+#define APPLY_BOTH (NUM_PLAYERS)
 
 /* Adjusts time. */
-static void UITimeMenu(BoardT *board, GameStateT *gameState)
+static void UITimeMenu(GameT *game)
 {   
     int c, i;
     int *coord = &gBoardIf.cursCoord; // shorthand.
-    char validChars[] = "SsIiPpAaCcDd";
-    char timeStr[TIME_STR_LEN];
-    int incPeriod;
+    char validChars[] = "SsIiTtPpAaCcDd";
+    char timeStr[CLOCK_TIME_STR_LEN];
+    int timeControlPeriod;
 
     // 0 -> white
     // 1 -> black
     // 2 -> both
-    static int applyToggle = 2;
+    static int applyToggle = APPLY_BOTH;
 
-    UICursorDraw(*coord, 1, 0);
+    UICursorDraw(*coord, CURSOR_BLINK);
 
     while (1)
     {
-	UITimeOptionsDraw(gameState, applyToggle);
+	UITimeOptionsDraw(game, applyToggle);
 	/* I do this here just so the cursor ends up in an aesthetically
 	   pleasing spot. */
 	gotoxy(OPTIONS_X, 24);
 	textcolor(LIGHTCYAN);
-	cprintf("Time    ");
+	cprintf("Time             ");
 
 	c = getch();
 	if (strchr(validChars, c) != NULL)
 	{
-	    /* FIXME: implement time options. */
 	    switch(c)
 	    {
 	    case 'S':
@@ -667,12 +708,13 @@ static void UITimeMenu(BoardT *board, GameStateT *gameState)
 				 "0123456789:inf", "Set start time to? >");
 		} while (!TimeStringIsValid(timeStr));
 
-		for (i = 0; i < 2; i++)
+		for (i = 0; i < NUM_PLAYERS; i++)
 		{
-		    if (applyToggle == i || applyToggle == 2)
+		    if (applyToggle == i || applyToggle == APPLY_BOTH)
 		    {
-			ClockSetTime(&gameState->origClocks[i],
-				     TimeStringToBigtime(timeStr));
+			ClockSetStartTime(&game->origClocks[i],
+					  TimeStringToBigTime(timeStr));
+			ClockReset(&game->origClocks[i]);
 		    }
 		}
 		break;
@@ -684,12 +726,29 @@ static void UITimeMenu(BoardT *board, GameStateT *gameState)
 				 "0123456789:", "Set increment to? >");
 		} while (!TimeStringIsValid(timeStr));
 
-		for (i = 0; i < 2; i++)
+		for (i = 0; i < NUM_PLAYERS; i++)
 		{
-		    if (applyToggle == i || applyToggle == 2)
+		    if (applyToggle == i || applyToggle == APPLY_BOTH)
 		    {
-			ClockSetInc(&gameState->origClocks[i],
-				    TimeStringToBigtime(timeStr));
+			ClockSetInc(&game->origClocks[i],
+				    TimeStringToBigTime(timeStr));
+		    }
+		}
+		break;
+	    case 'T':
+	    case 't':
+		do
+		{
+		    UIBarfString(timeStr, 9, /* xx:yy:zz\0 */
+				 "0123456789", "Set time control period to? >");
+		} while (sscanf(timeStr, "%d", &timeControlPeriod) < 1);
+
+		for (i = 0; i < NUM_PLAYERS; i++)
+		{
+		    if (applyToggle == i || applyToggle == APPLY_BOTH)
+		    {
+			ClockSetTimeControlPeriod(&game->origClocks[i],
+						  timeControlPeriod);
 		    }
 		}
 		break;
@@ -698,26 +757,26 @@ static void UITimeMenu(BoardT *board, GameStateT *gameState)
 		do
 		{
 		    UIBarfString(timeStr, 9, /* xx:yy:zz\0 */
-				 "0123456789", "Set increment period to? >");
-		} while (sscanf(timeStr, "%d", &incPeriod) < 1);
+				 "0123456789:inf", "Set per-move limit to? >");
+		} while (!TimeStringIsValid(timeStr));
 
-		for (i = 0; i < 2; i++)
+		for (i = 0; i < NUM_PLAYERS; i++)
 		{
-		    if (applyToggle == i || applyToggle == 2)
+		    if (applyToggle == i || applyToggle == APPLY_BOTH)
 		    {
-			ClockSetIncPeriod(&gameState->origClocks[i],
-					  incPeriod);
+			ClockSetPerMoveLimit(&game->origClocks[i],
+					     TimeStringToBigTime(timeStr));
 		    }
 		}
 		break;
 	    case 'A':
 	    case 'a':
-		ClocksReset(gameState);
-		UIStatusDraw(board, gameState);
+		ClocksReset(game);
+		UIStatusDraw(game);
 		break;
 	    case 'C':
 	    case 'c':
-		if (++applyToggle == 3)
+		if (++applyToggle > APPLY_BOTH)
 		{
 		    applyToggle = 0;
 		}
@@ -736,20 +795,24 @@ static void UITimeMenu(BoardT *board, GameStateT *gameState)
 
 /* Gets user input and translates it to valid command.  Returns: command, or
    two numbers signaling source and destination.  */
-static void UIGetCommand(uint8 command[], SwitcherContextT *sw,
-			 GameStateT *gameState)
+static void UIGetCommand(uint8 command[], GameT *game)
 {   
     int c;
     int gettingsrc = 1;
     int *coord = &gBoardIf.cursCoord; // shorthand.
-    char validChars[] = "NSRLWBFQDHCMEGAT";
+    BoardT *board = &game->savedBoard; // shorthand
+    char validChars[] = "NSRLWBFQHCMEGATUOP"
+#ifdef ENABLE_DEBUG_LOGGING
+	"D"
+#endif
+	;
 
     while (1)
     {
 	// Wait for actual input.
 	while(!kbhit())
 	{
-	    SwitcherSwitch(sw, gameState->playCookie);
+	    SwitcherSwitch(&game->sw);
 	}
 	c = getch();
 	if (isalpha(c))
@@ -758,16 +821,20 @@ static void UIGetCommand(uint8 command[], SwitcherContextT *sw,
 	{
 	    if (!gettingsrc)
 	    {
-		UICursorDraw(command[0], 0, 1);
+		UICursorDraw(command[0], CURSOR_HIDE);
 	    }
 	    command[0] = c; /* valid one-char command */
 	    return;
 	}
 	if (c == ENTER && gettingsrc)
 	{
-	    command[0] = *coord;
-	    UICursorDraw(*coord, 0, 0);
-	    gettingsrc = 0;
+            // ignore attempts to set a blank src
+	    if (board->coord[*coord])
+	    {
+		command[0] = *coord;
+		UICursorDraw(*coord, CURSOR_NOBLINK);
+		gettingsrc = 0;
+	    }
 	    continue;
 	}
 	else if (c == ENTER)
@@ -775,10 +842,10 @@ static void UIGetCommand(uint8 command[], SwitcherContextT *sw,
 	    if (*coord == command[0]) /* we want to unselect src spot */
 	    {
 		gettingsrc = 1;
-		UICursorDraw(*coord, 1, 0);
+		UICursorDraw(*coord, CURSOR_BLINK);
 		continue;
 	    }
-	    UICursorDraw(command[0], 0, 1);
+	    UICursorDraw(command[0], CURSOR_HIDE);
 	    command[1] = *coord;	/* enter destination */
 	    return;
 	}
@@ -788,10 +855,10 @@ static void UIGetCommand(uint8 command[], SwitcherContextT *sw,
 
 	/* At this point we have a valid direction. */
 	if (gettingsrc || command[0] != *coord)
-	    UICursorDraw(*coord, 0, 1); /* need to unmark current loc */
+	    UICursorDraw(*coord, CURSOR_HIDE); /* need to unmark current loc */
 	UICursorMove(c, coord);
 	if (gettingsrc || command[0] != *coord)
-	    UICursorDraw(*coord, 1, 0); /* need to blink current loc */
+	    UICursorDraw(*coord, CURSOR_BLINK); /* need to blink current loc */
     }	/* end while */
 }
 
@@ -802,7 +869,7 @@ static void UIBoardDraw(void)
 
     /* note: a carriage return after drawing the board could clobber the
        ticks. */
-    for (i = 0; i < 64; i++)
+    for (i = 0; i < NUM_SQUARES; i++)
     {
 	for (j = 0; j < 3; j++) // three rows per 'checker'
 	{
@@ -826,23 +893,23 @@ static void UIBoardDraw(void)
 
 static void UIBoardFlip(BoardT *board)
 {
-    UICursorDraw(gBoardIf.cursCoord, 0, 1); // hide old cursor
+    UICursorDraw(gBoardIf.cursCoord, CURSOR_HIDE); // hide old cursor
     gBoardIf.flipped ^= 1;
     UITicksDraw();   // update ticks
     UIBoardRefresh(board); // update player positions
-    UICursorDraw(gBoardIf.cursCoord, 1, 0);
+    UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
 }
 
 
 static void UIPlayerColorChange(void)
 {
-    char *colors[2] = {"White", "Black"};
+    char *colors[NUM_PLAYERS] = {"White", "Black"};
     int i;
 
     char myStr[3];
     int myColor;
 
-    for (i = 0; i < 2; i++)
+    for (i = 0; i < NUM_PLAYERS; i++)
     {
 	do
 	{
@@ -859,54 +926,62 @@ static void UIPlayerColorChange(void)
 static void UISetDebugLoggingLevel(void)
 {
     int i;
-    while ((i = UIBarf("Set debug level to (0-2)? >") - '0') < 0 ||
+    while ((i = UIBarf("Set debug level to (0-2) (higher -> more verbose)? >") - '0') < 0 ||
 	   i > 2)
 	;
     LogSetLevel(i);
 }
 
 
-void UINotifyThinking(void)
+static void UINotifyThinking(void)
 {
     gotoxy(OPTIONS_X, 24);
     textcolor(RED);
-    cprintf("Thinking");
+    cprintf("Thinking         ");
 }
 
 
-void UINotifyReady(void)
+static void UINotifyPonder(void)
 {
     gotoxy(OPTIONS_X, 24);
     textcolor(LIGHTGREEN);
-    cprintf("Ready   ");
-    UICursorDraw(gBoardIf.cursCoord, 1, 0);
+    cprintf("Ready (pondering)");
+    UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
 }
 
 
-void UINotifyComputerStats(CompStatsT *stats)
+static void UINotifyReady(void)
+{
+    gotoxy(OPTIONS_X, 24);
+    textcolor(LIGHTGREEN);
+    cprintf("Ready            ");
+    UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
+}
+
+
+static void UINotifyComputerStats(GameT *game, CompStatsT *stats)
 {
     gotoxy(1, 1);
     textcolor(SYSTEMCOL);
-    cprintf("%d %d %d %d %d ",
-	    stats->funcCallCount, stats->moveCount,
-	    stats->hashHitGood, stats->hashHitPartial,
-	    stats->filler);
+    cprintf("%d %d %d %d ",
+	    stats->nodes, stats->nonQNodes, stats->moveGenNodes,
+	    stats->hashHitGood);
 }
 
 
-void UINotifyDraw(char *reason)
+static void UINotifyDraw(char *reason, MoveT *move)
 {
     UIBarf("Game is drawn (%s).", reason);
 }
 
 
-void UINotifyCheckmated(int turn)
+static void UINotifyCheckmated(int turn)
 {
     UIBarf("%s is checkmated.", turn ? "Black" : "White");
 }
 
 
-void UINotifyResign(int turn)
+static void UINotifyResign(int turn)
 {
     UIBarf("%s resigns.", turn ? "Black" : "White");
 }
@@ -915,24 +990,14 @@ void UINotifyResign(int turn)
 static void UIMovelistShow(MoveListT *mvlist)
 {
     int i;
+    char result[15];
+
     textcolor(SYSTEMCOL);
     gotoxy(1, 1);
-    uint8 *comstr;
+
     for (i = 0; i < mvlist->lgh; i++)
     {
-	comstr = mvlist->list[i];
-	cprintf("%c%c%c%c.%d.%c%c ",
-		File(comstr[0]) + 'a',
-		Rank(comstr[0]) + '1',
-		File(comstr[1]) + 'a',
-		Rank(comstr[1]) + '1',
-		comstr[2],
-		(comstr[3] == FLAG ? 'F' :
-		 comstr[3] == DOUBLE_CHECK ? 'D' :
-		 File(comstr[3]) + 'a'),
-		(comstr[3] == FLAG ? 'F' :
-		 comstr[3] == DOUBLE_CHECK ? 'D' :
-		 Rank(comstr[3]) + '1'));
+	cprintf("%s ", moveToFullStr(result, &mvlist->moves[i]));
     }
     UIBarf("possible moves.");
 }
@@ -940,19 +1005,22 @@ static void UIMovelistShow(MoveListT *mvlist)
 
 /* this function intended to get player input and adjust variables
    accordingly */
-static void UIPlayerMove(BoardT *board, ThinkContextT *th,
-			 SwitcherContextT *sw, GameStateT *gameState)
+static void UIPlayerMove(ThinkContextT *th, GameT *game)
 {
-    uint8 *ptr;
+    MoveT *foundMove;
     uint8 chr;
     MoveListT movelist;
-    uint8 myPieces[64];
-    uint8 comstr[80];
+    uint8 comstr[2] = {FLAG, FLAG};
+    MoveT myMove;
     int myLevel;
     int myHiswin;
-    int on, player;
+    int player, turn;
+    char myStr[3];
 
-    UIGetCommand(comstr, sw, gameState);
+    BoardT *board = &game->savedBoard; // shorthand
+    turn = game->savedBoard.turn; // shorthand
+
+    UIGetCommand(comstr, game);
     
     switch(comstr[0])
     {
@@ -964,73 +1032,61 @@ static void UIPlayerMove(BoardT *board, ThinkContextT *th,
 	break;
     case 'N':     /* new game */
 	ThinkerCmdBail(th);
-	ClocksReset(gameState);
-	newgame(board);
-	GoaltimeCalc(gameState, board);
-	commitmove(board, NULL, th, gameState, 0);
+	GameNew(game, th);
 	return;
     case 'L':     /* switch computer level */
-	while ((myLevel = UIBarf("Set to what level? >") - '0') < 0 ||
-	       myLevel > 9)
-	    ;	/* do nothing */
-	if (board->level > (gVars.maxLevel = myLevel))
+	do
+	{
+	    UIBarfString(myStr, 3, "0123456789", "Set level to? >");
+	} while (sscanf(myStr, "%d", &myLevel) < 1);
+
+	if (CompCurrentLevel() > (gVars.maxLevel = myLevel))
 	{
 	    ThinkerCmdMoveNow(th);
 	}
-	UIOptionsDraw(gameState);
+	UIOptionsDraw(game);
 	return;
     case 'H':     /* change history window */
 	while ((myHiswin = UIBarf("Set to x moves (0-9)? >") - '0') < 0 ||
 	       myHiswin > 9)
 	    ;	/* do nothing */
 	gVars.hiswin = myHiswin << 1;	/* convert moves to plies. */
-	UIOptionsDraw(gameState);
+	UIOptionsDraw(game);
 	return;
     case 'W':     /* toggle computer control */
     case 'B':
 	player = (comstr[0] == 'B');
-	on = (gameState->control[player] ^= 1);
-	/* Are we affecting the control of the side to move? */
-	if ((gameState->savedBoard.ply & 1) == player)
-	{
-	    /* Yes. */
-	    if (on)
-	    {
-		GoaltimeCalc(gameState, board);
-		gUI->notifyThinking();
-		ThinkerCmdThink(th);
-	    }
-	    else
-	    {
-		ThinkerCmdBail(th);
-		GoaltimeCalc(gameState, board);
-		UINotifyReady();
-	    }
-	}
-	UIOptionsDraw(gameState);
+	game->control[player] ^= 1;
+
+	GameCompRefresh(game, th);
+	UIOptionsDraw(game);
+	return;
+    case 'P': // toggle pondering.
+	gVars.ponder ^= 1;
+
+	GameCompRefresh(game, th);
+	UIOptionsDraw(game);
 	return;
     case 'M':
 	ThinkerCmdMoveNow(th);
 	return;
     case 'C':     /* change w/b colors */
 	UIPlayerColorChange();
-	UIBoardRefresh(&gameState->savedBoard);
+	UIBoardRefresh(board);
 	return;
     case 'F':     /* flip board. */
-	UIBoardFlip(&gameState->savedBoard);
+	UIBoardFlip(board);
 	return;
     case 'D':     /* change debug logging level. */
 	UISetDebugLoggingLevel();
 	return;
     case 'S':
-	UIBarf(GameSave(&gameState->savedBoard) < 0 ?
+	UIBarf(SaveGameSave(&game->sgame) < 0 ?
 	       "Game save failed." :
 	       "Game save succeeded.");
 	return;
     case 'R':
-	/* restore to copy at first, so computer does not need to re-think if
-	   the restore fails. */
-	if (GameRestore(&gameState->savedBoard) < 0)
+	if (SaveGameRestore(&game->sgame) < 0)
 	{
 	    UIBarf("Game restore failed.");
 	}
@@ -1038,39 +1094,49 @@ static void UIPlayerMove(BoardT *board, ThinkContextT *th,
 	{
 	    ThinkerCmdBail(th);
 	    UIBarf("Game restore succeeded.");
-	    hashInit();
-	    histInit();
-	    BoardCopy(board, &gameState->savedBoard);
-	    commitmove(board, NULL, th, gameState, 0);
+	    gHashInit();
+	    gHistInit();
+	    // Could goto current ply instead of numPlies.  I'm assuming
+	    // here the user is absent-minded and might forget (or might not
+	    // know) the current ply is persistent.
+	    GameGotoPly(game, GameLastPly(game), th);
+	}
+	return;
+    case 'U':
+	if (GameRewind(game, 1, th) < 0)
+	{
+	    UIBarf("Start of game.");
+	}
+	return;
+    case 'O':
+	if (GameFastForward(game, 1, th) < 0)
+	{
+	    UIBarf("End of redo information.");
 	}
 	return;
     case 'E':
 	ThinkerCmdBail(th);
-	ClocksStop(gameState);
+	ClocksStop(game);
 	do {
 	    UIEditPosition(board);
-	} while (BoardSanityCheck(board));
-	UIOptionsDraw(gameState);
+	} while (BoardSanityCheck(board, 0));
+	UIOptionsDraw(game);
 
-	memcpy(myPieces, board->coord, sizeof(myPieces));
-	ClocksReset(gameState);
-	newgameEx(board, myPieces, board->cbyte, board->ebyte, board->ply);
-	GoaltimeCalc(gameState, board);
-	commitmove(board, NULL, th, gameState, 0);
+	GameNewEx(game, th, board, 0, 1);
 	return;
     case 'A': /* toggle randomize moves. */
 	gVars.randomMoves ^= 1;
-	UIOptionsDraw(gameState);
+	UIOptionsDraw(game);
 	return;
     case 'T':
         // I'm pretty sure I want the computer to stop thinking, if I'm swiping
 	// the time out from under it.
 	ThinkerCmdBail(th);
-	ClocksStop(gameState);
-	UITimeMenu(board, gameState);
-	UIOptionsDraw(gameState);
+	ClocksStop(game);
+	UITimeMenu(game);
+	UIOptionsDraw(game);
 	UINotifyReady();
-	commitmove(board, NULL, th, gameState, 0);
+	GameMoveCommit(game, NULL, th, 0);
 	return;
     default:
 	break;
@@ -1078,20 +1144,25 @@ static void UIPlayerMove(BoardT *board, ThinkContextT *th,
 
     /* at this point must be a move or request for moves. */
     /* get valid moves. */
-    mlistGenerate(&movelist, &gameState->savedBoard, 0);
+    mlistGenerate(&movelist, board, 0);
     if (comstr[0] == 'G')	/* display moves */
     {
 	UIMovelistShow(&movelist);
 	UIBoardDraw();
 	UITicksDraw();
-	UIOptionsDraw(gameState);
-	UIBoardRefresh(&gameState->savedBoard);
-	UIStatusDraw(board, gameState);
+	UIOptionsDraw(game);
+	UIBoardRefresh(board);
+	UIStatusDraw(game);
+	UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
      	return;
     }
 
+    /* Suppose we have a valid move.  Can we find it in the movelist? */
+    myMove.src = comstr[0];
+    myMove.dst = comstr[1];
+
     /* search movelist for comstr */
-    if ((ptr = searchlist(&movelist, comstr, 2)) == NULL)
+    if ((foundMove = mlistSearch(&movelist, &myMove, 2)) == NULL)
     {
 	UIBarf("Sorry, invalid move.");
 	UITicksDraw();
@@ -1102,28 +1173,32 @@ static void UIPlayerMove(BoardT *board, ThinkContextT *th,
     ThinkerCmdBail(th);
 
     /* Do we need to promote? */
-    if (ISPAWN(gameState->savedBoard.coord[comstr[0]]) &&
-	(comstr[1] > 55 || comstr[1] < 8))
+    if (ISPAWN(board->coord[myMove.src]) &&
+	(myMove.dst > 55 || myMove.dst < 8))
     {
 	while ((chr = UIBarf("Promote piece to (q, r, b, n)? >")) != 'q' &&
 	       chr != 'r' && chr != 'b' && chr != 'n')
 	    ; /* do nothing */
 	chr = asciiToNative(chr);
-	comstr[2] = (chr & ~1) | (gameState->savedBoard.ply & 1);
+	myMove.promote = (chr & ~1) | (board->turn);
 
-	ptr = searchlist(&movelist, comstr, 3);
-	assert(ptr != NULL);
+	foundMove = mlistSearch(&movelist, &myMove, 3);
+	assert(foundMove != NULL);
     }
     else
     {
-	comstr[2] = ptr[2];
+	myMove.promote = foundMove->promote;
     }
-    comstr[3] = ptr[3];
-    commitmove(board, comstr, th, gameState, 0);
+    myMove.chk = foundMove->chk;
+    GameMoveCommit(game, &myMove, th, 0);
 }
 
+static int UIShouldCommitMoves(void)
+{
+    return 1;
+}
 
-static void UINotifyMove(uint8 *comstr) { }
+static void UINotifyMove(MoveT *move) { }
 
 
 static UIFuncTableT myUIFuncTable =
@@ -1137,16 +1212,18 @@ static UIFuncTableT myUIFuncTable =
     .notifyError = UINotifyError,
     .notifyPV = UINotifyPV,
     .notifyThinking = UINotifyThinking,
+    .notifyPonder = UINotifyPonder,
     .notifyReady = UINotifyReady,
     .notifyComputerStats = UINotifyComputerStats,
     .notifyDraw = UINotifyDraw,
     .notifyCheckmated = UINotifyCheckmated,
-    .notifyResign = UINotifyResign
+    .notifyResign = UINotifyResign,
+    .shouldCommitMoves = UIShouldCommitMoves
 };
 
 
 /* Do any UI-specific initialization. */
-UIFuncTableT *UIInit(GameStateT *gameState)
+UIFuncTableT *uiNcursesInit(GameT *game)
 {
     initconio();
     /* set cursor invisible (ncurses).  Hacky, but geez. */
@@ -1162,7 +1239,7 @@ UIFuncTableT *UIInit(GameStateT *gameState)
 
     UIBoardDraw();
     UITicksDraw();
-    UIOptionsDraw(gameState);    
+    UIOptionsDraw(game);    
 
     return &myUIFuncTable;
 }

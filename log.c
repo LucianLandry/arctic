@@ -16,9 +16,10 @@
 
 #include <stdarg.h>
 #include <stdio.h>
-#include "ref.h"
+#include "log.h"
+#include "uiUtil.h"
 
-static int gLogLevel = eLogEmerg;
+int gLogLevel = eLogEmerg;
 static FILE *gLogFile = NULL;
 
 void LogSetLevel(int level)
@@ -55,36 +56,36 @@ int LogPrint(int level, const char *format, ...)
 
 
 /* debugging funcs. */
+#ifdef ENABLE_DEBUG_LOGGING
 void LogMoveList(int level, MoveListT *mvlist)
 {
+    char tmpStr[6];
     int i;
     if (level > gLogLevel)
     {
 	return; /* no-op. */
     }
 
-    LogPrint(eLogDebug, "{mvlist lgh %d insrt %d co %d ",
+    LogPrint(level, "{mvlist lgh %d insrt %d co %d ",
 	     mvlist->lgh, mvlist->insrt, mvlist->capOnly);
     for (i = 0; i < mvlist->lgh; i++)
     {
-	LogPrint(level,
- "%c%c%c%c ",
-		 File(mvlist->list[i] [0]) + 'a',
-		 Rank(mvlist->list[i] [0]) + '1',
-		 File(mvlist->list[i] [1]) + 'a',
-		 Rank(mvlist->list[i] [1]) + '1');
+	LogPrint(level, "%s ", moveToStr(tmpStr, &mvlist->moves[i]));
     }
     LogPrint(level, "}\n");
 }
 
 
-void LogMove(int level, BoardT *board, uint8 *comstr)
+void LogMove(int level, BoardT *board, MoveT *move)
 {
     int moveDepth;
     int cappiece;
     char capstr[6];
     char promostr[6];
     char chkstr[10];
+    char levelstr[160];
+    char *myLevelstr;
+    char tmpStr[6];
 
     if (level > gLogLevel)
     {
@@ -92,45 +93,67 @@ void LogMove(int level, BoardT *board, uint8 *comstr)
     }
 
     /* optimization: do all initialization after gLogLevel check. */
-    cappiece = board->coord[comstr[1]];
+    myLevelstr = levelstr;
+    cappiece = board->coord[move->dst];
     capstr[0] = '\0';
     promostr[0] = '\0';
     chkstr[0] = '\0';
 
-    LogPrint(level, "d%02d", board->depth);
+    myLevelstr += sprintf(myLevelstr, "D%02d", board->depth);
     for (moveDepth = MIN(board->depth, 20); moveDepth > 0; moveDepth--)
     {
-	LogPrint(level, "    ");
+	myLevelstr += sprintf(myLevelstr, "    ");
     }
     if (cappiece)
     {
 	sprintf(capstr, "(x%c)", nativeToAscii(cappiece));
     }
-    if (comstr[2] && !ISPAWN(comstr[2]))
+    if (move->promote && !ISPAWN(move->promote))
     {
-	sprintf(promostr, "(->%c)", nativeToAscii(comstr[2]));
+	sprintf(promostr, "(->%c)", nativeToAscii(move->promote));
     }
-    if (comstr[3] != FLAG)
+    if (move->chk != FLAG)
     {
 	sprintf(chkstr, "(chk-%c%c)",
-		File(comstr[3]) + 'a', Rank(comstr[3]) + '1');
+		AsciiFile(move->chk), AsciiRank(move->chk));
     }
-    LogPrint(level, "%c%c%c%c%s%s%s\n",
-	     File(comstr[0]) + 'a',
-	     Rank(comstr[0]) + '1',
-	     File(comstr[1]) + 'a',
-	     Rank(comstr[1]) + '1',
+    LogPrint(level, "%s%s%s%s%s\n",
+	     levelstr,
+	     moveToStr(tmpStr, move),
 	     capstr, promostr, chkstr);
 }
 
 
-void LogMoveShow(int level, BoardT *board, uint8 *comstr, char *caption)
+// A very simple "log-this-board" routine.
+void LogBoard(int level, BoardT *board)
+{
+    int rank, file, chr;
+
+    if (level > gLogLevel)
+    {
+	return; // no-op
+    }
+
+    LogPrint(level, "LogBoard:\n");
+    for (rank = 7; rank >= 0; rank--)
+    {
+	for (file = 0; file < 8; file++)
+	{
+	    chr = nativeToAscii(board->coord[toCoord(rank, file)]);
+	    LogPrint(level, "%c", chr == ' ' ? '.' : chr);
+	}
+	LogPrint(level, "\n");
+    }
+}
+#endif /* ENABLE_DEBUG_LOGGING */
+
+
+void LogMoveShow(int level, BoardT *board, MoveT *move, char *caption)
 {
     int ascii, i, j;
+    char tmpStr[6];
 
-    LogPrint(level, "%s:\nMove was %c%c%c%c\n", caption,
-	     File(comstr[0]) + 'a', Rank(comstr[0]) + '1',
-	     File(comstr[1]) + 'a', Rank(comstr[1]) + '1');
+    LogPrint(level, "%s:\nMove was %s\n", caption, moveToStr(tmpStr, move));
 
     for (i = 7; i >= 0; i--)
     {
@@ -141,4 +164,27 @@ void LogMoveShow(int level, BoardT *board, uint8 *comstr, char *caption)
 	}
 	LogPrint(level, "\n");
     }
+}
+
+
+/* Only meant to be called in an emergency situation (program is fixing to
+   bail). */
+void LogPieceList(BoardT *board)
+{
+    int i, j;
+    for (i = 0; i < BQUEEN + 1; i++)
+    {
+	if (board->pieceList[i].lgh)
+	{
+	    LOG_EMERG("%d:", i);
+	    for (j = 0; j < board->pieceList[i].lgh; j++)
+	    {
+		LOG_EMERG("%c%c",
+			  AsciiFile(board->pieceList[i].coords[j]),
+			  AsciiRank(board->pieceList[i].coords[j]));
+	    }
+	    LOG_EMERG(".\n");
+	}
+    }
+    LOG_EMERG("pieceList results.\n");
 }

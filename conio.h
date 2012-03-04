@@ -66,7 +66,8 @@ extern int getche(void);
 extern int kbhit(void);
 extern int cprintf(char *format, ...)
     __attribute__ ((format (printf, 1, 2)));
-extern int cscanf(const char *format, ...); 
+extern int cscanf(const char *format, ...)
+    __attribute__ ((format (scanf, 1, 2)));
 
 extern unsigned inp(unsigned port);
 extern unsigned inpw(unsigned port);

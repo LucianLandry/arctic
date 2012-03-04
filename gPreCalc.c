@@ -1,5 +1,5 @@
 /***************************************************************************
-              init.c - game initialization (gPreCalc, hash, board)
+                gPreCalc.c - all constant (or init-time) globals.
                              -------------------
     copyright            : (C) 2007 by Lucian Landry
     email                : lucian_b_landry@yahoo.com
@@ -14,18 +14,18 @@
  *                                                                         *
  ***************************************************************************/
 
-#include <string.h> /* memcpy(), memset() */
-#include <stdlib.h> /* qsort(3), random(3), malloc(3) */
+#include <stdlib.h>   /* qsort() */
 #include <assert.h>
-#include <unistd.h>
-#include <pthread.h>
-#include "ref.h"
+#include <unistd.h>   /* sysconf() */
+#include "gPreCalc.h"
+#include "gDynamic.h"
+
+// I do not have a better place to put this yet.
+MoveT gMoveNone = {FLAG, 0, 0, 0};
 
 GPreCalcT gPreCalc;
 
-GDynamicT gVars;
-
-static uint8 gNormalStartingPieces[64] = 
+static uint8 gNormalStartingPieces[NUM_SQUARES] = 
 {ROOK, NIGHT, BISHOP, QUEEN, KING, BISHOP, NIGHT, ROOK,
  PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN,
  0, 0, 0, 0, 0, 0, 0, 0,
@@ -153,14 +153,56 @@ static uint8 gAllNormalMoves[512 /* yes, this is the exact size needed */] =  {
 static uint8 gAllNightMoves[800];
 
 
+/* contains (up to) 4 valid squares of advancement: 2 capture squares (if
+   valid), then any valid e2e4-like move, then the appropriate e2e3 move.
+   Each side uses a different set of squares. */
+static uint8 gAllPawnMoves[4 * NUM_SQUARES * 2];
+
+
+/* Note how we already need to have calculated rook and bishop moves. */
+static int calcPawnMoves(uint8 *idx, int coord, int turn)
+{
+    /* indexed by turn and direction, respectively. */
+    int toind[2] [3] = {{2, 0, 1}, {4, 6, 5}};
+    int i;
+
+    /* was degenerate, but if we are using in attacked(), we actually need
+       to fill this out. */
+#if 0
+    /* degenerate case(s). */
+    if (Rank(coord) == 0 || Rank(coord) == 7)
+    {
+	for (i = 0; i < 4; i++)
+	{
+	    *(idx++) = FLAG;
+	}
+	return 4;
+    }
+#endif
+
+    /* calculate capture squares and e2e3 move. */
+    for (i = 0; i < 3; i++)
+    {
+	*(idx++) = *(gPreCalc.moves[toind[turn] [i]] [coord]);
+    }
+    /* calculate e2e4 moves.  Even the ones that "do not exist" since we use
+       this in attacked(). */
+    *idx =
+	(coord < 56 /* 16 */ && !turn) || (coord > 15 /* 47 */ && turn) ?
+	*(gPreCalc.moves[toind[turn] [2]] [coord] + 1) :
+	FLAG;
+    return 4;
+}
+
+
 static int whiteGoodNightMove(uint8 *el1, uint8 *el2)
 {
     int rankDiff = Rank(*el1) - Rank(*el2);
     return rankDiff != 0 ? -rankDiff : /* higher rank comes first for White */
 	/* .. But if both moves are on the same rank, we want the one closest
 	   to center. */
-	Abs((3 + 4) - (int) (File(*el1) * 2)) -
-	Abs((3 + 4) - (int) (File(*el2) * 2));
+	abs((3 + 4) - (int) (File(*el1) * 2)) -
+	abs((3 + 4) - (int) (File(*el2) * 2));
 }
 
 
@@ -170,12 +212,13 @@ static int blackGoodNightMove(uint8 *el1, uint8 *el2)
     return rankDiff != 0 ? rankDiff : /* lower rank comes first for Black */
 	/* .. But if both moves are on the same rank, we want the one closest
 	   to center. */
-	Abs((3 + 4) - (int) (File(*el1) * 2)) -
-	Abs((3 + 4) - (int) (File(*el2) * 2));
+	abs((3 + 4) - (int) (File(*el1) * 2)) -
+	abs((3 + 4) - (int) (File(*el2) * 2));
 }
 
 
 typedef int (*QSORTFUNC)(const void *, const void *);
+
 
 /* Calculates night moves for 'coord' and 'turn' (in preferred order).
    Returns number of moves (+ FLAG) copied into 'moveArray'. */
@@ -215,7 +258,6 @@ static int calcNightMoves(uint8 *moveArray, int coord, int turn)
 }
 
 
-
 static int dirf(int from, int to)
 {
     int res;
@@ -231,7 +273,7 @@ static int dirf(int from, int to)
         res = 2;                                /* / move */
     else if (rdiff == -fdiff)
         res = 0;                                /* \ move */
-    else if (Abs(rdiff) + Abs(fdiff) == 3)
+    else if (abs(rdiff) + abs(fdiff) == 3)
         return 8;                               /* night move */
     else return DIRFLAG;                        /* no direction whatsoever. */
     return from < to ? res : res + 4;
@@ -251,11 +293,11 @@ static int worthf(char piece)
     switch(piece | 1)
     {
     case BPAWN:   return EVAL_PAWN;
-    case BBISHOP:
-    case BNIGHT:  return EVAL_BISHOP;
+    case BBISHOP: return EVAL_BISHOP;
+    case BNIGHT:  return EVAL_KNIGHT;
     case BROOK:   return EVAL_ROOK;
     case BQUEEN:  return EVAL_QUEEN;
-    case BKING:   return EVAL_KING; /*error condition. */
+    case BKING:   return EVAL_KING;
     default:      break;
     }
     return 0;
@@ -279,15 +321,15 @@ static int centerDistancef(uint8 coord1)
 }
 
 
-static void rowinit(int d, int start, int finc, int sinc, uint8 *moves[] [16],
+static void rowinit(int d, int start, int finc, int sinc, uint8 *moves[] [NUM_SQUARES],
 		    uint8 *ptr)
 {
     int temp, i;
     int row = 0;
     for (i = temp = start; row < 8;)
     {
-	moves[i] [d] = ptr++;
-	if (*moves[i] [d] == FLAG)
+	moves[d] [i] = ptr++;
+	if (*moves[d] [i] == FLAG)
 	{
 	    i = (temp += sinc);
 	    row++;
@@ -297,29 +339,29 @@ static void rowinit(int d, int start, int finc, int sinc, uint8 *moves[] [16],
 }
 
 
-static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [16],
+static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [NUM_SQUARES],
 		     uint8 *ptr)
 {
     int temp, i, j;
-    for (i = start; Abs(i - start) < 8; i += finc)
+    for (i = start; abs(i - start) < 8; i += finc)
 	for (j = i; ; j += sinc - finc)
 	{
-	    moves[j] [d] = ptr++;
-	    if (*moves[j] [d] == FLAG)
+	    moves[d] [j] = ptr++;
+	    if (*moves[d] [j] == FLAG)
 		break;
 	}
-    for (temp = (i = start + sinc + finc * 7); Abs(i - temp) < 49; i += sinc)
+    for (temp = (i = start + sinc + finc * 7); abs(i - temp) < 49; i += sinc)
 	for (j = i; ; j += sinc - finc)
 	{
-	    moves[j] [d] = ptr++;
-	    if (*moves[j] [d] == FLAG)
+	    moves[d] [j] = ptr++;
+	    if (*moves[d] [j] == FLAG)
 		break;
 	}
 }
 
 
 /* initialize gPreCalc. */
-void preCalcInit(int numHashEntries)
+void gPreCalcInit(int numHashEntries, int numCpuThreads)
 {
     int i, d, j, num;
     uint8 *ptr = gAllNormalMoves;
@@ -339,25 +381,37 @@ void preCalcInit(int numHashEntries)
         case 7: rowinit(d,  7, -1, 8, gPreCalc.moves, ptr); break;
         default: break;
         };
-        ptr += 64;
+        ptr += NUM_SQUARES;
     }
 
     /* Calculate knight-move arrays.  Can reuse ptr. */
     ptr = gAllNightMoves;
-    for (i = 0; i < 2; i++)
+    for (i = 0; i < NUM_PLAYERS; i++)
     {
-	for (j = 0; j < 64; j++)
+	for (j = 0; j < NUM_SQUARES; j++)
 	{
-	    gPreCalc.moves[j] [8 + i] = ptr;
+	    gPreCalc.moves[8 + i] [j] = ptr;
 	    ptr += calcNightMoves(ptr, j, i);
 	}
     }
     assert(ptr = gAllNightMoves + sizeof(gAllNightMoves));
 
-    /* initialize direction, distance, and centerDistance arrays. */
-    for (i = 0; i < 64; i++)
+    /* Calculate pawn-move arrays.  Can reuse ptr. */
+    ptr = gAllPawnMoves;
+    for (i = 0; i < NUM_PLAYERS; i++)
     {
-        for (j = 0; j < 64; j++)
+	for (j = 0; j < NUM_SQUARES; j++)
+	{
+	    gPreCalc.moves[10 + i] [j] = ptr;
+	    ptr += calcPawnMoves(ptr, j, i);
+	}
+    }
+    assert(ptr = gAllPawnMoves + sizeof(gAllPawnMoves));
+
+    /* initialize direction, distance, and centerDistance arrays. */
+    for (i = 0; i < NUM_SQUARES; i++)
+    {
+        for (j = 0; j < NUM_SQUARES; j++)
 	{
             gPreCalc.dir[i] [j] = dirf(i, j);
 	    gPreCalc.distance[i] [j] = distancef(i, j);
@@ -369,7 +423,7 @@ void preCalcInit(int numHashEntries)
     /* initialize check array. */
     for (i = 0; i < BQUEEN + 1; i++)
     {
-	for (j = 0; j < 2; j++)
+	for (j = 0; j < NUM_PLAYERS; j++)
 	{
 	    gPreCalc.check[i] [j] = checkf(i, j);
 	}
@@ -381,6 +435,7 @@ void preCalcInit(int numHashEntries)
 	gPreCalc.worth[i] = worthf(i);
     }
 
+#if 0
     /* initialize attacks array. */
     for (i = 0; i < DIRFLAG + 1; i++)
     {
@@ -390,13 +445,13 @@ void preCalcInit(int numHashEntries)
 	    switch(j | 1)
 	    {
 	    case BBISHOP:
-		gPreCalc.attacks[i] [j] = !(i & 0x9);
+		gPreCalc.attacks[i] [j - ATTACKS_OFFSET] = !(i & 0x9);
 		break;
 	    case BROOK:
-		gPreCalc.attacks[i] [j] = i & 1;
+		gPreCalc.attacks[i] [j - ATTACKS_OFFSET] = i & 1;
 		break;
 	    case BQUEEN:
-		gPreCalc.attacks[i] [j] = i < 8;
+		gPreCalc.attacks[i] [j - ATTACKS_OFFSET] = i < 8;
 		break;
 	    default:
 		assert(0);
@@ -404,10 +459,10 @@ void preCalcInit(int numHashEntries)
 	    }
 	}
     }
-
+#endif
 
     /* initialize zobrist hashing. */
-    for (i = 0; i < 64; i++)
+    for (i = 0; i < NUM_SQUARES; i++)
     {
 	for (j = 0; j < BQUEEN + 1; j++)
 	{
@@ -417,27 +472,55 @@ void preCalcInit(int numHashEntries)
 	num = random();
 	if (i >= 24 && i < 40)
 	{
-	    /* every (useful) ebyte zobrist needs 5 unique bits.  The least
-	       significant is hardwired to '1' to distinguish this from the
-	       "no enpassant" case. */
+	    // Every (useful) ebyte zobrist needs 5 unique bits.  Here we use
+	    // bits 8-4.  The least significant (bit 4) is hardwired to '1' to
+	    // distinguish this from the "no enpassant" case.
 	    num &= ~0x1f0;
-	    num |= (((24 - i) << 5) | 0x10);
+	    num |= (((24 - i) << 5) | 0x10);  // FIXME this looks suspicious.
 	}
 	gPreCalc.zobrist.ebyte[i] = num;
 	
 	if (i < 16)
 	{
 	    num = random();
-	    /* make sure every cbyte zobrist has 4 unique bits. */
+	    // Make sure every cbyte zobrist has 4 unique bits.  Here, we use
+	    // bits 3-0.
 	    num &= ~0xf;
 	    num |= i;
 	    gPreCalc.zobrist.cbyte[i] = num;
 	}
     }
     num = random();
-    /* 'turn' also needs a unique bit. */
+    // 'turn' also needs a unique bit.  Here, we use bit 9.
     num |= 0x200;
     gPreCalc.zobrist.turn = num;
+
+    /* initialize number of (known) processors. */
+    if (numCpuThreads != -1)
+    {
+	// Override our notion of numProcs.
+	gPreCalc.numProcs = numCpuThreads;
+    }
+    else if ((gPreCalc.numProcs = sysconf(_SC_NPROCESSORS_ONLN)) >
+	     MAX_NUM_PROCS)
+    {
+	gPreCalc.numProcs = MAX_NUM_PROCS;
+    }
+    gPreCalc.totalMemory = sysconf(_SC_PHYS_PAGES);
+    gPreCalc.totalMemory *= sysconf(_SC_PAGESIZE);
+
+    if (numHashEntries == -1)
+    {
+	/* User declined to specify how many entries they want.
+	   As a convenience, pick the nearest pow2 that uses (upto) 1/8
+	   total memory. */
+	numHashEntries = (gPreCalc.totalMemory / 8) / sizeof(HashPositionT);
+	while ((numHashEntries & (numHashEntries - 1)) != 0)
+	{
+	    /* Not a power of 2 (yet), so strip off a bit. */
+	    numHashEntries &= numHashEntries - 1;
+	}
+    }
 
     /* Note: Having 10 unique bits means we need a transposition table
        at least 2^10 (1024k) in size for proper hashing, if we do not want
@@ -447,140 +530,5 @@ void preCalcInit(int numHashEntries)
     gPreCalc.numHashEntries = numHashEntries;
     gPreCalc.hashMask = numHashEntries - 1;
 
-    /* initialize number of (known) processors. */
-    if ((gPreCalc.numProcs = sysconf(_SC_NPROCESSORS_ONLN)) > MAX_NUM_PROCS)
-    {
-	gPreCalc.numProcs = MAX_NUM_PROCS;
-    }
-    /* gPreCalc.numProcs = 1; bldbg */
-    gPreCalc.totalMemory = sysconf(_SC_PHYS_PAGES);
-    gPreCalc.totalMemory *= getpagesize();
-}
-
-
-/* This is useful for generating a hash for the initial board position, or
-   (slow) validating the incrementally-updated hash. */
-int calcZobrist(BoardT *board)
-{
-    int retVal = 0;
-    int i;
-    for (i = 0; i < 64; i++)
-    {
-	retVal ^= gPreCalc.zobrist.coord[board->coord[i]] [i];
-    }
-    retVal ^= gPreCalc.zobrist.cbyte[board->cbyte];
-    if (board->ply & 1)
-	retVal ^= gPreCalc.zobrist.turn;
-    if (board->ebyte != FLAG)
-	retVal ^= gPreCalc.zobrist.ebyte[board->ebyte];
-    return retVal;
-}
-
-
-void histInit(void)
-{
-    int i, j, k;
-
-    /* reset history table. */
-    for (i = 0; i < 2; i++)
-	for (j = 0; j < 64; j++)
-	    for (k = 0; k < 64; k++)
-	    {
-		/* -50, not -1, because -1 might trigger accidentally if
-		   we expand the history window beyond killer moves. */
-		gVars.hist[i] [j] [k] = -50;
-	    }
-}
-
-void hashInit(void)
-{
-    int size = gPreCalc.numHashEntries * sizeof(HashPositionT);
-    int i = 0;
-    int retVal;
-
-    if (size == 0)
-	return; /* degenerate case. */
-
-    if (gVars.hash == NULL)
-    {
-	/* should only be true once */
-	if ((gVars.hash = malloc(size)) == NULL)
-	{
-	    LOG_EMERG("Failed to init hash (numEntries %d, size %d)\n",
-		      gPreCalc.numHashEntries, size);
-	    exit(0);
-	}
-	for (i = 0; i < NUM_HASH_LOCKS; i++)
-	{
-	    retVal = pthread_mutex_init(&gVars.hashLocks[i], NULL);
-	    assert(retVal == 0);
-	}
-    }
-
-    for (i = 0; i < gPreCalc.numHashEntries; i++)
-    {
-	gVars.hash[i].depth = HASH_NOENTRY;
-    }
-}
-
-
-void newgameEx(BoardT *board, uint8 pieces[], int cbyte, int ebyte, int ply)
-{
-    int i;
-
-    /* blank everything. */
-    memset(board, 0, sizeof(BoardT));
-
-    /* copy all of the pieces over. */
-    memcpy(board->coord, pieces, 64);
-
-    /* init playlist/playptr. */
-    for (i = 0; i < 64; i++)
-	if (board->coord[i])
-	    addpieceSmart(board, board->coord[i], i);
-
-    /* cbyte handling. */
-    board->cbyte = cbyte;
-    newcbyte(board);
-
-    /* ebyte handling. */
-    assert(ebyte == FLAG || ISPAWN(board->coord[ebyte]));
-    board->ebyte = ebyte;
-
-    /* ncheck handling. */
-    for (i = 0; i < 2; i++)
-    {
-	/* must be 1 K of each kind. */
-	assert(board->playlist[KING | i].lgh == 1);
-	calcNCheck(board, board->playlist[KING | i].list[0], "newgameEx");
-    }
-
-    /* ply handling. */
-    assert(ply == 0 /* the normal situation */ ||
-	   ply == 1 /* hopefully setting up a position */);
-    board->ply = ply;
-    board->repeatPly = -1;
-
-    for (i = 0; i < 64; i++)
-    {
-        /* abuse this macro to setup board->hashcoord */
-	COORDUPDATE(board, i, board->coord[i]);
-    }
-    board->zobrist = calcZobrist(board);
-    hashInit();
-    histInit();
-    gUI->boardRefresh(board);
-}
-
-
-void newgame(BoardT *board)
-{
-    newgameEx(board, gNormalStartingPieces, ALLCASTLE, FLAG, 0);
-}
-
-
-int isNormalStartingPosition(BoardT *board)
-{
-    return board->cbyte == ALLCASTLE && board->ebyte == FLAG &&
-	memcmp(board->coord, gNormalStartingPieces, 64) == 0;
+    gPreCalc.normalStartingPieces = gNormalStartingPieces;
 }

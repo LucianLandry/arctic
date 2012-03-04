@@ -1,182 +1,117 @@
-/***************************************************************************
-                     comp.c - computer 'AI' functionality.
-                             -------------------
-    copyright            : (C) 2007 by Lucian Landry
-    email                : lucian_b_landry@yahoo.com
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//                   comp.c - computer 'AI' functionality.
+//                           -------------------
+//  copyright            : (C) 2007 by Lucian Landry
+//  email                : lucian_b_landry@yahoo.com
+//--------------------------------------------------------------------------
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU Library General Public License as       *
- *   published by the Free Software Foundation; either version 2 of the    *
- *   License, or (at your option) any later version.                       *
- *                                                                         *
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//
+//   This program is free software; you can redistribute it and/or modify
+//   it under the terms of the GNU Library General Public License as
+//   published by the Free Software Foundation; either version 2 of the
+//   License, or (at your option) any later version.
+//
+//--------------------------------------------------------------------------
 
-#include <stddef.h> /* NULL */
+#include <stddef.h>   // NULL
 #include <string.h>
-#include <pthread.h> /* pthread_create() */
 #include <assert.h>
 #include <errno.h>
-#include <stdlib.h> // exit()
+#include <stdlib.h>   // exit()
+#include <poll.h>     // poll(2)
 #include "ref.h"
+#include "thinker.h"
+#include "position.h"
+#include "board.h"
+#include "gPreCalc.h"
+#include "gDynamic.h"
+#include "log.h"
+#include "aThread.h"
+#include "uiUtil.h"
+
+// Since I spent a lot of time trying to do it, here is a treatise on why
+// one cannot shrink the search window to the bounds of the hash evaluation of
+// the current board position.
+//
+// For starters, it is not valid to dec 'beta'.  For an orig window
+// "             alpha                        beta"
+// We don't want to return:
+// "                            hashhighbound          EVAL_WIN"
+// ... that is all well and good, but also not enough information.
+// We could attempt to compensate for that by using the hashed move
+// eval, but it is not necessarily the best move,
+// "hashlowbound                hashhighbound"
+// and so cannot satisfy our requirements either!
+// 
+// For similar reasons, we cannot inc alpha when hashed-beta > beta.
+//
+// Also,
+// If the lowbound is in the window, and I use the hasheval for the
+// hashmove, (and I cannot.  I need an exact eval in that case!) there
+// is still nothing guaranteeing that our evals will line up w/in the
+// window (even at the same searchdepth, because re-searches can hit
+// hashes of deeper search depth, which change the evaluation).  So
+// our hash 'window' is at best an educated guess.  We could use that
+// for a kind of PVS (principal variation search), but we do not implement
+// that.
 
 
-/* Since I spent a lot of time trying to do it, here is a treatise on why
-   one cannot shrink the search window to the bounds of the hash evaluation.
+// Null window note: currently, a move which is "as good" as the null window
+// could fail either high or low (which way is undefined).
 
-   For starters, it is not valid to dec 'beta'.  For an orig window
-   "             alpha                        beta"
-   We don't want to return:
-   "                            hashhighbound          EVAL_CHECKMATE"
-   ... that is all well and good, but also not enough information.
-   We could attempt to compensate for that by using the hashed move
-   eval, but it is not necessarily the best move,
-   "hashlowbound                hashhighbound"
-   and so cannot satisfy our requirements either!
-   
-   For similar reasons, we cannot inc alpha when hashed-beta > beta.
-
-   Also,
-   If the lowbound is in the window, and I use the hasheval for the
-   hashmove, (and I cannot.  I need an exact eval in that case!) there
-   is still nothing guaranteeing that our evals will line up w/in the
-   window (even at the same searchdepth, because re-searches can hit
-   hashes of deeper search depth, which change the evaluation).  So
-   our hash 'window' is at best an educated guess.  We could use that
-   for a kind of PVS, but we do not implement that.
-*/
-
-/* Null window note: currently, a move which is "as good" as the null window
-   could fail either high or low (which way is undefined). */
-
-/* Hashing note: if you see something like (where we play white):
-   223426 <first : 4 ...
-   224562 <first : 5 0 0 0 Ra2 dxc4 Qxc4 Qc8 axb7 Qxb7 Rxa8.
-   230517 <first : move a1a2
-   ...
-   236631 <second: 16. ... d5c4
-   ...
-   236786 <first : 0 -100 0 0 Qxc4.
-   ...
-   236787 <first : 4 -100 0 0 Qxc4.
-   237425 <first : 5 -100 0 0 Qxc4 Nxg3 hxg3 Rc8 axb7 Rxc4 Bxc4.
-
-   Don't panic.  What this means is, we started the depth6 search on Ra2
-   and the Qxc4 branch was found wanting (because it was searched deeper).
-   So, that was hashed.  But we did not complete the Ra2 evaluation before
-   time expired.
-*/
+// Hashing note: if you see something like (where we play white):
+// 223426 <first : 4 ...
+// 224562 <first : 5 0 0 0 Ra2 dxc4 Qxc4 Qc8 axb7 Qxb7 Rxa8.
+// 230517 <first : move a1a2
+// ...
+// 236631 <second: 16. ... d5c4
+// ...
+// 236786 <first : 0 -100 0 0 Qxc4.
+// ...
+// 236787 <first : 4 -100 0 0 Qxc4.
+// 237425 <first : 5 -100 0 0 Qxc4 Nxg3 hxg3 Rc8 axb7 Rxc4 Bxc4.
+//
+// Don't Panic.  What this means is, we started the depth6 search on Ra2
+// and the Qxc4 branch was found wanting (because it was searched deeper).
+// So, that was hashed.  But we did not complete the Ra2 evaluation before
+// time expired.
 
 
-/* FIXME 'gThinker' should maybe not be a global ...
-   but I'm trying to avoid passing around extra args to updatePv(). */
+// Globals.
+// FIXME 'gThinker' should maybe not be a global ...
+// but I'm trying to avoid passing around extra args to updatePv().
 static ThinkContextT *gThinker;
+// same argument for gStats, but it affects minimax() and trymove() as well!
+static CompStatsT gStats;
+
+#if 1
+#define SPIN_LOCK(lock) SpinlockLock(lock)
+#define SPIN_UNLOCK(lock) SpinlockUnlock(lock)
+#else // tests speedup w/locking disabled (safe with one compute thread)
+#define SPIN_LOCK(lock)
+#define SPIN_UNLOCK(lock)
+#endif
+
+#define HASH_MISS 1
+#define HASH_HIT 0
 
 // Forward declarations.
-static EvalT minimax(BoardT *board, int alpha, int beta,
-		     int strgh, CompStatsT *stats, PvT *goodPv,
-		     ThinkContextT *th);
-
-int drawInsufficientMaterial(BoardT *board)
-{
-    int b1, b2;
-
-    return
-	/* K vs k */
-	board->totalStrgh == 0 ||
-
-	/* (KN or KB) vs k */
-	(board->totalStrgh == EVAL_KNIGHT &&
-	 board->playlist[PAWN].lgh + board->playlist[BPAWN].lgh == 0) ||
-
-	/* KB vs kb, bishops on same color */
-	(board->totalStrgh == (EVAL_BISHOP << 1) &&
-	 board->playlist[BISHOP].lgh == 1 &&
-	 board->playlist[BBISHOP].lgh == 1 && 
-	 !((Rank(b1 = board->playlist[BISHOP].list[0]) + File(b1) +
-	    Rank(b2 = board->playlist[BBISHOP].list[0]) + File(b2)) & 1));
-}
+static PositionEvalT minimax(BoardT *board, int alpha, int beta,
+			     PvT *goodPv, ThinkContextT *th, int *hashHitOnly);
 
 
-/* With minor modification, we could also detect 1 repeat, but it would be
-   more expensive. */
-int drawThreefoldRepetition(BoardT *board)
-{
-    int repeats, ncpPlies, ply;
-
-    /* 4th ply would be first possible repeat, 8th ply is 2nd and final
-       repeat. */
-    if (board->ncpPlies >= 8)
-    {
-	repeats = 0;
-	for (ncpPlies = board->ncpPlies - 4, ply = board->ply - 4;
-	     ncpPlies >= 4 || (repeats == 1 && ncpPlies >= 0);
-	     ncpPlies -= 2, ply -= 2)
-	{
-	    if (PositionHit(board, &board->positions[ply & 127].p) &&
-		/* At this point we have a full match. */
-		++repeats == 2)
-	    {
-		return 1;
-	    }
-	}
-    }
-    return 0;
-}
-
-
-/* Calculates (roughly) how 'valuable' a move is. */
-int calcCapWorth(BoardT *board, uint8 *comstr)
-{
-    int cappiece = board->coord[comstr[1]];
-    int capWorth = WORTH(cappiece);
-
-    if (capWorth == EVAL_KING) /* captured king, cannot happen */
-    {
-	LogMoveShow(eLogEmerg, board, comstr, "diagnostic");
-	assert(0);
-    }
-
-    if (comstr[2])
-    {
-	/* add in extra value for promotion or en passant. */
-	capWorth += WORTH(comstr[2]);
-	if (!ISPAWN(comstr[2]))
-	    capWorth -= EVAL_PAWN;
-    }
-
-    return capWorth;
-}
-
-
-static int eval(BoardT *board)
-{
-    uint8 *coord = board->coord;
-    int turn = board->ply & 1;
-    int i, result;
-    result = 0;
-    for (i = 0; i < 64; i++)
-	if (CHECK(coord[i], turn) == FRIEND)
-	    result += WORTH(coord[i]);
-	else if (CHECK(coord[i], turn) == ENEMY)
-	    result -= WORTH(coord[i]);
-    return result;
-}
-
-
-/* assumes enemy is down to 1 king and we have no pawns. */
+// Assumes neither side has any pawns.
 static int endGameEval(BoardT *board, int turn)
 {
-    int ekcoord = board->playlist[BKING ^ turn].list[0];
-    int kcoord = board->playlist[KING | turn].list[0];
+    int ekcoord = board->pieceList[BKING ^ turn].coords[0];
+    int kcoord = board->pieceList[KING | turn].coords[0];
 
-    return board->playerStrgh[turn] +
-	/* enemy king needs to be as close to the corner as possible. */
+    return
+	// enemy king needs to be as close to a corner as possible.
 	gPreCalc.centerDistance[ekcoord] * 14 /* max 84 */ +
-	/* Failing any improvement in the above, we should also try to close in
-	   w/our king. */
+	// Failing any improvement in the above, we should also try to close in
+	// w/our own king.
 	(14 - gPreCalc.distance[kcoord] [ekcoord]); /* max 14 */
 }
 
@@ -184,24 +119,22 @@ static int endGameEval(BoardT *board, int turn)
 #define QUIESCING (searchDepth < 0)
 
 
-/*
-  'alpha' is the lowbound for the search (any move must be at least this good).
-  It is also roughly equivalent to 'bestVal' (for any move so far), except
-  perhaps it is higher than any of them.
 
-  'beta' is the highbound for the search (if we find a move at least this
-  good, we don't need to worry about searching the rest of the moves).
-
-  'lowBound' and 'highBound' are the possible limits of the best 'move' found
-  so far.
-
-  I can take care of 'optimization' later.
-*/
+// 'alpha' is the lowbound for the search (any move must be at least this
+// good).
+// It is also roughly equivalent to 'bestVal' (for any move so far), except
+// perhaps it is higher than any of them.
+//
+// 'beta' is the highbound for the search (if we find a move at least this
+// good, we don't need to worry about searching the rest of the moves).
+//
+// 'lowBound' and 'highBound' are the possible limits of the best 'move' found
+// so far.
 
 
-static inline EvalT invertEval(EvalT eval)
+static inline PositionEvalT invertEval(PositionEvalT eval)
 {
-    return (EvalT) {-eval.highBound, -eval.lowBound};
+    return (PositionEvalT) {-eval.highBound, -eval.lowBound};
 }
 
 #define SET_BOUND(low, high) \
@@ -214,23 +147,23 @@ do { if (retVal.lowBound < (eval).lowBound) \
          retVal.highBound = (eval).highBound; } while (0)
 
 #define RETURN_BOUND(low, high) \
-do { return (EvalT) {(low), (high)}; } while (0)
+do { return (PositionEvalT) {(low), (high)}; } while (0)
 
 
-void updatePv(BoardT *board, PvT *goodPv, PvT *childPv, uint8 *comstr,
+void updatePv(BoardT *board, PvT *goodPv, PvT *childPv, MoveT *move,
 	      int eval)
 {
     int depth = board->depth;
 
-    if (depth < MAX_PV_DEPTH && comstr[0] != FLAG)
+    if (depth < MAX_PV_DEPTH && move->src != FLAG)
     {
-	/* this be a good move. */
-	memcpy(goodPv->pv, comstr, 4);
+	// This be a good move.
+	goodPv->moves[0] = *move; // struct assign
 
 	if (childPv && childPv->depth)
 	{
 	    goodPv->depth = childPv->depth;
-	    memcpy(&goodPv->pv[4], childPv->pv, (goodPv->depth - depth) << 2);
+	    memcpy(&goodPv->moves[1], &childPv->moves[0], (goodPv->depth - depth) * sizeof(MoveT));
 	}
 	else
 	{
@@ -239,11 +172,18 @@ void updatePv(BoardT *board, PvT *goodPv, PvT *childPv, uint8 *comstr,
 
 	if (depth == 0)
 	{
-	    /* searching at root level, so let user know the updated
-	       line. */
+	    PvRspArgsT pvArgs;
+
+	    // Searching at root level, so let user know the updated line.
 	    goodPv->eval = eval;
 	    goodPv->level = board->level;
-	    ThinkerRspNotifyPv(gThinker, goodPv);
+
+	    memcpy(&pvArgs.stats, &gStats, sizeof(gStats));
+	    memcpy(&pvArgs.pv, goodPv, sizeof(PvT));
+	    ThinkerRspNotifyPv(gThinker, &pvArgs);
+
+	    // Update the tracked principal variation.
+	    gPvUpdate(goodPv);
 	}
     }
     else
@@ -252,216 +192,328 @@ void updatePv(BoardT *board, PvT *goodPv, PvT *childPv, uint8 *comstr,
     }
 }
 
-static EvalT tryMove(BoardT *board, uint8 *comstr, CompStatsT *stats,
-		     int newStrgh, int alpha, int beta, PvT *newPv,
-		     ThinkContextT *th)
+static PositionEvalT tryMove(BoardT *board, MoveT *move,
+			     int alpha, int beta, PvT *newPv,
+			     ThinkContextT *th, int *hashHitOnly)
 {
     UnMakeT unmake;
-    EvalT myEval;
+    PositionEvalT myEval;
+    CvT *cv = &board->cv;
 
-    LogMove(eLogDebug, board, comstr);
-    LogSetLevel(eLogEmerg);
-    makemove(board, comstr, &unmake); /* switches sides */
-    stats->moveCount++;
+    LogMove(eLogDebug, board, move);
+    BoardMoveMake(board, move, &unmake); // switches sides
 
+    // It seems silly to do 2 checks for this and I should probably just
+    // assert(board->depth < MAX_CV_DEPTH) since under ordinary circumstances,
+    // this should never happen.  But I guess I'd rather have the extra check
+    // and not ever have to worry about a crash.
+    if (board->depth < MAX_CV_DEPTH)
+    {
+	cv->moves[board->depth] = *move; // struct assign
+    }
     board->depth++;
 
-    myEval = invertEval(minimax(board, -beta, -alpha,
-				-newStrgh, stats, newPv, th));
-    board->depth--;
+    // massage alpha/beta for mate detection so that we can "un-massage" the
+    // returned bounds later w/out violating our alpha/beta.
+    // Okay, example: let's think about the case where we try to find a mate in one.
+    // alpha = EVAL_WIN - 1, beta = EVAL_WIN. maxLevel = 0.
+    // minimax called, a=EVAL_LOSS, b = EVAL_LOSS.  quiescing and ncheck.  {EVAL_LOSS, EVAL_LOSS}
+    // We get {EVAL_WIN, EVAL_WIN}, which we return as {EVAL_WIN - 1, EVAL_WIN - 1}.
+    // If far side not in check, we get ... probably quiescing, so {strgh, strgh}, but
+    // worst case a fail high of {EVAL_LOSS, EVAL_WIN}.  We return
+    // {EVAL_LOSS - 1, EVAL_WIN - 1} which works.
+    if (alpha >= EVAL_WIN_THRESHOLD && alpha < EVAL_WIN)
+    {
+	alpha++;
+    }
+    else if (alpha <= EVAL_LOSS_THRESHOLD && alpha > EVAL_LOSS)
+    {
+	alpha--;
+    }
+    if (beta >= EVAL_WIN_THRESHOLD && beta < EVAL_WIN)
+    {
+	beta++;
+    }
+    else if (beta <= EVAL_LOSS_THRESHOLD && beta > EVAL_LOSS)
+    {
+	beta--;
+    }
 
-    /* restore the current board position. */
-    unmakemove(board, comstr, &unmake);
+    myEval = invertEval(minimax(board, -beta, -alpha,
+				newPv, th, hashHitOnly));
+
+    board->depth--;
+    if (board->depth < MAX_CV_DEPTH)
+    {
+	cv->moves[board->depth].src = FLAG;
+    }
+
+    // restore the current board position.
+    BoardMoveUnmake(board, move, &unmake);
+
+    // Enable calculation of plies to win/loss by tweaking the eval.
+    // Slightly hacky.
+    // If we got here, we could make a move and had to try it.
+    // Therefore neither bound can be EVAL_WIN.
+    if (myEval.lowBound >= EVAL_WIN_THRESHOLD)
+    {
+	myEval.lowBound--;
+    }
+    else if (myEval.lowBound <= EVAL_LOSS_THRESHOLD)
+    {
+	myEval.lowBound++;
+    }
+    if (myEval.highBound >= EVAL_WIN_THRESHOLD)
+    {
+	myEval.highBound--;
+    }
+    else if (myEval.highBound <= EVAL_LOSS_THRESHOLD)
+    {
+	myEval.highBound++;
+    }
 
     LOG_DEBUG("eval: %d %d %d %d\n",
 	      alpha, myEval.lowBound, myEval.highBound, beta);
+
+    return myEval;
+}
+
+static int potentialImprovement(BoardT *board)
+{
+    int turn = board->turn;
+    int improvement = 0;
+    int lowcoord, highcoord;
+    int i, x, len;
+    // traipse through the enemy pieceList.
+    CoordListT *pl = &board->pieceList[QUEEN ^ turn];
+
+    do
+    {
+	if (pl->lgh)
+	{
+	    improvement = EVAL_QUEEN;
+	    break;
+	}
+	pl += ROOK - QUEEN;
+	if (pl->lgh)
+	{
+	    improvement = EVAL_ROOK;
+	    break;
+	}
+	pl += BISHOP - ROOK;
+	if (pl->lgh)
+	{
+	    improvement = EVAL_BISHOP;
+	    break;
+	}
+	pl += NIGHT - BISHOP;
+	if (pl->lgh)
+	{
+	    improvement = EVAL_KNIGHT;
+	    break;
+	}
+	pl += PAWN - NIGHT;
+	if (pl->lgh)
+	{
+	    improvement = EVAL_PAWN;
+	    break;
+	}
+    } while (0);
+
+    // If we have at least a pawn on the 6th or 7th rank, we could also improve
+    // by promotion.  (We include 6th rank because this potentialImprovement()
+    // routine is really lazy, and calculated before any depth-1 move, as
+    // opposed to after each one).
+    pl = &board->pieceList[PAWN | turn];
+    len = pl->lgh;
+    if (len)
+    {
+	if (turn)
+	{
+	    lowcoord = 8;   // 7th rank, black
+	    highcoord = 23; // 6th rank, black
+	}
+	else
+	{
+	    lowcoord = 40;  // 6th rank, white
+	    highcoord = 55; // 7th rank, white
+	}
+	for (i = 0; i < len; i++)
+	{
+	    x = pl->coords[i];
+	    if (x >= lowcoord && x <= highcoord)
+	    {
+		improvement += EVAL_QUEEN - EVAL_PAWN;
+		break;
+	    }
+	}
+    }
+    return improvement;
+}
+
+
+// Evaluates the next hashed move in 'mvlist'.
+// 'cookie' keeps track of our place in 'mvlist'.
+// Returns the evaluation of the found move
+// (if no move found, 'cookie' is set to -1).
+// Side effect: removes the move from the list.
+PositionEvalT tryNextHashMove(BoardT *board, int alpha, int beta,
+			      PvT *newPv, ThinkContextT *th,
+			      MoveListT *mvlist, int *cookie,
+			      MoveT *hashMove)
+{
+    PositionEvalT myEval = {EVAL_LOSS, EVAL_LOSS};
+    int hashHitOnly = HASH_MISS;
+    int i;
+    MoveT *move;
+
+    for (i = *cookie; i < mvlist->lgh; i++)
+    {
+	move = &mvlist->moves[i];
+
+	hashHitOnly = HASH_HIT; // assume the best case
+	myEval = tryMove(board, move,
+			 alpha, beta, newPv, th, &hashHitOnly);
+	if (hashHitOnly == HASH_HIT)
+	    break;
+    }
+
+    if (hashHitOnly == HASH_HIT)
+    {
+	// We found a move, and 'evaluated' it. ...
+	// Copy off and remove it.
+	*hashMove = *move; // struct assign
+	mlistMoveDelete(mvlist, i);
+	*cookie = i;
+    }
+    else
+    {
+	// ran off end of list.  Eval is not valid.
+	*cookie = -1;
+    }
     return myEval;
 }
 
 
-// returns index of completed searcher.
-static int compWaitOne(void)
+static int biasDraw(int strgh, int depth)
 {
-    int res;
-    int i;
-    eThinkMsgT rsp;
-
-    while ((res = poll(gVars.pfds, gPreCalc.numProcs, -1)) == -1
-	   && errno == EINTR)
-    {
-	continue;
-    }
-    assert(res > 0); // other errors should not happen
-    for (i = 0; i < gPreCalc.numProcs; i++)
-    {
-	assert(!(gVars.pfds[i].revents & (POLLERR | POLLHUP | POLLNVAL)));
-	if (gVars.pfds[i].revents & POLLIN)
-	{
-	    // Received response from slave.
-	    rsp = ThinkerRecvRsp(&gVars.searchArgs[i].th, NULL, 0);
-	    assert(rsp == eRspSearchDone);
-	    gVars.numThinking--;
-	    return i;
-	}
-    }
-    assert(0);
-    return -1;
+    return
+	// even strgh.  Assume the opponent is pernicious and wants to seek a
+	// draw.  But if computer's ply, avoid draw.  This is slightly
+	// asymmetrical and will skew scores if both sides are computer.
+	// Otherwise we should be okay, but this is tricky.  FIXME?
+	strgh == 0 ? (depth & 1 ? 1 : -1) :
+	// Bias against a draw if we are up material.
+	strgh > 0 ? -1 :
+	// If we are down material, bias for a draw.
+	1;
 }
 
+// Note: the simple lock/unlock of the hashLock is good for about a 6%
+// slowdown ... even using spinlocks.  So it could be to our advantage to check
+// for SMP before actually doing it. ...
+// although on second thought, that has a measurable slowdown of its own, so I
+// will optimize for the multithread case.
 
-static void compWaitAll(void)
+// Evaluates a given board position from {board->turn}'s point of view.
+static PositionEvalT minimax(BoardT *board, int alpha, int beta,
+			     PvT *goodPv, ThinkContextT *th, int *hashHitOnly)
 {
-    while (gVars.numThinking > 0)
-    {
-	compWaitOne();
-    }
-}
+    // Trying to order the declared variables by their struct size, to
+    // increase cache hits, does not work.  Trying instead by functionality.
+    // and/or order of usage, is also not reliable.
+    int turn, ncheck, searchDepth;
 
-
-static SearchArgsT *searcherGet(void)
-{
-    int i;
-    for (i = 0; i < gPreCalc.numProcs; i++)
-    {
-	if (!ThinkerCompIsThinking(&gVars.searchArgs[i].th))
-	{
-	    return &gVars.searchArgs[i];
-	}
-    }
-    assert(0);
-    return NULL;
-}
-
-
-static void searchersMakeMove(uint8 *comstr, UnMakeT *unmake, int mightDraw)
-{
-    int i;
-    SearchArgsT *sa;
-    for (i = 0; i < gPreCalc.numProcs; i++)
-    {
-	sa = &gVars.searchArgs[i];
-	if (mightDraw)
-	{
-	    PositionSave(&sa->board);
-	}
-	makemove(&sa->board, comstr, unmake);
-	sa->board.depth++;
-    }
-}
-
-
-static void searchersUnmakeMove(uint8 *comstr, UnMakeT *unmake)
-{
-    int i;
-    SearchArgsT *sa;
-    for (i = 0; i < gPreCalc.numProcs; i++)
-    {
-	sa = &gVars.searchArgs[i];
-	sa->board.depth--;
-	unmakemove(&sa->board, comstr, unmake);
-    }
-}
-
-
-static void searcherSearch(uint8 *comstr, int alpha, int beta, int strgh)
-{
-    // Delegate a move.
-    SearchArgsT *sa = searcherGet();
-    sa->strgh = strgh;
-    sa->alpha = alpha;
-    sa->beta = beta;
-    memcpy(sa->comstr, comstr, 4);
-    ThinkerCmdThink(&sa->th);
-    gVars.numThinking++;
-}
-
-
-/* Note: the simple lock/unlock of the hashLock is good for about an 8%
-   slowdown (FIXME: measure this better, also measure error)  So it is to our
-   advantage to check for SMP before actually doing it. ... although on second
-   thought, that has a measurable slowdown of its own, so I will optimize for
-   the multithread case.
-*/
-static EvalT minimax(BoardT *board, int alpha, int beta,
-		     int strgh, CompStatsT *stats, PvT *goodPv,
-		     ThinkContextT *th)
-/* evaluates a given board position from {board->ply}'s point of view. */
-{
-    int newval, i, capWorth;
-    int secondBestVal, turn, ncheck;
-    int mightDraw; /* bool.  is it possible to hit a draw while evaluating from
-		      this position.  Could be made more intelligent. */
-    /* alpha (the low search window) can be ... anything.  So if we want a
-       more accurate evaluation, we need to track 'bestVal' separately.
-    */
-    int bestVal;
-    int searchDepth;
-
-    EvalT retVal, myEval;
-
+    int mightDraw; // bool.  Is it possible to hit a draw while evaluating from
+		   // this position.
     HashPositionT *hp;
-    MoveListT mvlist;
-    PvT newPv;
-
-    uint8 *bestComstr, *comstr;
-
-    int hashHit = 0;
-    uint8 hashComstr[4];
-    EvalT hashEval;
-    uint8 hashDepth;
-    pthread_mutex_t *hashLock;
-
+    SpinlockT *hashLock;
+    int hashHit;
+    // int hashDepth;
+    MoveT hashMove;
+    PositionEvalT hashEval;
+    MoveT bestMove;
+    PositionEvalT retVal;
     int masterNode;  // multithread support.
-    int searchIndex;
+    MoveT *move;
+    int preEval, improvement, i, secondBestVal;
+    int cookie;
+    PositionEvalT myEval;
+    int newVal;
     UnMakeT unmake;
+    PvT newPv;
+    MoveListT mvlist;
+    int strgh;
+#ifdef ENABLE_DEBUG_LOGGING
+    char tmpStr[6];
+#endif
 
-    /* I'm trying to use lazy initialization for this function. */
+    // I'm trying to use lazy initialization for this function.
     goodPv->depth = 0;
-    turn = board->ply & 1;
+    turn = board->turn;
+    strgh = board->playerStrength[turn] - board->playerStrength[turn ^ 1];
+    searchDepth = board->level - board->depth;
 
-    if (drawInsufficientMaterial(board) ||
-	drawFiftyMove(board) ||
-	drawThreefoldRepetition(board))
+    gStats.nodes++;
+    if (!QUIESCING)
     {
-	/* Draw detected.
-	   Skew the eval a bit: If we have better/equal material, try not to
-	   draw.  Otherwise, try to draw. */
-	bestVal = board->playerStrgh[turn] >= board->playerStrgh[turn ^ 1] ?
-	    -1 : 0;
-	RETURN_BOUND(bestVal, bestVal);
+	gStats.nonQNodes++;
+    }
+
+    if (BoardDrawInsufficientMaterial(board) ||
+	BoardDrawFiftyMove(board) ||
+	BoardDrawThreefoldRepetition(board))
+    {
+	// Draw detected.
+	// Skew the eval a bit: If we have equal or better material, try not to
+	// draw.  Otherwise, try to draw.  (here, strgh is used as a tmp
+        // variable)
+	strgh = biasDraw(strgh, board->depth);
+	RETURN_BOUND(strgh, strgh);
     }
 
     ncheck = board->ncheck[turn];
-    searchDepth = board->level - board->depth;
+
+    if (board->repeatPly != -1)
+    {
+	// Detected repeated position.  Fudge things a bit and (again) try to
+	// avoid this situation when we are winning or even.  This also may
+	// help us avoid a "we either draw or lose material" situation beyond
+	// the search window.
+	//
+	// I tried implementing this as just returning 'draw' which also
+	// cuts down on the search tree, but this screws up the eval of losing
+	// positions -- thanks to back-propagation, we could mistakenly
+	// prefer the position over a move that won or kept material.
+	improvement = -biasDraw(strgh, board->depth);
+	strgh -= improvement;
+    }
+    else
+    {
+	improvement = 0;
+    }
 
     if (QUIESCING && ncheck == FLAG)
     {
-	/* Putting some endgame eval right here (no captures
-	   possible in anything-else vs k (unless pawns present), so movgen not
-	   needed).  Also (currently) don't bother with hashing since usually
-	   ncpPlies will be too high.
-	*/
-	if (board->playerStrgh[turn] == 0 &&
-	    board->playlist[BPAWN ^ turn].lgh == 0)
+	// Putting some endgame eval right here.  No strength change is
+	// possible if opponent only has king (unless we have pawns), so movgen
+	// is not needed.  Also, (currently) don't bother with hashing since
+	// usually ncpPlies will be too high.
+	if (board->playerStrength[turn ^ 1] == 0 &&
+	    board->pieceList[PAWN | turn].lgh == 0)
 	{
-	    bestVal = -endGameEval(board, turn ^ 1); /* (oh crap.) */
-	    RETURN_BOUND(bestVal, bestVal);
-	}
-	if (board->playerStrgh[turn ^ 1] == 0 &&
-	    board->playlist[PAWN | turn].lgh == 0)
-	{
-	    bestVal = endGameEval(board, turn); /* (oh good.) */
-	    RETURN_BOUND(bestVal, bestVal);
+	    strgh += endGameEval(board, turn); // (oh good.)
+	    RETURN_BOUND(strgh, strgh);
 	}
 
-	/* When quiescing (ncheck is a special case because we attempt to
-	   detect checkmate even during quiesce) we assume that we can at least
-	   preserve our current strgh, by picking some theoretical move that
-	   wasn't generated.  This actually functions as our node-level
-	   evaluation function, cleverly hidden. */
+	// When quiescing (ncheck is a special case because we attempt to
+	// detect checkmate even during quiesce) we assume that we can at least
+	// preserve our current strgh, by picking some theoretical move that
+	// wasn't generated.  This actually functions as our node-level
+	// evaluation function, cleverly hidden.
 	if (strgh >= beta)
 	{
-	    RETURN_BOUND(strgh, EVAL_CHECKMATE);
+	    RETURN_BOUND(strgh, EVAL_WIN);
 	}
     }
 
@@ -480,9 +532,14 @@ static EvalT minimax(BoardT *board, int alpha, int beta,
 	(searchDepth >= 3 - (board->ply - board->repeatPly));
 
     hp = NULL;
+    hashLock = NULL;
+
+#if 0
+    /* partial hashhit support. */
+    hashHit = 0;
     hashEval.lowBound = hashEval.highBound = 0;
     hashDepth = HASH_NOENTRY;
-    hashLock = NULL;
+#endif
 
     /* Is there a suitable hit in the transposition table? */
     if ((!mightDraw || board->ncpPlies == 0) && gVars.hash != NULL)
@@ -492,147 +549,207 @@ static EvalT minimax(BoardT *board, int alpha, int beta,
 	hashLock = &gVars.hashLocks[board->zobrist & (NUM_HASH_LOCKS - 1)];
 
 	/* (hp must be locked when it is read or written to.) */
-	pthread_mutex_lock(hashLock);
+	SPIN_LOCK(hashLock);
 
-	if (PositionHit(board, &hp->p) && hp->depth != HASH_NOENTRY)
+	if (BoardPositionHit(board, &hp->p) && hp->depth != HASH_NOENTRY)
 	{
 	    hashHit = (searchDepth <= hp->depth || QUIESCING);
 	    hashEval = hp->eval;
-	    memcpy(hashComstr, hp->comstr, 4);
-	    hashDepth = hp->depth;
+	    hashMove = hp->move; // struct assign
+	    /* hashDepth = hp->depth; */
 	
-	    if ((hashHit &&
-		 /* know eval exactly? */
-		 (hashEval.highBound == hashEval.lowBound ||
-		  /* know it's good enough? */
-		  hashEval.lowBound >= beta ||
-		  /* know it's bad enough? */
-		  hashEval.highBound <= alpha)) ||
+	    if ( // know eval exactly?
+		(hashEval.highBound == hashEval.lowBound ||
+		 // know it's good enough?
+		 hashEval.lowBound >= beta ||
+		 // know it's bad enough?
+		 hashEval.highBound <= alpha) &&
 
-		/* -checkmate or checkmate is good, regardless of depth. */
-		hashEval.highBound == -EVAL_CHECKMATE ||
-		hashEval.lowBound == EVAL_CHECKMATE)
+		(hashHit ||
+		 // For detected win/loss, depth does not matter.
+		 hashEval.highBound <= EVAL_LOSS_THRESHOLD ||
+		 hashEval.lowBound >= EVAL_WIN_THRESHOLD))
 	    {
-		stats->hashHitGood++;
+		gStats.hashHitGood++;
 
-		/* re-record base ply for this move. */
-		hp->ply = board->ply - board->depth;
-		/* in case of checkmate.  Not proven to be better. */
+		// re-record items in the hit hash position to "reinforce" it
+		// against future removal:
+		// 1) base ply for this move.
+		hp->basePly = board->ply - board->depth;
+		// 2) search depth (in case of checkmate, it might go up.  Not
+		//    proven to be better.)
 		hp->depth = MAX(hp->depth, searchDepth);
 
-		LOG_DEBUG("hashHit alhb: %d %d %d %d %d 0x%x\n",
+		LOG_DEBUG("hashHit alhb: %d %d %d %d %d %s 0x%x\n",
 			  alpha, hp->eval.lowBound, hp->eval.highBound, beta,
-			  hp->depth, hp->p.zobrist);
+			  hp->depth,
+			  moveToStr(tmpStr, &hashMove),
+			  board->zobrist);
 
-		pthread_mutex_unlock(hashLock);
+		SPIN_UNLOCK(hashLock);
 
 		/* record the move (if there is one). */
-		updatePv(board, goodPv, NULL, hashComstr, hashEval.lowBound);
+		updatePv(board, goodPv, NULL, &hashMove, hashEval.lowBound);
 		return hashEval;
 	    }
 	}
-	pthread_mutex_unlock(hashLock);
+	SPIN_UNLOCK(hashLock);
+    }
+    if (hashHitOnly != NULL)
+    {
+	*hashHitOnly = HASH_MISS;
+	/* actual bounds should not matter. */
+	RETURN_BOUND(EVAL_LOSS, EVAL_WIN);
     }
 
-    mlistGenerate(&mvlist, board, QUIESCING && ncheck == FLAG);
+    gStats.moveGenNodes++;
+    if (board->depth || !th->searchArgs.mvlist.lgh)
+    {
+	mlistGenerate(&mvlist, board, QUIESCING && ncheck == FLAG);
+    }
+    else
+    {
+	memcpy(&mvlist, &th->searchArgs.mvlist, sizeof(MoveListT));
+    }
     LogMoveList(eLogDebug, &mvlist);
 
-    stats->funcCallCount++;
+    /* bestMove must be initialized before we goto out. */
+    bestMove = gMoveNone; // struct assign
 
-    /* bestComstr must be initialized before we goto out. */
-    bestComstr = NULL;
+    if (QUIESCING &&
+	board->pieceList[PAWN].lgh == 0 &&
+	board->pieceList[BPAWN].lgh == 0)
+    {
+	// Endgame.  Add some intelligence to the eval.  This allows us to
+	// win scenarios like KQ vs KN.
+	if (strgh >= 0)
+	{
+	    strgh += endGameEval(board, turn); // (oh good.)
+	}
+	else
+	{
+	    strgh -= endGameEval(board, turn ^ 1); // (oh bad.)
+	}
+    }
 
     /* Note:  ncheck for any side guaranteed to be correct *only* after
        the other side has made its move. */
     if (!(mvlist.lgh))
     {
-	bestVal =
-	    ncheck != FLAG ? -EVAL_CHECKMATE : /* checkmate detected */
+	strgh =
+	    ncheck != FLAG ? EVAL_LOSS : /* checkmate detected */
 	    !QUIESCING ? 0 : /* stalemate detected */
 	    strgh;
-	SET_BOUND(bestVal, bestVal);
+	SET_BOUND(strgh, strgh);
 	goto out;
     }
 
-    /* This doesn't work well, perhaps poor interaction w/history table. */
-    /* mlistSortByCap(&mvlist, board); */
-
-    if (board->depth == 0 && goodPv->pv[0] != FLAG)
-    {
-	/* root node, incremental search.  Make sure the move from the previous
-	   search is evaluated first. */
-	mlistFirstMove(&mvlist, board, goodPv->pv);
-    }
-
-    bestVal = -EVAL_CHECKMATE;
     if (QUIESCING)
     {
         /* once we know we're not mated, alpha always >= strgh. */
 	if (strgh >= beta)
 	{
-	    SET_BOUND(strgh, EVAL_CHECKMATE);
+	    SET_BOUND(strgh, EVAL_WIN);
 	    goto out;
 	}
 
-	bestVal = strgh;
-	alpha = MAX(bestVal, alpha);
-	mlistSortByCap(&mvlist, board);
-	LogMoveList(eLogDebug, &mvlist);
-    }
+	alpha = MAX(strgh, alpha);
+	if (mvlist.lgh > 1)
+	{
+	    mlistSortByCap(&mvlist, board);
+	    LogMoveList(eLogDebug, &mvlist);
+	}
 
-    /* Save board position for later draw detection, if applicable. */
-    if (mightDraw)
+	// If we find no better moves ...
+	SET_BOUND(strgh, strgh);
+    }
+    else
     {
-	PositionSave(board);
+	/* This doesn't work well, perhaps poor interaction w/history table. */
+	/* mlistSortByCap(&mvlist, board); */
+	if (board->depth <= gVars.pv.level &&
+	    gVars.pv.moves[board->depth].src != FLAG)
+	{
+	    // Try the principal variation move (if applicable) first.
+	    mlistFirstMove(&mvlist, &gVars.pv.moves[board->depth]);
+	}
+
+	// Save board position for later draw detection, if applicable.
+	// (It is never applicable when we are quiescing)
+	if (mightDraw)
+	{
+	    BoardPositionSave(board);
+	}
+
+	// If we find no better moves ...
+	SET_BOUND(EVAL_LOSS, alpha);
     }
 
-    /* If there are no better moves, 'bestVal' is really the best we can
-       do. */
-    SET_BOUND(bestVal, bestVal);
 
 #if 1
     masterNode = (th == gThinker && // master node
-		  searchDepth > 0); // not subject to futility pruning
-#else
+		  searchDepth > 1); // not subject to futility pruning
+#else // disables move delegation.
     masterNode = 0;
 #endif
 
-    comstr = NULL;
-    capWorth = EVAL_KING;
+    move = NULL;
 
-    /* (It is harmless to set bestComstr = (first move) when quiescing, and
-       necessary when not.) */
-    for (i = 0, bestComstr = mvlist.list[0], secondBestVal = alpha;
-	 i < mvlist.lgh || (masterNode && gVars.numThinking > 0);
+    if (searchDepth == 1)
+    {
+	improvement += potentialImprovement(board);
+    }
+
+#if 1
+    cookie = searchDepth > 3 /* adjust to taste */ &&
+        /* Needed to avoid scenarios where we pick a crappy hashed move,
+	   and then run out of time before evaluating the good move we meant
+	   to pick. */
+	board->depth != 0 &&
+	mvlist.lgh > 1 ? 0 : -1;
+#else // disables trying hashed moves first.
+    cookie = -1;
+#endif
+
+    for (i = 0, secondBestVal = alpha;
+	 i < mvlist.lgh || (masterNode && ThinkerSearchersSearching());
 	 i++)
     {
 	assert(i <= mvlist.lgh);
-	if (i < mvlist.lgh)
+
+	if (cookie > -1)
 	{
-	    comstr = mvlist.list[i];
-	    capWorth = calcCapWorth(board, comstr);
+	    i--; // this counters i++
+
+	    myEval = tryNextHashMove(board, alpha, beta, &newPv, th,
+				     &mvlist, &cookie, &hashMove);
+	    if (cookie == -1) /* no move found? */
+		continue;
+	    move = &hashMove;
+	    /* Otherwise, use this myEval/move combination to adjust our
+	       variables. */
 	}
 
-	/* can we delegate a move? */
-	if (masterNode)
+	// We ran out of hashed moves (or trying them first is disabled).
+	// Can we delegate a move?
+	else if (masterNode)
 	{
 	    if (i == 0)
 	    {
 		LOG_DEBUG("bldbg: comp1\n");
 		// First move is special (for PV).  We process it (almost)
 		// normally.
-		searchersMakeMove(comstr, &unmake, mightDraw);
-		myEval = tryMove(board, comstr, stats, capWorth + strgh,
-				 alpha, beta, &newPv, th);
-		searchersUnmakeMove(comstr, &unmake);
+		move = &mvlist.moves[i];
+		ThinkerSearchersMoveMake(move, &unmake, mightDraw);
+		myEval = tryMove(board, move, alpha, beta, &newPv, th, NULL);
+		ThinkerSearchersMoveUnmake(move, &unmake);
 	    }
 	    else if (i < mvlist.lgh &&  // have a move to search?
 		     // have someone to delegate it to?
-		     gVars.numThinking < gPreCalc.numProcs)
+		     ThinkerSearcherGetAndSearch(alpha, beta, &mvlist.moves[i]))
 	    {
+		// We delegated it successfully.
 		LOG_DEBUG("bldbg: comp2\n");
-		// Yes.  Delegate this move.
-		searcherSearch(comstr, alpha, beta, strgh);
 		continue;
 	    }
 	    else 
@@ -641,37 +758,44 @@ static EvalT minimax(BoardT *board, int alpha, int beta,
 		// Either do not have a move to search, or
 		// nobody to search on it.  Wait for an eval to become
 		// available.
-		searchIndex = compWaitOne();
 		LOG_DEBUG("bldbg: comp3.5\n");
-		myEval = gVars.searchArgs[searchIndex].eval;
-		comstr = gVars.searchArgs[searchIndex].comstr;
-		// yuck?  I do not have to copy the whole thing; just
-		// 'pv->depth << 2' worth of pv.pv should do.  See updatePv().
-		memcpy(&newPv, &gVars.searchArgs[searchIndex].pv, sizeof(PvT));
+		myEval = ThinkerSearchersWaitOne(&move, &newPv);
 		i--; // this counters i++
 	    }
 	}
 	else
 	{
 	    // Normal search.
-	    if ((QUIESCING || (searchDepth == 0 && !mightDraw)) &&
-		capWorth + strgh <= alpha &&
-		comstr[3] == FLAG)
+	    move = &mvlist.moves[i];
+
+	    if ((QUIESCING || (searchDepth < 2 && !mightDraw)) &&
+		move->chk == FLAG &&
+		((preEval =
+		  BoardCapWorthCalc(board, move) + strgh + improvement)
+		 <= alpha))
 	    {
 		/* Last level + no possibility to draw, or quiescing;
 		   The capture/promo/en passant is not good enough;
 		   And there is no check.
 		   So, this particular move will not improve things...
-		   and we can skip it. */
+		   and we can skip it.
+
+		   (In the case of searchDepth == 1, we assume we cannot
+		   improve our position more than a queen capture, which
+		   is true unless there is a capturing checkmate at depth '-1',
+		   which is rare enough that I am willing to live with it.)
+
+		   This is the familiar 'futility pruning'.
+		*/
 
 		/* (however, we do need to bump the highbound.  Otherwise, a
 		   depth-0 position can be mistakenly evaluated as +checkmate.)
 		*/
-		retVal.highBound = MAX(retVal.highBound, capWorth + strgh);
+		retVal.highBound = MAX(retVal.highBound, preEval);
 
-		/* *if* alpha > origalpha, we found a bestVal > origalpha.  In
+		/* *if* alpha > origalpha, we found a newVal > origalpha.  In
 		   this case, we want to set an exact value for this.  However,
-		   an alpha < bestVal < beta should actually have an exactval
+		   an alpha < newVal < beta should actually have an exactval
 		   already.
 		*/
 
@@ -684,51 +808,59 @@ static EvalT minimax(BoardT *board, int alpha, int beta,
 		continue;
 	    }
 
-	    myEval = tryMove(board, comstr, stats, capWorth + strgh,
-			     alpha, beta, &newPv, th);
+	    myEval = tryMove(board, move, alpha, beta, &newPv, th, NULL);
 	}
 
-        /* Note: If we need to move, we cannot trust 'myEval'.  We must
-	   go with the best value/move we already had. */
-	if (ThinkerCompNeedsToMove(gThinker))
+        /* Note: If we need to move, we cannot trust (and should not hash)
+	   'myEval'.  We must go with the best value/move we already had ... if any. */
+	if (ThinkerCompNeedsToMove(gThinker) ||
+	    (gVars.maxNodes != NO_LIMIT && gStats.nodes >= gVars.maxNodes))
 	{
 	    if (masterNode)
 	    {
 		// Wait for any searchers to terminate.
-		compWaitAll();
+		ThinkerSearchersBail();
 	    }
-	    RETURN_BOUND(retVal.lowBound, EVAL_CHECKMATE);
+	    RETURN_BOUND(retVal.lowBound, EVAL_WIN);
 	}
 
+	// In case of a <= alpha exact eval, this can at least tighten
+	// the evaluation of this position.  Even though we don't record the
+	// move, I think that's good enough to avoid 'bestVal'.
 	BUMP_BOUND_TO(myEval);
 
-	newval = myEval.lowBound;
-	if (newval >= alpha)
+	newVal = myEval.lowBound;
+	if (newVal >= alpha)
 	{
-	    /* This doesn't practically turn the history table off,
-	       because most moves should fail w/{-EVAL_CHECKMATE, alpha}. */
+	    /* This does *not* practically disable the history table,
+	       because most moves should fail w/{EVAL_LOSS, alpha}. */
 	    secondBestVal = alpha;  /* record 2ndbest val for history table. */
 	}
 
-	if (newval > alpha)
+	if (newVal > alpha)
 	{
-	    bestComstr = comstr;
-	    bestVal = alpha = newval;
+	    bestMove = *move; // struct assign
+	    alpha = newVal;
 
-	    updatePv(board, goodPv, &newPv, bestComstr, bestVal);
+	    updatePv(board, goodPv, &newPv, &bestMove, newVal);
 
-	    if (bestVal >= beta) /* ie, will leave other side just as bad
-				     off (if not worse) */
+	    if (newVal >= beta) // ie, will leave other side just as bad
+				// off (if not worse)
 	    {
-		if (masterNode && gVars.numThinking > 0)
+		if (masterNode && ThinkerSearchersSearching())
 		{
-		    compWaitAll();
-		    retVal.highBound = EVAL_CHECKMATE;
+		    ThinkerSearchersBail();
+		    retVal.highBound = EVAL_WIN;
 		}
-		else if (i != mvlist.lgh - 1)
-		    retVal.highBound = EVAL_CHECKMATE;
-		break;	      /* why bother checking how bad the other
-				 moves are? */
+		else if (cookie != -1 || i != mvlist.lgh - 1)
+		{
+		    retVal.highBound = EVAL_WIN;
+		}
+		// (else, we should have got through the last move
+		//  and do not need to clobber the highBound.)
+
+		break;	      // why bother checking how bad the other
+		              // moves are?
 	    }
 	    else if (myEval.lowBound != myEval.highBound)
 	    {
@@ -738,62 +870,49 @@ static EvalT minimax(BoardT *board, int alpha, int beta,
 		assert(0);
 	    }
 	}
-	else if (newval > bestVal)
+	else
 	{
-	    /* The move sucks, but it's better than what we have now. */
-	    bestComstr = comstr;
-	    bestVal = newval;
+	    assert(myEval.highBound <= alpha);
 	}
     }
 
 
-    if (!QUIESCING && bestVal > secondBestVal
+    if (!QUIESCING && alpha > secondBestVal
 	// Do not add moves that will automatically be preferred -- picked this
 	// up from a chess alg site.  It does seem to help our speed
 	// (slightly).
-	&& bestComstr[2] == 0 && board->coord[bestComstr[1]] == 0)
+	&& bestMove.promote == 0 && board->coord[bestMove.dst] == 0)
     {
+	assert(bestMove.src != FLAG); // aka gMoveNone.src
 	/* move is at least one point better than others. */
 	gVars.hist[turn]
-	    [bestComstr[0]] [bestComstr[1]] = board->ply;
+	    [bestMove.src] [bestMove.dst] = board->ply;
     }
 
 out:
-#if 0
-    /* (I take this out because with the revised algorithm, we are currently
-       affecting maybe .002% (extreme max) of our evaluations while losing
-       about 2% in calculating speed.  In short it is not worth it.)
 
-       Perhaps when we get more fine-grained evaluation, we can try this again.
-    */
+#if 0
+    /* Out.  Affects .04% of positions (max) while giving us a 2% (at least)
+       compute hit. */
     if (hashHit &&
 	hashDepth > (QUIESCING ? -1 : searchDepth) &&
-	/*
-	  Does not work (even with < instead of <=).  In a nutshell, it is
-	  more of a crime to return a possibly-complete-garbage move (due to
-	  the nature of alpha-beta) as an exact value than it is to return
-	  a move that we know is a little bit off (at least in the case of
-	  "<").  These arguments apply to >=, > as well but at one level closer
-	  to the root.
-
-	  Note: Not a real problem, but this original code can also result in
-	  us appearing to discard a perfectly good move in the PV for another
-	  one of the same value (especially at level zero).  This is because we
-	  know from the hash that the original move is (at best, with <=) only
-	  as good as the more deeply-evaluated move.
-	  (hashEval.highBound <= retVal.lowBound ||
-	   hashEval.lowBound >= retVal.highBound))
-	*/
-	bestComstr && !memcmp(bestComstr, hashComstr, 4) &&
 	(hashEval.highBound < retVal.lowBound ||
 	 hashEval.lowBound > retVal.highBound))
+	/* partial hashhit.  We know this position is better (or worse) than
+	   advertised, but even though we (may) have a move associated with
+	   the hash position, we do not actually know the best move for this
+	   position -- in the case of <, it could be a complete garbage move.
+
+	   For this reason, if we use partial hashhit, we cannot hash this
+	   position (because we need to give it a move, and we have no idea
+	   what move to give it). */
     {
 	/* If the hash eval is out of our range, at a greater
 	   depth, our current evaluation is clearly "wrong".  Because we
 	   must return an exact eval (not a range), the new eval will also be
 	   "wrong", but chances are it will be less so.
 	*/
-	if (hashEval.highBound <= retVal.lowBound)
+	if (hashEval.highBound < retVal.lowBound)
 	{
 	    SET_BOUND(hashEval.highBound, hashEval.highBound);
 	}
@@ -802,26 +921,33 @@ out:
 	    SET_BOUND(hashEval.lowBound, hashEval.lowBound);
 	}
 
-	stats->hashHitPartial++;
+	gStats.hashHitPartial++;
 
-	/* bestComstr = hashComstr; not needed since same move */
+	/* record the move (if there is one). ... FIXME probably remove.
+	   This was useful when we changed the move to hashMove, but I do not
+	   think it is useful now. */
+	/* updatePv(board, goodPv, NULL, bestMove, retVal.lowBound); */
 
-	/* record the move (if there is one). */
-	updatePv(board, goodPv, NULL, hashComstr, hashEval.lowBound);
-    }
+	/* re-record base ply for this move.  I do this w/out taking a lock.
+	   hp->basePly should only affect our decision to replace a hash entry,
+	   and the write should be atomic, so this should be fairly
+	   harmless. */
+	hp->basePly = board->ply - board->depth;
+    } else
 #endif
 
-    /* Do we need to replace the transposition table entry? */
+    /* Should we replace the transposition table entry? */
     if (hp != NULL)
     {
-	pthread_mutex_lock(hashLock);
+	SPIN_LOCK(hashLock);
 
         /* (HASH_NOENTRY should always trigger here) */
 	if (searchDepth > hp->depth ||
-	    /* Replacing entries that came before this search is
-	       aggressive, but it works better than a 'numPieces' comparison.
-	    */
-	    hp->ply < board->ply - board->depth ||
+	    // Replacing entries that came before this search is aggressive,
+	    // but it works better than a 'numPieces' comparison.  We use "!="
+	    // instead of "<" because we may move backwards in games as well
+	    // (undoing moves, or setting positions etc.)
+	    hp->basePly != board->ply - board->depth ||
 	    /* Otherwise, use the position that gives us as much info as
 	       possible, and after that the most recently used (ie this move).
 	    */
@@ -833,130 +959,161 @@ out:
 	       Every single element of this structure should always be updated,
 	       since:
 	       -- it is not blanked for a newgame
-	       -- even if hashHit, the hash entry might have been overwritten in
-	       the meantime (because of the ply check, or because another
-	       thread clobbered the table). */
+	       -- the hash entry might have been overwritten in the meantime
+	       (by another thread, or at a different ply). */
 	    memcpy(&hp->p, &board->zobrist, sizeof(PositionT));
 
 	    hp->eval = retVal; /* struct copy */
 	    hp->depth = searchDepth;
-	    hp->ply = board->ply - board->depth;
+	    hp->basePly = board->ply - board->depth;
 
-	    /* copy off best move. */
-	    if (bestComstr != NULL)
-	    {
-		memcpy(hp->comstr, bestComstr, 4);
-	    }
-	    else
-		hp->comstr[0] = FLAG; /* no associated move. */
+	    /* copy off best move (may be gMoveNone). */
+	    hp->move = bestMove; // struct assign
+
+	    LOG_DEBUG("hashupdate lhdp: %d %d %d %d %s 0x%x\n",
+		      hp->eval.lowBound, hp->eval.highBound,
+		      hp->depth, hp->basePly,
+		      moveToStr(tmpStr, &bestMove),
+		      board->zobrist);
 	}
 
-	pthread_mutex_unlock(hashLock);
+	SPIN_UNLOCK(hashLock);
     }
 
     return retVal;
 }
 
-
-static int canDraw(BoardT *board)
+// These draws are claimed, not automatic.  Other draws are automatic.
+static int canClaimDraw(BoardT *board)
 {
-    return drawFiftyMove(board) || drawThreefoldRepetition(board);
+    return BoardDrawFiftyMove(board) || BoardDrawThreefoldRepetition(board);
 }
 
 
-static void computermove(BoardT *board, ThinkContextT *th)
+static void computermove(ThinkContextT *th, int bPonder)
 {
-    int i, strngth;
-    EvalT myEval;
-    CompStatsT stats = {0, 0, 0, 0, 0};
+    PositionEvalT myEval;
     PvT pv;
-    int turn = board->ply & 1;
+    BoardT *board = &th->searchArgs.localBoard;
+    int turn = board->turn;
     /* save off ncheck, minimax() clobbers it. */
     int ncheck = board->ncheck[turn];
     int resigned = 0;
     MoveListT mvlist;
     UnMakeT unmake;
-    uint8 *comstr = pv.pv;
+    MoveT *move = pv.moves;
     int bWillDraw = 0;
 
-    comstr[0] = FLAG;
-    board->depth = 0;	/* start search from root depth. */
+    // Do impose some kind of max search depth to prevent a tight loop (and a
+    // lot of spew) when running into the fifty-move rule.  If I could think
+    // of an elegant (not compute-hogging) way to detect that further-depth
+    // searches would be futile, I would implement it.
+    int maxSearchDepth = gVars.maxLevel == NO_LIMIT ? 100 : gVars.maxLevel;
 
-    /* If we can draw, do so w/out thinking. */
-    if (canDraw(board))
+    move->src = FLAG;
+    board->depth = 0;	// start search from root depth.
+
+    // Clear stats.
+    memset(&gStats, 0, sizeof(gStats));
+
+    // If we can claim a draw, do so w/out thinking.
+    if (canClaimDraw(board))
     {
-	ThinkerRspDraw(th, comstr);
+	ThinkerRspDraw(th, move);
 	return;
+    }
+
+    if (gVars.randomMoves)
+    {
+	BoardRandomize(board);
     }
 
     mlistGenerate(&mvlist, board, 0);
 
-    if (mvlist.lgh == 1)
+    if (!bPonder &&
+
+	// only one move to make -- do not think about it.
+	(mvlist.lgh == 1 ||
+
+	 // Special case optimization (normal game, 1st move).
+	 // The move is not worth thinking about any further.
+	 BoardIsNormalStartingPosition(board)))
     {
-	/* only one move to make -- don't think about it. */
-	memcpy(comstr, &mvlist.list[0], 4);
+	*move = mvlist.moves[0]; // struct assign
     }
     else
     {
-	if (gVars.randomMoves)
-	{
-	    BoardRandomize(board);
-	}
+	// Use the principal variation move (if it exists) if we run out of
+	// time before we figure out a move to recommend.
+	mlistFirstMove(&mvlist, gVars.pv.moves);
 
-	/* get starting strength, though it doesn't really matter */
-	strngth = eval(board);
+	// setup known search parameters across the slaves.
+	ThinkerSearchersBoardSet(board);
 
-	/* setup known search parameters across the slaves. */
-	for (i = 0; i < gPreCalc.numProcs; i++)
-	{
-	    BoardCopy(&gVars.searchArgs[i].board, board);
-	    gVars.searchArgs[i].stats = &stats;
-	    gVars.searchArgs[i].strgh = strngth;
-	}
+	for (board->level =
+             // Always try to find the shortest mate if we have stumbled
+	     // onto one.  But normally we start at a deeper level just to
+	     // save the cycles.
+	     abs(gVars.pv.eval) >= EVAL_WIN_THRESHOLD && !bPonder ? 0 :
 
-	for (board->level = 0; board->level <= gVars.maxLevel; board->level++)
+	     // We start the search at the same level as the PV if we did not
+	     // complete the search, or at the next level if we did.  If the PV
+	     // level is zero, we just start over because the predicted move may
+	     // not have been made.
+	     gVars.pv.level +
+	     (gVars.pv.level && gVars.pv.depth == PV_COMPLETED_SEARCH ?
+	      1 : 0);
+
+	     board->level <= maxSearchDepth;
+	     board->level++)
 	{
 	    /* setup known search parameters across the slaves. */
-	    for (i = 0; i < gPreCalc.numProcs; i++)
-	    {
-		gVars.searchArgs[i].board.depth = board->depth;
-		gVars.searchArgs[i].board.level = board->level;
-	    }
+	    ThinkerSearchersSetDepthAndLevel(board->depth, board->level);
 
 	    LOG_DEBUG("ply %d searching level %d\n", board->ply, board->level);
-	    myEval = minimax(board, -EVAL_CHECKMATE, EVAL_CHECKMATE,
-			     strngth, &stats, &pv, th);
-	    board->ncheck[turn] = ncheck; /* restore ncheck */
+	    myEval = minimax(board,
+			     // Could use resignThreshold here, but I guess we
+			     // would prefer the most accurate score possible.
+			     EVAL_LOSS + board->level,
+			     // Try to find the shortest mates possible.
+			     EVAL_WIN - (board->level + 1),
+			     &pv, th, NULL);
+	    board->ncheck[turn] = ncheck; // restore ncheck
+	    LOG_DEBUG("top-level eval: %d %d %d %d\n",
+		      EVAL_LOSS + (board->level + 2),
+		      myEval.lowBound,
+		      myEval.highBound,
+		      EVAL_WIN - (board->level + 1));
 
 	    if (ThinkerCompNeedsToMove(th))
 	    {
-		/* We're guaranteed to have at least one move available, so
-		   use it. */
-		break;
-	    }
-	    else if (myEval.lowBound <= -EVAL_CHECKMATE)
-	    {
-		/* we're in a really bad situation */
-		resigned = 1;
-		break;
-	    }
-	    else if (myEval.lowBound >= EVAL_CHECKMATE)
-	    {
-		/* we don't need further evaluation in order to mate. */
 		break;
 	    }
 
-	    else if (board->ply == 0 && isNormalStartingPosition(board))
+	    // Hacky.  Mark that we have completed search for this level.
+	    gVars.pv.depth = PV_COMPLETED_SEARCH;
+
+	    if ((!bPonder && myEval.highBound <= gVars.resignThreshold) ||
+		(bPonder && myEval.lowBound >= -gVars.resignThreshold))
 	    {
-		/* Special case optimization (normal game, 1st move).
-		   The move is not worth thinking about any further. */
+		// we're in a really bad situation
+		resigned = 1;
+		break;
+	    }
+	    if (
+		// If we know are mating, or getting mated, further evaluation
+		// is unnecessary.
+		// (The logic works whether we are pondering or not.)
+		myEval.highBound <= EVAL_LOSS_THRESHOLD ||
+		myEval.lowBound >= EVAL_WIN_THRESHOLD)
+	    {
 		break;
 	    }
 	}
 	board->level = 0; /* reset board->level */
     }
 
-    ThinkerRspNotifyStats(th, &stats);
+    ThinkerRspNotifyStats(th, &gStats);
 
     if (resigned)
     {
@@ -964,41 +1121,43 @@ static void computermove(BoardT *board, ThinkContextT *th)
 	return;
     }
 
+    // We may not actually have found any decent move (forced to move, or
+    // pondering and side to move is about to be checkmated, for instance)
+    // For the former, we cannot assume we are in a lost position.
+    // In either case, just use the first move.
+    if (move->src == FLAG)
+    {
+	*move = mvlist.moves[0]; // struct assign
+    }
+
     /* If we can draw after this move, do so. */
-    makemove(board, comstr, &unmake);
-    bWillDraw = canDraw(board);
-    unmakemove(board, comstr, &unmake);    
+    BoardMoveMake(board, move, &unmake);
+    bWillDraw = canClaimDraw(board);
+    BoardMoveUnmake(board, move, &unmake);    
     board->ncheck[turn] = ncheck; /* restore ncheck */ 
 
     if (bWillDraw)
     {
-	ThinkerRspDraw(th, comstr);
+	ThinkerRspDraw(th, move);
     }
     else
     {
-	ThinkerRspMove(th, comstr);
+	ThinkerRspMove(th, move);
     }
 }
 
 
-typedef struct {
-    ThreadArgsT args;
-    SearchArgsT *sa;
-} SearcherArgsT;
-
-
 static void *searcherThread(SearcherArgsT *args)
 {
-    SearcherArgsT myArgs = *args; // struct copy
+    BoardT *board;
+    MoveT *move;
+    ThinkContextT *th = args->th;
+
     ThreadNotifyCreated("searcherThread", args);
 
-    BoardT *board;
-    uint8 *comstr;
-    ThinkContextT *th = &myArgs.sa->th;
-
     // Shorthand.
-    board = &myArgs.sa->board;
-    comstr = myArgs.sa->comstr;
+    board = &th->searchArgs.localBoard;
+    move = &th->searchArgs.move;
 
     // We cycle, basically:
     // -- waiting on a board position/move combo from the compThread
@@ -1009,26 +1168,26 @@ static void *searcherThread(SearcherArgsT *args)
     // compThread since we want things to be as multi-threaded as possible.
     while (1)
     {
-	ThinkerCompWaitThink(th);
+	ThinkerCompWaitSearch(th);
 
 	// Make the appropriate move, bump depth etc.
-	myArgs.sa->eval = tryMove(board, comstr, myArgs.sa->stats,
-				  (myArgs.sa->strgh +
-				   calcCapWorth(board, comstr)),
-				  myArgs.sa->alpha,
-				  myArgs.sa->beta,
-				  &myArgs.sa->pv,
-				  th);
+	th->searchArgs.eval =
+	    tryMove(board, move,
+		    th->searchArgs.alpha,
+		    th->searchArgs.beta,
+		    &th->searchArgs.pv,
+		    th,
+		    NULL);
 
 	ThinkerRspSearchDone(th);
     }
+    return NULL; // never get here.
 }
 
 
 
 typedef struct {
     ThreadArgsT args;
-    BoardT *board;
     ThinkContextT *th;
 } CompArgsT;
 
@@ -1037,38 +1196,39 @@ static void *compThread(CompArgsT *args)
 {
     CompArgsT myArgs = *args; // struct copy
     ThreadNotifyCreated("compThread", args);
-
+    eThinkMsgT cmd;
     gThinker = myArgs.th;
+
     while(1)
     {
-	/* wait for a think-command to come in. */
-	ThinkerCompWaitThink(myArgs.th);
-	/* Ponder on it, and recommend either: a move, draw, or resign. */
-	computermove(myArgs.board, myArgs.th);
+	/* wait for a think- or ponder-command to come in. */
+	cmd = ThinkerCompWaitThinkOrPonder(myArgs.th);
+	/* Think on it, and recommend either: a move, draw, or resign. */
+	computermove(myArgs.th, cmd == eCmdPonder);
     }
+    return NULL; // never get here.
 }
 
 
-void compThreadInit(BoardT *board, ThinkContextT *th)
+CvT *CompMainCv(void)
 {
-    CompArgsT args = {gThreadDummyArgs, board, th};
-    SearcherArgsT sargs;
-    int i;
+    return &gThinker->searchArgs.localBoard.cv;
+}
+
+
+int CompCurrentLevel(void)
+{
+    return gThinker->searchArgs.localBoard.level;
+}
+
+
+void CompThreadInit(ThinkContextT *th)
+{
+    CompArgsT args = {gThreadDummyArgs, th};
 
     // initialize main compThread.
     ThreadCreate(compThread, &args);
 
     // initialize searcher threads.
-    for (i = 0; i < gPreCalc.numProcs; i++)
-    {
-	sargs.sa = &gVars.searchArgs[i];
-	ThinkerInit(&sargs.sa->th);
-	ThreadCreate(searcherThread, &sargs);
-
-	// (also initialize the associated poll structure.)
-	memset(&gVars.pfds[i], 0, sizeof(struct pollfd));
-	gVars.pfds[i].fd = sargs.sa->th.masterSock;
-	gVars.pfds[i].events = POLLIN;
-    }
-
+    ThinkerSearchersCreate(gPreCalc.numProcs, searcherThread);
 }

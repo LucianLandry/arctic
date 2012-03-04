@@ -1,36 +1,75 @@
 Out-there (maybe, maybe not)
-neural net evaluation.
-search shallower for wider branches, deeper for narrower?
-more search time if eval fluctuates (maybe just goes down)
-Use a PV.
-more efficient smp search (propagate alpha-beta up the pv? finish search w/multiple threads?)
-preserve per-thread pv, use it for move ordering?
-optimize pawnmove?
-razoring variation?
-adapative back-propagating opening book?
-1-dimensional movelist?
-pgn save/restore.
-move takeback; examineback/forward (during or after game).
-# sort moves based on last eval? (not even worth trying, probably too compute-intensize)
-# try any hashed move first... maybe even before normal movgen.  ... discarded,
-	slightly slower. (version 9)
-# movgen coroutine discarded, slightly slower (version 7).
-# try lva quiescent move ordering. (seemed not a win or lose; code slightly
-	more complex) (version 9)
-# partial hashhit, slowed code down by 2% and -- with our coarse evaluations
-	only came into play about .0002% (extreme max) of the time.  Could
-	possibly be tried later.
+Neural net evaluation.  Examples: neurochess, SAL, morph.
+Still more efficient smp search (propagate alpha-beta up the pv?)
+Go directly from pondering to thinking on a ponderhit, just like
+	any good UCI engine would do.
+Razoring variation?  Something like doing a depth-2 search to see which moves
+	to only do a depth-1 search on.  If the search is good enough I could
+	also use it for move ordering.
+Adaptive back-propagating opening book?
+Figure out some way to spot "obvious" (no decent alternative) moves and make
+	them quickly.  Perhaps a full alpha-beta search to (lastSearchDepth -
+	2) or something.  Might also want it to be in the PV.
+pgn-format save/restore.
+multiple-computer/clustering search.
+    We will probably need to use a custom protocol for this.  The closest
+    "standard" way to do what I want would be UCI, + alpha/beta constraint
+    option to "go", plus a way to easily unmake/make moves on an internal board.
+If checkmate, use the shortest mate sequence possible (would probably tweak
+	eval slightly).  This is just icing and not really necessary.
+w/out hash spinlock, save 4%.  Use something even lighter? (mutex == 2%heavier)
+Find a way to advance the pawn in the endgame w/out it getting crowded out by
+	other moves (this is less bad after I implemented PV)?  Do I give pawn
+	rank a bonus?  Or make it a preferred move?
+Support multiple kings on the board.  Also consider not hard-coding which
+	pieces are 'royal' (ie killing them wins the game)
+Support for chess variants.  fischer-random, crazyhouse and Die come to mind.
+	Also consider the FICS wild variants + Xboard variants.
+uiXboard: implement 'hint', analyze mode.
+Fractional ply extension. (+ 1/numMoves)
+Shrink search window (not null necessarily, but do shrink it)
+Better thread utilization: keep all threads busy through end of minimax compute
+	(including last move).
+Remove MAX_NUM_CPUS limitation.
+More search time if first move's eval goes down.  Finish the level. ... at
+     least try to find a move that doesn't go down.  Especially if first move
+     evals to -checkmate.
+
 
 Version 10:
-TODO:
-Implement undo (1 move).
-Implement analyze (think on position w/out making move) support for xboard.
+Implemented depth-1 futility pruning.
+Fix capture-king bug (enpassant codepath could reset dc to FLAG)
+Made pawn moves symmetrical (prefer kingside capture).
+Cleanup: Split ref.h up; module re-org; use builtin abs(); proper MoveT
+Improved Makefile.
+Pick system-dependent intelligent default for hash memory size.
+SwitcherContextT rework.
+Bugfix: fix corrupted hash (bestComstr must be array, or could be switched out
+	from under us!)
+Bugfix: make buildSanString() work properly when src rank+file are different.
+Implement undo+redo (including move takeback)
+Bugfix: edit-position (bump MLIST_MAX_MOVES, fix adjacent king detection)
+Bugfix: xboard: make any applicable move before claiming a claimed draw.
+Move ordering: check hashed positions first (~20% improvement)
+Fix occasional thinker recv()/send() asserts.
+Prefer king castling moves.
+Made number of cpu threads runtime-configurable.
+Bugfix: fix crash when forcing move before decent move has been found.
+Bugfix: uiNcurses: fix display of clocks when they go negative.
+Implement preferred variation (PV), use it for move preference.
+Bugfix: fix repeatPly calc (should improve hashing)
+Improved endgame (KQ vs KN, KQ vs KB)
+uiXboard: -- implemented 'ping', 'setboard'.
+	  -- improved PV output (nodes, timeTaken)
 Implement pondering.
+Bugfix: take captures into account in endgame eval when we only have king.
+Minor changes for x86-64 + gcc 4.3.2.
+Fix capture-king bug (discovered check via enpassant when we are in check ourselves)
+Implement (optional) per-move timelimit for all interfaces.
+Implement separate time control period + increment for all interfaces.
+Compute optimization: brmove(), minimax(), addmove(), attacked(), hashlock ->
+	aSpinlockT, logging disabled by default, use global stats (~9.4%)
 Implement UCI interface.
-General compute optimization/profiling.
-Better Makefile.
-Split ref.h up into functional units.
-If checkmate, use the shortest mate sequence possible.
 
 
 Version 9:
@@ -49,7 +88,7 @@ Console UI: -- added status (random, level, black+white, hiswin)
             -- Bugfix: Blink cursor after board flip
             -- Implemented UIBarfString()
 	    -- piece color: allow all 16 colors
-Warning fixes for gcc 4.1.2. (sarge -> etch is about 10% speedup, 2% even before recompile).
+Warning fixes, gcc 4.1.2 (sarge -> etch == ~10% speedup, 2% before recompile)
 Computer moves immediately on 1st ply (in normal game)
 Implemented basic clock support.
 Bugfix: calcCapWorth(): evaluate promotions correctly.
