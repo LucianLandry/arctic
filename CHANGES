@@ -35,6 +35,9 @@ More search time if first move's eval goes down.  Finish the level. ... at
      least try to find a move that doesn't go down.  Especially if first move
      evals to -checkmate.
 
+Version 11:
+Build improvements: use Git for version control, rudimentary cmake support
+Bugfix: uiXboard: handle 0 increment and 0 moves per timecontrol properly
 
 Version 10:
 Implemented depth-1 futility pruning.

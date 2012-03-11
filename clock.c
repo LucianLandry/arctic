@@ -105,13 +105,20 @@ void ClockApplyIncrement(ClockT *myClock, int ply)
     ClockAddTime(myClock, myClock->inc);
 
     // Add any time from a new time control.
-    if (myClock->timeControlPeriod &&
-	// add 2 instead of 1, if want to apply 'before' move
-	((ply + 1) & ~0x1) % (myClock->timeControlPeriod * 2) == 0)
+    if (myClock->timeControlPeriod)
+    {
+	if (// add 2 instead of 1, if want to apply 'before' move
+	    ((ply + 1) >> 1) % myClock->timeControlPeriod == 0)
+	{
+	    ClockAddTime(myClock, myClock->startTime);
+	}
+    }
+    else if (myClock->numMovesToNextTimeControl == 1)
     {
 	ClockAddTime(myClock, myClock->startTime);
     }
 }
+
 
 
 bigtime_t ClockGetTime(ClockT *myClock)

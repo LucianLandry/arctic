@@ -203,15 +203,15 @@ static void processUciCommand(void)
     // Respond appropriately to the "uci" command.
     // TODO: in the future we should support:
     // -- "Hash"
-    printf("id name arctic %s.%s\n"
+    printf("id name arctic %s.%s-%s\n"
 	   "id author Lucian Landry\n"
 	   "option name Ponder type check default true\n"
 	   "option name RandomMoves type check default true\n"
-	   "option name UCI_EngineAbout type string default arctic %s.%s by"
+	   "option name UCI_EngineAbout type string default arctic %s.%s-%s by"
 	   " Lucian Landry\n"
 	   "uciok\n",
-	   VERSION_STRING_MAJOR, VERSION_STRING_MINOR,
-	   VERSION_STRING_MAJOR, VERSION_STRING_MINOR);
+	   VERSION_STRING_MAJOR, VERSION_STRING_MINOR, VERSION_STRING_PHASE,
+	   VERSION_STRING_MAJOR, VERSION_STRING_MINOR, VERSION_STRING_PHASE);
 }
 
 // Helper function for processPositionCommand().  Process a board once it has

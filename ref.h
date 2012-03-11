@@ -21,7 +21,8 @@
 #include "aTypes.h"
 
 #define VERSION_STRING_MAJOR "1"
-#define VERSION_STRING_MINOR "0beta"
+#define VERSION_STRING_MINOR "1"
+#define VERSION_STRING_PHASE "devel" // or beta, release
 
 #define FLAG            127
 #define FLAG64          0x7f7f7f7f7f7f7f7fLL; /* 8 FLAGs in a row */

@@ -227,9 +227,10 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
     {
 	// Note: we do not care if these features are accepted or rejected.
 	// We try to handle all input as well as possible.
-	printf("feature analyze=0 myname=arctic%s.%s variants=normal "
-	       "colors=0 done=1 ping=1 setboard=1\n",
-	       VERSION_STRING_MAJOR, VERSION_STRING_MINOR);
+	printf("feature analyze=0 myname=arctic%s.%s-%s variants=normal "
+	       "colors=0 ping=1 setboard=1 done=1\n",
+	       VERSION_STRING_MAJOR, VERSION_STRING_MINOR,
+	       VERSION_STRING_PHASE);
     }
 
     else if (matches(inputStr, "new"))
@@ -285,13 +286,8 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
     else if (sscanf(inputStr, "level %d %20s %d", &mps, baseStr, &inc) == 3)
     {
 	err = 0;
-	if (mps != 0 && inc != 0)
-	{
-	    printf("Error (unimplemented mps+inc): %s", inputStr);
-	    err = 1;
-	}
-	else if ((strchr(baseStr, ':') && !TimeStringIsValid(baseStr)) ||
-		 (!strchr(baseStr, ':') && sscanf(baseStr, "%d", &base) != 1))
+	if ((strchr(baseStr, ':') && !TimeStringIsValid(baseStr)) ||
+	    (!strchr(baseStr, ':') && sscanf(baseStr, "%d", &base) != 1))
 	{
 	    printf("Error (bad parameter '%s'): %s", baseStr, inputStr);
 	    err = 1;
@@ -312,15 +308,9 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 	    ClockInit(&game->origClocks[i]);
 	    ClockSetStartTime(&game->origClocks[i], baseTime);
 	    ClockReset(&game->origClocks[i]);
-	    if (mps != 0)
-	    {
-		ClockSetTimeControlPeriod(&game->origClocks[i], mps);
-	    }
-	    if (inc != 0)
-	    {
-		// Incremental time control.
-		ClockSetInc(&game->origClocks[i], ((bigtime_t) inc) * 1000000);
-	    }
+	    ClockSetTimeControlPeriod(&game->origClocks[i], mps);
+	    // Incremental time control.
+	    ClockSetInc(&game->origClocks[i], ((bigtime_t) inc) * 1000000);
 	}
 	if (gXboardState.newgame)
 	{
