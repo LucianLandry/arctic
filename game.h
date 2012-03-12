@@ -27,9 +27,8 @@
 typedef struct {
     SaveGameT sgame;
     int control[NUM_PLAYERS]; // 0 if player controls; 1 if computer
-    int bDone;                // Boolean.  'true' if game has ended
-                              // (draw/mate), or computer resigned the
-                              // position.
+    bool bDone;               // 'true' if game has ended (draw/mate), or
+                              // computer resigned the position.
 
     // Actual allocated space for below.  Most code should access this through
     // the 'clocks' reference.  In xboard, the 1st clock is the opponent's

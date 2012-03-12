@@ -104,7 +104,7 @@ void GameMoveMake(GameT *game, MoveT *move)
 
     // Give computer a chance to re-evaluate the position, if we insist
     // on changing the board.
-    game->bDone = 0;
+    game->bDone = false;
 
     myClock = game->clocks[turn];
     ClockStop(myClock);
@@ -160,7 +160,7 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
     {
 	ClocksStop(game);
 	gUI->notifyDraw("insufficient material", NULL);
-	game->bDone = 1;
+	game->bDone = true;
     }
     else if (!mvlist.lgh)
     {
@@ -173,12 +173,12 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
 	{
 	    gUI->notifyCheckmated(turn);
 	}
-	game->bDone = 1;
+	game->bDone = true;
     }
     else if (declaredDraw)
     {
 	// Some draws are not automatic, and need to be notified separately.
-	game->bDone = 1;
+	game->bDone = true;
     }
 
     // Cannot use GameCompRefresh() here, since perhaps we changed the

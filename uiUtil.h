@@ -68,13 +68,13 @@ void setForceMode(ThinkContextT *th, GameT *game);
 // NULL "inputStr"s are not moves.
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation.
-int isMove(char *inputStr, MoveT *resultMove);
+bool isMove(char *inputStr, MoveT *resultMove);
 
 // Return whether or not 'inputStr' looks like a legal move.
 // NULL "inputStr"s are not legal moves.
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation.
-int isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board);
+bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board);
 
 // Get a line of input from stdin, of max string length "maxLen"
 // (or unlimited if maxLen <= 0)

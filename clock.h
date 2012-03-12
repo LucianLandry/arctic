@@ -35,7 +35,7 @@ typedef struct {
                            // not rely on this
     int numMovesToNextTimeControl;
 
-    int bRunning; // boolean: is the clock running?
+    bool bRunning; // boolean: is the clock running?
 
     bigtime_t turnStartTime; // time this turn started (absolute).  Do not
                              // confuse this with startTime!
@@ -112,7 +112,7 @@ static inline int ClockGetNumMovesToNextTimeControl(ClockT *myClock)
     return myClock->numMovesToNextTimeControl;
 }
 
-static inline int ClockIsRunning(ClockT *myClock)
+static inline bool ClockIsRunning(ClockT *myClock)
 {
     return myClock->bRunning;
 }
@@ -123,7 +123,7 @@ static inline int ClockIsInfinite(ClockT *myClock)
 }
 
 
-int TimeStringIsValid(char *str);
+bool TimeStringIsValid(char *str);
 bigtime_t TimeStringToBigTime(char *str);
 char *TimeStringFromBigTime(char *result, bigtime_t myTime);
 

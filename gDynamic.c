@@ -106,7 +106,7 @@ void gPvUpdate(PvT *goodPv)
 
 void PvDecrement(PvT *pv, MoveT *move)
 {
-    int bPredictedMove =
+    bool bPredictedMove =
 	move != NULL &&
 	move->src != FLAG &&
 	!memcmp(move, &pv->moves[0], sizeof(MoveT));

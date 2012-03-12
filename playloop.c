@@ -68,7 +68,7 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
 	}
 
 	ClocksStop(game);
-	game->bDone = 1;
+	game->bDone = true;
 	gUI->notifyReady();
 
 	if (BoardDrawFiftyMove(board))
@@ -108,7 +108,7 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
 	    board->turn;      // (no)
 
 	ClocksStop(game);
-	game->bDone = 1;
+	game->bDone = true;
 	gUI->notifyReady();
 	LOG_DEBUG("%d resigns\n", turn);
 	LogFlush();

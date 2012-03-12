@@ -440,20 +440,20 @@ void setForceMode(ThinkContextT *th, GameT *game)
 // NULL "inputStr"s are not moves.
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation.
-int isMove(char *inputStr, MoveT *resultMove)
+bool isMove(char *inputStr, MoveT *resultMove)
 {
     memset(resultMove, 0, sizeof(MoveT));
     if (inputStr == NULL)
     {
-	return 0;
+	return false;
     }
     if (asciiToCoord(inputStr) != FLAG && asciiToCoord(&inputStr[2]) != FLAG)
     {
 	resultMove->src = asciiToCoord(inputStr);
 	resultMove->dst = asciiToCoord(&inputStr[2]);
-	return 1;
+	return true;
     }
-    return 0;
+    return false;
 }
 
 
@@ -461,7 +461,7 @@ int isMove(char *inputStr, MoveT *resultMove)
 // NULL "inputStr"s are not legal moves.
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation.
-int isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
+bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
 {
     MoveListT moveList;
     MoveT *foundMove;
@@ -469,7 +469,7 @@ int isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
 
     if (!isMove(inputStr, resultMove))
     {
-	return 0;
+	return false;
     }
 
     mlistGenerate(&moveList, board, 0);
@@ -477,7 +477,7 @@ int isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
     // Search moveList for move.
     if ((foundMove = mlistSearch(&moveList, resultMove, 2)) == NULL)
     {
-	return 0;
+	return false;
     }
 
     // Do we need to promote?
@@ -487,7 +487,7 @@ int isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
 	chr = inputStr[4];
 	if (chr != 'q' && chr != 'r' && chr != 'n' && chr != 'b')
 	{
-	    return 0;
+	    return false;
 	}
 
 	chr = asciiToNative(chr);
@@ -502,10 +502,10 @@ int isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
     }
     resultMove->chk = foundMove->chk;
 
-    return 1;
+    return true;
 }
 
-static int isNewLineChar(char c)
+static bool isNewLineChar(char c)
 {
     return c == '\n' || c == '\r';
 }

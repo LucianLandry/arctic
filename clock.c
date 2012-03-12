@@ -52,7 +52,7 @@ void ClockStop(ClockT *myClock)
 {
     if (myClock->bRunning)
     {
-	myClock->bRunning = 0;
+	myClock->bRunning = false;
 	myClock->timeTaken = calcTimeTaken(myClock);
 
 	if (!ClockIsInfinite(myClock))
@@ -67,7 +67,7 @@ void ClockStart(ClockT *myClock)
 {
     if (!myClock->bRunning)
     {
-	myClock->bRunning = 1;
+	myClock->bRunning = true;
 	myClock->turnStartTime = getBigTime();
     }
 }
@@ -165,19 +165,19 @@ bigtime_t ClockTimeTaken(ClockT *myClock)
 // We want either xx:yy:zz, yy:zz, or (:)zz.
 // (or CLOCK_TIME_INFINITE_STR, --> "inf")
 // But we try to be permissive in what we accept.
-int TimeStringIsValid(char *str)
+bool TimeStringIsValid(char *str)
 {
     int colCount = 0;
-    int isValid = 1;
+    bool isValid = true;
 
     if (!strcmp(str, CLOCK_TIME_INFINITE_STR))
     {
-	return 1;
+	return true;
     }
 
     if (*str == '\0')
     {
-	return 0;
+	return false;
     }
     do
     {
@@ -186,7 +186,7 @@ int TimeStringIsValid(char *str)
 	    // ':' must have a number after it, and cannot be > 2 numbers.
 	    (*str == ':' && (++colCount > 2 || !isdigit(*(str + 1)))))
 	{
-	    isValid = 0;
+	    isValid = false;
 	    break;
 	}
     } while (*(++str) != '\0');

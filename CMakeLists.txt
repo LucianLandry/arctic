@@ -15,5 +15,5 @@ set(CMAKE_C_FLAGS "-Wall -Werror -O2 -fomit-frame-pointer")
 # it happens anyway, usually...)
 # set(CMAKE_C_FLAGS -Wall -Werror -O2 -pg -fno-inline-functions-called-once)
 
-# Normal link flags.
-set(CMAKE_EXE_LINKER_FLAGS ${CMAKE_C_FLAGS})
+# Drop -rdynamic since I am pretty sure we do not need it
+set(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")

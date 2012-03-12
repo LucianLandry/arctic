@@ -984,13 +984,13 @@ out:
 }
 
 // These draws are claimed, not automatic.  Other draws are automatic.
-static int canClaimDraw(BoardT *board)
+static bool canClaimDraw(BoardT *board)
 {
     return BoardDrawFiftyMove(board) || BoardDrawThreefoldRepetition(board);
 }
 
 
-static void computermove(ThinkContextT *th, int bPonder)
+static void computermove(ThinkContextT *th, bool bPonder)
 {
     PositionEvalT myEval;
     PvT pv;
@@ -1002,7 +1002,7 @@ static void computermove(ThinkContextT *th, int bPonder)
     MoveListT mvlist;
     UnMakeT unmake;
     MoveT *move = pv.moves;
-    int bWillDraw = 0;
+    bool bWillDraw = false;
 
     // Do impose some kind of max search depth to prevent a tight loop (and a
     // lot of spew) when running into the fifty-move rule.  If I could think

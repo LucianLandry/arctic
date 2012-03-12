@@ -17,7 +17,8 @@
 #ifndef ATYPES_H
 #define ATYPES_H
 
-#include <stdint.h> // C99 integer types.
+#include <stdbool.h> // Pull in C99 bool.
+#include <stdint.h>  // C99 integer types.
 
 typedef uint8_t      uint8;
 typedef int8_t       int8;
