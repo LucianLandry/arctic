@@ -281,7 +281,7 @@ char *TimeStringFromBigTime(char *result, bigtime_t myTime)
     }
 
     negative = (myTime < 0);
-    myTime = abs(myTime);
+    myTime = llabs(myTime);
 
     // Direction of truncation is machine-dependent for negative numbers,
     // so make sure we only use positive numbers here.

@@ -178,7 +178,7 @@ void PlayloopRun(GameT *game, ThinkContextT *th)
 		(myTime < 0 ?
 		 // Avoid machine-dependent behavior of / and % w/negative
 		 // numbers.
-		 1000000 - (abs(myTime) % 1000000) :
+		 1000000 - (llabs(myTime) % 1000000) :
 		 myTime % 1000000); // normal case (positive)
 
 	    pollTimeout /= 1000; // ... converted to msec
