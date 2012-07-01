@@ -16,14 +16,16 @@
 
 #include <assert.h>
 #include <errno.h>
-#include <sys/poll.h> // poll(2)
+#include <stdio.h>    // fileno(3)
 #include <stdlib.h>   // abs(3)
+#include <sys/poll.h> // poll(2)
 
-#include "playloop.h"
-#include "log.h"
-#include "ui.h"
 #include "clockUtil.h"
 #include "gDynamic.h"
+#include "log.h"
+#include "playloop.h"
+#include "ui.h"
+
 
 static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
 {
@@ -196,7 +198,7 @@ void PlayloopRun(GameT *game, ThinkContextT *th)
 	    }
 	}
 
-	// poll for input from either stdin, or the computer, or timeout.
+	// poll for input from either stdin (UI), or the computer, or timeout.
 	res = poll(pfds, 2, pollTimeout);
 
 	if (res == 0)
@@ -230,8 +232,8 @@ void PlayloopRun(GameT *game, ThinkContextT *th)
 	{
 	    SwitcherSwitch(&game->sw);
 	}
-	/* 'else' because user-input handler may change the state on us,
-	   so we need to re-poll... */
+	// 'else' because user-input handler may change the state on us,
+	// so we need to re-poll...
 	else if (pfds[1].revents & POLLIN)
 	{
 	    PlayloopCompProcessRsp(game, th);

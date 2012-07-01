@@ -29,6 +29,7 @@
 #include "gDynamic.h"
 #include "log.h"
 #include "saveGame.h"
+#include "transTable.h"
 #include "ui.h"
 #include "uiUtil.h"
 
@@ -170,7 +171,11 @@ static void UINotifyPV(GameT *game, PvRspArgsT *pvArgs)
     PvT *pv = &pvArgs->pv; // shorthand.
 
     // Get a suitable string of moves to print.
-    buildMoveString(mySanString, sizeof(mySanString), pv, &game->savedBoard);
+    if (buildMoveString(mySanString, sizeof(mySanString), pv, &game->savedBoard,
+			true, false) < 1)
+    {
+	return;
+    }
 
     // blank out the last pv.
     memset(spaces, ' ', 79);
@@ -1031,6 +1036,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
 	exit(0);
 	break;
     case 'N':     /* new game */
+	gVars.gameCount++;
 	ThinkerCmdBail(th);
 	GameNew(game, th);
 	return;
@@ -1094,7 +1100,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
 	{
 	    ThinkerCmdBail(th);
 	    UIBarf("Game restore succeeded.");
-	    gHashInit();
+	    TransTableReset();
 	    gHistInit();
 	    // Could goto current ply instead of numPlies.  I'm assuming
 	    // here the user is absent-minded and might forget (or might not

@@ -42,9 +42,13 @@ char *moveToStr(char *result, MoveT *move);
 // Returns 'result' (should be at least 11 bytes in length).
 char *moveToFullStr(char *result, MoveT *move);
 
-// Writes out moves in SAN (Nf3) if "board" != NULL,
+// Writes out moves in SAN (Nf3) if 'useSan' == true,
 // otherwise long algebraic notation (g1f3) is used.
-void buildMoveString(char *dstStr, int dstLen, PvT *pv, BoardT *board);
+// Iff 'chopFirst' is true, the first move is not written (but still checked for
+// legality).
+// Returns the number of moves successfully converted.
+int buildMoveString(char *dstStr, int dstLen, PvT *pv, BoardT *board,
+		    bool useSan, bool chopFirst);
 
 #define FEN_STARTSTRING \
     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -75,6 +79,10 @@ bool isMove(char *inputStr, MoveT *resultMove);
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation.
 bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board);
+
+// Pattern matchers for tokens embedded at the start of a larger string.
+bool matches(char *str, char *needle);
+bool matchesNoCase(char *str, char *needle);
 
 // Get a line of input from stdin, of max string length "maxLen"
 // (or unlimited if maxLen <= 0)

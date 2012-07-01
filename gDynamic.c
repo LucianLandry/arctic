@@ -19,7 +19,6 @@
 #include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
-#include "aSpinlock.h"
 
 GDynamicT gVars;
 
@@ -36,37 +35,6 @@ void gHistInit(void)
 		   we expand the history window beyond killer moves. */
 		gVars.hist[i] [j] [k] = -50;
 	    }
-}
-
-void gHashInit(void)
-{
-    int size = gPreCalc.numHashEntries * sizeof(HashPositionT);
-    int i = 0;
-    int retVal;
-
-    if (size == 0)
-	return; /* degenerate case. */
-
-    if (gVars.hash == NULL)
-    {
-	/* should only be true once */
-	if ((gVars.hash = malloc(size)) == NULL)
-	{
-	    LOG_EMERG("Failed to init hash (numEntries %d, size %d)\n",
-		      gPreCalc.numHashEntries, size);
-	    exit(0);
-	}
-	for (i = 0; i < NUM_HASH_LOCKS; i++)
-	{
-	    retVal = SpinlockInit(&gVars.hashLocks[i]);
-	    assert(retVal == 0);
-	}
-    }
-
-    for (i = 0; i < gPreCalc.numHashEntries; i++)
-    {
-	gVars.hash[i].depth = HASH_NOENTRY;
-    }
 }
 
 void PvInit(PvT *pv)

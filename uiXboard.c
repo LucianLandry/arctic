@@ -24,22 +24,24 @@
 // unless we're talking about the "black" and "white" commands ... it's
 // wrong.
 
-#include <stdio.h>
-#include <signal.h>
 #include <assert.h>
-#include <string.h>
 #include <ctype.h>
-#include <stdlib.h>
 #include <errno.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "clockUtil.h"
+#include "comp.h"      // CompCurrentLevel()
+#include "gDynamic.h"
+#include "gPreCalc.h"
+#include "log.h"
+#include "moveList.h"
+#include "playloop.h"
 #include "ui.h"
 #include "uiUtil.h"
-#include "moveList.h"
-#include "gDynamic.h"
-#include "log.h"
-#include "clockUtil.h"
-#include "playloop.h"
-#include "comp.h"      // CompCurrentLevel()
-
+#include "transTable.h"
 
 #define MAXBUFLEN 160
 
@@ -53,13 +55,6 @@ static struct {
 #define OPPONENT_CLOCK (&game->actualClocks[0])
 #define ENGINE_CLOCK (&game->actualClocks[1])
 
-
-// Just a bit of syntactic sugar.
-static int matches(char *str, char *needle)
-{
-    int len = strlen(needle);
-    return !strncmp(str, needle, len) && isspace(str[len]);
-}
 
 // bool, and hopefully self-explanatory.  The "force mode" definition is
 // more or less given in the documentation for the "force" command.
@@ -152,6 +147,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
     char *inputStr;
     int protoVersion, myLevel, turn;
     int i, err;
+    int64 i64;
     BoardT *board = &game->savedBoard; // shorthand.
     BoardT tmpBoard;
     struct sigaction ignoreSig;
@@ -228,13 +224,15 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 	// Note: we do not care if these features are accepted or rejected.
 	// We try to handle all input as well as possible.
 	printf("feature analyze=0 myname=arctic%s.%s-%s variants=normal "
-	       "colors=0 ping=1 setboard=1 done=1\n",
+	       "colors=0 ping=1 setboard=1 memory=%d done=1\n",
 	       VERSION_STRING_MAJOR, VERSION_STRING_MINOR,
-	       VERSION_STRING_PHASE);
+	       VERSION_STRING_PHASE, !gPreCalc.userSpecifiedHashSize);
     }
 
     else if (matches(inputStr, "new"))
     {
+	gVars.gameCount++;
+
 	// New game, computer is Black.
 	gXboardState.badPosition = 0; // hope for the best.
 	setForceMode(th, game);
@@ -484,7 +482,24 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 	gXboardState.post = 0;
     }
 
-    /* (Anything below this case needs a decent position.) */
+    else if (sscanf(inputStr, "memory %"PRId64, &i64) == 1)
+    {
+	// If user overrode, it cannot be set here.
+	if (gPreCalc.userSpecifiedHashSize)
+	{
+	    printf("Error (unimplemented command): %s", inputStr);
+	}
+	else if (ThinkerCompIsThinking(th))
+	{
+	    printf("Error (command received while thinking): %s", inputStr);
+	}
+	else
+	{
+	    TransTableInit(i64 * 1024 * 1024); // MB -> bytes
+	}
+    }
+
+    // (Anything below this case needs a decent position.)
     else if (gXboardState.badPosition)
     {
 	printf("Illegal move (bad position): %s", inputStr);
@@ -505,7 +520,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 	ClockStart(ENGINE_CLOCK);
 	// ClocksPrint(game, "go");
 	GoaltimeCalc(game);
-	ThinkerCmdThink(th, board);
+	ThinkerCmdThink(th, board, &game->sgame);
     }
 
     else if (isMove(inputStr, &myMove))
@@ -584,10 +599,12 @@ static void xboardNotifyPV(GameT *game, PvRspArgsT *pvArgs)
     PvT *pv = &pvArgs->pv; // shorthand
     BoardT *board = &game->savedBoard; // shorthand
 
-    if (!gXboardState.post)
+    if (!gXboardState.post ||
+	buildMoveString(mySanString, sizeof(mySanString), pv, board,
+			true, false) < 1)
+    {
 	return;
-
-    buildMoveString(mySanString, sizeof(mySanString), pv, board);
+    }
 
     printf("%d %d %u %d %s.\n",
 	   pv->level, pv->eval,

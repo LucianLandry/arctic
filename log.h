@@ -17,7 +17,6 @@
 #ifndef LOG_H
 #define LOG_H
 
-#include <stdio.h> /* "FILE *" */
 #include "aTypes.h"
 #include "board.h"
 #include "moveList.h"
@@ -28,23 +27,22 @@ enum {
     eLogDebug
 } LogLevelT;
 
-/* private, should not be used by outside modules. */
+// private, should not be used by outside modules.
 extern int gLogLevel;
 
-void LogSetFile(FILE *logFile);
+void LogInit(void);
 void LogSetLevel(int level);
 void LogFlush(void);
 int LogPrint(int level, const char *format, ...)
     __attribute__ ((format (printf, 2, 3)));
 void LogMoveShow(int level, BoardT *board, MoveT *move, char *caption);
 void LogPieceList(BoardT *board);
-
-#define LOG_EMERG(format, ...) LogPrint(eLogEmerg, (format), ##__VA_ARGS__)
-
-#ifdef ENABLE_DEBUG_LOGGING
 void LogMoveList(int level, MoveListT *mvlist);
 void LogMove(int level, BoardT *board, MoveT *move);
 void LogBoard(int level, BoardT *board);
+
+#define LOG_EMERG(format, ...) LogPrint(eLogEmerg, (format), ##__VA_ARGS__)
+
 #define LOG_NORMAL(format, ...) \
     do \
         if (gLogLevel >= eLogNormal) \
@@ -52,6 +50,10 @@ void LogBoard(int level, BoardT *board);
             LogPrint(eLogNormal, (format), ##__VA_ARGS__); \
         } \
     while (0)
+
+// These macros are normally disabled because checking the log level while
+// "thinking" gives a small, but noticable hit on performance.
+#ifdef ENABLE_DEBUG_LOGGING
 #define LOG_DEBUG(format, ...) \
     do \
         if (gLogLevel >= eLogDebug) \
@@ -59,12 +61,19 @@ void LogBoard(int level, BoardT *board);
             LogPrint(eLogDebug, (format), ##__VA_ARGS__); \
         } \
     while (0)
-#else
-#define LOG_NORMAL(format, ...)
+
+#define LOGMOVE_DEBUG(board, move) \
+    LogMove(eLogDebug, (board), (move))
+
+#define LOGMOVELIST_DEBUG(mvlist) \
+    LogMoveList(eLogDebug, (mvlist))
+ 
+#else // !ENABLE_DEBUG_LOGGING
+
 #define LOG_DEBUG(format, ...)
-static inline void LogMoveList(int level, MoveListT *mvlist) { }
-static inline void LogMove(int level, BoardT *board, MoveT *move) { }
-static inline void LogBoard(int level, BoardT *board) { }
-#endif
+#define LOGMOVE_DEBUG(board, move)
+#define LOGMOVELIST_DEBUG(mvlist)
+
+#endif // ifdef ENABLE_DEBUG_LOGGING
 
 #endif /* LOG_H */

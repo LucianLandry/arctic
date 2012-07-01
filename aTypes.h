@@ -17,8 +17,10 @@
 #ifndef ATYPES_H
 #define ATYPES_H
 
-#include <stdbool.h> // Pull in C99 bool.
-#include <stdint.h>  // C99 integer types.
+#include <stdbool.h> // C99 "bool".
+#include <stdint.h>  // C99 integer types, INT64_MAX, SIZE_MAX, etc.
+#include <inttypes.h> // C99 support for platform-agnostic printf() of 64-bit
+                      // types (PRId64 for example)
 
 typedef uint8_t      uint8;
 typedef int8_t       int8;

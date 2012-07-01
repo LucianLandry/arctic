@@ -17,7 +17,6 @@ multiple-computer/clustering search.
     option to "go", plus a way to easily unmake/make moves on an internal board.
 If checkmate, use the shortest mate sequence possible (would probably tweak
 	eval slightly).  This is just icing and not really necessary.
-w/out hash spinlock, save 4%.  Use something even lighter? (mutex == 2%heavier)
 Find a way to advance the pawn in the endgame w/out it getting crowded out by
 	other moves (this is less bad after I implemented PV)?  Do I give pawn
 	rank a bonus?  Or make it a preferred move?
@@ -36,11 +35,15 @@ More search time if first move's eval goes down.  Finish the level. ... at
      evals to -checkmate.
 
 Version 11:
+Done:
 Build improvements: use Git for version control, rudimentary cmake support
 Bugfix: uiXboard: handle 0 increment and 0 moves per timecontrol properly
 Bugfix: uiUci: fix 'searchMoves' parameter handling (untested)
 Cleanup: use C99 bool where I can.
 Bugfix: must use llabs() instead of abs() for handling time.
+Reimplemented transposition table (presumably a better one), and added hooks
+        for controlling it to uiUci/uiXboard.
+Use a "smarter" resign strategy (try not to resign too early)
 
 Version 10:
 Implemented depth-1 futility pruning.

@@ -231,11 +231,9 @@ int SaveGameGotoPly(SaveGameT *sgame, int ply, BoardT *board, ClockT *clocks[])
 }
 
 
-/*
-  Returns: 0, if save successful, otherwise -1.
-  Presumes 'sgame' has been initialized (w/SaveGameInit())
-  'sgame' is guaranteed to be 'sane', if the function succeeds.
-*/
+// Assumes 'sgame' has been initialized (w/SaveGameInit())
+// Returns: 0, if save successful, otherwise -1.
+// 'sgame' is guaranteed to be 'sane' after return, regardless of result.
 int SaveGameRestore(SaveGameT *sgame)
 {
     FILE *myFile;
@@ -354,4 +352,27 @@ int SaveGameRestore(SaveGameT *sgame)
     }
 
     return retVal;
+}
+
+// Assumes 'dst' is non-NULL and has been initialized w/SaveGameInit().
+// Clobbers 'dst', but in a safe fashion.
+void SaveGameCopy(SaveGameT *dst, SaveGameT *src)
+{
+    int savedNumAllocatedPlies = dst->numAllocatedPlies;
+    GamePlyT *savedPlies = dst->plies;
+
+    if (src->numPlies > dst->numAllocatedPlies)
+    {
+	if ((savedPlies =
+	     realloc(dst->plies, src->numPlies * sizeof(GamePlyT))) == NULL)
+	{
+	    LOG_EMERG("SaveGameCopy: could not allocate space for moves.\n");
+	    assert(0);
+	}
+	savedNumAllocatedPlies = src->numPlies;
+    }
+    *dst = *src; // struct copy
+    dst->numAllocatedPlies = savedNumAllocatedPlies;
+    dst->plies = savedPlies;
+    memcpy(dst->plies, src->plies, dst->numPlies * sizeof(GamePlyT));
 }

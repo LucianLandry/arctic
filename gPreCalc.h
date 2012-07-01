@@ -1,18 +1,18 @@
-/***************************************************************************
-                gPreCalc.h - all constant (or init-time) globals.
-                             -------------------
-    copyright            : (C) 2007 by Lucian Landry
-    email                : lucian_b_landry@yahoo.com
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//              gPreCalc.h - all constant (or init-time) globals.
+//                           -------------------
+//  copyright            : (C) 2007 by Lucian Landry
+//  email                : lucian_b_landry@yahoo.com
+//--------------------------------------------------------------------------
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU Library General Public License as       *
- *   published by the Free Software Foundation; either version 2 of the    *
- *   License, or (at your option) any later version.                       *
- *                                                                         *
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//
+//   This program is free software; you can redistribute it and/or modify
+//   it under the terms of the GNU Library General Public License as
+//   published by the Free Software Foundation; either version 2 of the
+//   License, or (at your option) any later version.
+//
+//--------------------------------------------------------------------------
 
 #ifndef GPRECALC_H
 #define GPRECALC_H
@@ -62,40 +62,39 @@ typedef struct {
     int worth[BQUEEN + 1]; /* pre-calculated worth of pieces.  Needs to be
 			      signed (Kk is -1). */
 
-    /* pre-calculated distance from one square to another.  Does not take
-       diagonal moves into account. */
+    // pre-calculated distance from one square to another.  Does not take
+    // diagonal moves into account (by design).
     uint8 distance[NUM_SQUARES] [NUM_SQUARES];
 
-    /* pre-calculated distance from one square to center of board.  Does not
-       take diagonal moves into account. */
+    // pre-calculated distance from one square to center of board.  Does not
+    // take diagonal moves into account (by design).
     uint8 centerDistance[NUM_SQUARES];
 
-    /* (pre-calculated) hashing support. */
+    // (pre-calculated) hashing support.
     struct
     {
-	int coord[BQUEEN + 1] [NUM_SQUARES];
-	int turn;
-	int cbyte[16];
-	int ebyte[NUM_SQUARES];
+	uint64 coord[BQUEEN + 1] [NUM_SQUARES];
+	uint64 turn;
+	uint64 cbyte[16];
+	uint64 ebyte[NUM_SQUARES];
     } zobrist;
 
-    /* transposition table mask. */
-    int hashMask;
-    int numHashEntries;
     int numProcs;
-    uint64 totalMemory;
+    bool userSpecifiedHashSize;
 
-    /* For convenience. */
+    // For convenience.
     uint8 *normalStartingPieces;
 } GPreCalcT;
 extern GPreCalcT gPreCalc;
 
-void gPreCalcInit(int numHashEntries, int numCpuThreads);
+void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads);
+uint64 random64(void); // generate a 64-bit random number.
 
 #define FRIEND 0
 #define UNOCCD 1
 #define ENEMY 2
-/* returns FRIEND, ENEMY, or UNOCCD */
+
+// returns FRIEND, ENEMY, or UNOCCD
 #define CHECK(piece, turn)  (gPreCalc.check[(piece)] [(turn)])
 
 #define WORTH(piece) (gPreCalc.worth[piece])

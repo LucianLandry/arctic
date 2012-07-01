@@ -24,6 +24,7 @@
 
 #include "aThread.h"
 #include "clockUtil.h"
+#include "gDynamic.h"
 #include "log.h"
 #include "moveList.h"
 #include "ui.h"
@@ -97,6 +98,26 @@ char *moveToFullStr(char *result, MoveT *move)
     return result;
 }
 
+static bool matchHelper(char *str, char *needle, bool caseSensitive)
+{
+    int len = strlen(needle);
+    return
+	str == NULL ? 0 :
+	!(caseSensitive ? strncmp(str, needle, len) :
+	  strncasecmp(str, needle, len)) &&
+	(isspace(str[len]) || str[len] == '\0');
+}
+
+// Pattern matchers for tokens embedded at the start of a larger string.
+bool matches(char *str, char *needle)
+{
+    return matchHelper(str, needle, true);
+}
+
+bool matchesNoCase(char *str, char *needle)
+{
+    return matchHelper(str, needle, false);
+}
 
 static void getSanMove(BoardT *board, char *sanStr, MoveT *move)
 {
@@ -180,54 +201,76 @@ static void getSanMove(BoardT *board, char *sanStr, MoveT *move)
 }
 
 
-// Writes out moves in SAN (Nf3) if "board" != NULL,
+// Writes out moves in SAN (Nf3) if 'useSan' == true,
 // otherwise long algebraic notation (g1f3) is used.
-void buildMoveString(char *dstStr, int dstLen, PvT *pv, BoardT *board)
+// Returns the number of moves successfully converted.
+int buildMoveString(char *dstStr, int dstLen, PvT *pv, BoardT *board,
+		    bool useSan, bool chopFirst)
 {
-    char myStrSpace[MAX_PV_DEPTH * 8 + 1];
+    char myStrSpace[MAX_PV_DEPTH * 8 + 1] = "";
     char *myStr = myStrSpace;
-    char sanStr[8]; /* longest move: Qb5xb6+ */
+    char sanStr[8]; // longest move: Qb5xb6+
     BoardT myBoard;
     int i;
     MoveT *moves;
     int lastLen = 0, myStrLen;
+    MoveListT mvlist;
+    int movesWritten = 0;
 
-    if (board != NULL)
-    {
-	BoardCopy(&myBoard, board);
-    }
+    BoardCopy(&myBoard, board);
 
     for (i = 0, moves = pv->moves;
 	 i < pv->depth + 1;
 	 i++, moves++)
     {
-	if (board != NULL)
+	mlistGenerate(&mvlist, &myBoard, 0);
+	if (mlistSearch(&mvlist, moves, 4))
 	{
-	    getSanMove(&myBoard, sanStr, moves);
+	    if (useSan)
+	    {
+		getSanMove(&myBoard, sanStr, moves);
+	    }
+	    else // using algebraic notation
+	    {
+		moveToStr(sanStr, moves);
+	    }
 	    BoardMoveMake(&myBoard, moves, NULL);
 	}
 	else
 	{
-	    moveToStr(sanStr, moves);
-	}
-
-	/* Build up the result string. */
-	myStr += sprintf(myStr, "%s%s",
-			 // Do not use leading space before first move.
-			 i == 0 ? "" : " ",
-			 sanStr);
-	myStrLen = myStr - myStrSpace;
-	assert(myStrLen < sizeof(myStrSpace));
-	if (myStrLen > dstLen)
-	{
-	    /* We wrote too much information.  Chop the last move off. */
-	    myStrSpace[lastLen] = '\0';
+	    // Illegal move found, probably a blasted hash.  This can happen
+	    // but not very often.
+	    LogPrint(eLogNormal, "%s: game %d: illegal move %d.%d.%d.%d "
+		     "baseply %d depth %d maxDepth %d (probably overwritten "
+		     "hash), ignoring\n",
+		     __func__, gVars.gameCount,
+		     moves->src, moves->dst, moves->promote, moves->chk,
+		     board->ply, i, pv->depth);
 	    break;
 	}
-	lastLen = myStrLen;
+
+	if (!(i == 0 && chopFirst))
+	{
+	    // Build up the result string.
+	    myStr += sprintf(myStr, "%s%s",
+			     // Do not use leading space before first move.
+			     i == 0 ? "" : " ",
+			     sanStr);
+	    myStrLen = myStr - myStrSpace;
+	    assert(myStrLen < sizeof(myStrSpace));
+	    if (myStrLen > dstLen)
+	    {
+		// We wrote too much information.  Chop the last move off.
+		myStrSpace[lastLen] = '\0';
+		break;
+	    }
+	    lastLen = myStrLen;
+	    movesWritten++;
+	}
     }
 
     strcpy(dstStr, myStrSpace);
+    return movesWritten;
 }
 
 
@@ -413,9 +456,6 @@ int fenToBoard(char *fenString, BoardT *result)
 	return -1;
     }
 
-    // Possible false 3-fold repetition should not be a concern:  the positions
-    // are zeroed out so even in the remote possibility that the zobrist
-    // accidentally matches, we should never match a zeroed-out hashCoord.
     BoardCopy(result, &tmpBoard);
 
     // LogBoard(eLogEmerg, result);

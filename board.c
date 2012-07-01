@@ -28,13 +28,11 @@
 // #define DEBUG_CONSISTENCY_CHECK
 
 // Incremental update.  To be used everytime when board->coord[i] is updated.
-// It is the hashing equivalent of 'board->coord[i] = newVal'.
+// (This used to update a compressed equivalent of coord called 'hashCoord',
+//  but now is just syntactic sugar.)
 static inline void CoordUpdate(BoardT *board, uint8 i, uint8 newVal)
 {
     board->coord[i] = newVal;
-    board->hashCoord[i >> 1] =
-        (board->coord[i & ~1] << 4) +
-        (board->coord[(i & ~1) + 1]);
 }
 
 
@@ -115,7 +113,7 @@ int BoardConsistencyCheck(BoardT *board, char *failString, int checkz)
     if (checkz && board->zobrist != BoardZobristCalc(board))
     {
 	LOG_EMERG("BoardConsistencyCheck(%s): failure in zobrist calc "
-		  "(%x, %x).\n",
+		  "(%"PRIx64", %x).\n",
 		  failString, board->zobrist, BoardZobristCalc(board));
 	LogPieceList(board);
 	exit(0);
@@ -253,6 +251,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
 	unmake->cappiece = cappiece;
 	unmake->cbyte = board->cbyte;
 	unmake->ebyte = board->ebyte;
+	unmake->ncheck = board->ncheck[board->turn];
 	unmake->ncpPlies = board->ncpPlies;
 	unmake->zobrist = board->zobrist;
 	unmake->repeatPly = board->repeatPly;
@@ -344,7 +343,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
 			      ((board->ply - board->ncpPlies) &
 			       (NUM_SAVED_POSITIONS - 1)),
 			      (board->ply - 1) & (NUM_SAVED_POSITIONS - 1)) &&
-		BoardPositionHit(board, &myElem->p))
+		BoardPositionHit(board, myElem->zobrist))
 	    {
 		board->repeatPly = board->ply;
 		break;
@@ -389,6 +388,7 @@ void BoardMoveUnmake(BoardT *board, MoveT *move, UnMakeT *unmake)
 	board->cbyte = unmake->cbyte;
 	board->ebyte = unmake->ebyte; // We need to do this before rest of
 	                              // the function.
+	board->ncheck[turn] = unmake->ncheck;
 	board->ncpPlies = unmake->ncpPlies;
 	board->zobrist = unmake->zobrist;
 	board->repeatPly = unmake->repeatPly;
@@ -635,9 +635,6 @@ static void copyHelper(BoardT *dest, BoardT *src, int len)
     PositionElementT *myElem;
     // Prevent this from taking too long in pathological cases.
     int numPositions = MIN(src->ncpPlies, NUM_SAVED_POSITIONS);
-    PositionT zeroPosition;
-
-    memset(&zeroPosition, 0, sizeof(PositionT));
 
     // Have something good to load, so copy it over.
     memmove(dest, src, len);
@@ -662,9 +659,9 @@ static void copyHelper(BoardT *dest, BoardT *src, int len)
 				  (NUM_SAVED_POSITIONS - 1)];
 	// We try to avoid copying empty positions, just so we do not have to
 	// check against them.
-	if (memcmp(&zeroPosition, &myElem->p, sizeof(PositionT)))
+	if (myElem->zobrist != 0)
 	{
-	    ListPush(&dest->posList[myElem->p.zobrist &
+	    ListPush(&dest->posList[myElem->zobrist &
 				    (NUM_SAVED_POSITIONS - 1)],
 		     myElem);
 	}
@@ -714,11 +711,6 @@ void BoardSet(BoardT *board, uint8 *pieces, int cbyte, int ebyte, int turn,
 	calcNCheck(board, i, "BoardSet");
     }
 
-    for (i = 0; i < NUM_SQUARES; i++)
-    {
-        // Abuse this function to setup board->hashCoord.
-	CoordUpdate(board, i, board->coord[i]);
-    }
     board->zobrist = BoardZobristCalc(board);
 }
 
@@ -733,7 +725,7 @@ int BoardIsNormalStartingPosition(BoardT *board)
 }
 
 
-int BoardDrawInsufficientMaterial(BoardT *board)
+bool BoardDrawInsufficientMaterial(BoardT *board)
 {
     int b1, b2;
 
@@ -745,7 +737,7 @@ int BoardDrawInsufficientMaterial(BoardT *board)
 	(board->totalStrength == EVAL_KNIGHT &&
 	 board->pieceList[PAWN].lgh + board->pieceList[BPAWN].lgh == 0))
     {
-	return 1;
+	return true;
     }
 
     if (
@@ -761,13 +753,13 @@ int BoardDrawInsufficientMaterial(BoardT *board)
 	       Rank(b2) + File(b2)) & 1);
     }
 
-    return 0;
+    return false;
 }
 
 
 // With minor modification, we could also detect 1 repeat, but it would be
 // more expensive.
-int BoardDrawThreefoldRepetition(BoardT *board)
+bool BoardDrawThreefoldRepetition(BoardT *board)
 {
     int repeats, ncpPlies, ply;
 
@@ -788,18 +780,59 @@ int BoardDrawThreefoldRepetition(BoardT *board)
 	     ncpPlies -= 2, ply -= 2)
 	{
 	    if (BoardPositionHit
-		(board, &board->positions[ply & (NUM_SAVED_POSITIONS - 1)].p)
+		(board, board->positions[ply & (NUM_SAVED_POSITIONS - 1)].zobrist)
 		&&
 		// At this point we have a full match.
 		++repeats == 2)
 	    {
-		return 1;
+		return true;
 	    }
 	}
     }
-    return 0;
+    return false;
 }
 
+bool BoardPositionsSame(BoardT *b1, BoardT *b2)
+{
+    return
+	!memcmp(b1->coord, b2->coord, sizeof(b1->coord)) &&
+	b1->cbyte == b2->cbyte &&
+	b1->ebyte == b2->ebyte &&
+	b1->turn == b2->turn;
+}
+
+// BoardDrawThreefoldRepetition() is fast and (due to representing positions
+// by zobrist) very close to but not 100% accurate.
+// This function is slow and 100% accurate (modulo bugs).
+// The way this function is typically used, we only need to search the last
+// ~100 plies, (because otherwise matching positions would also trigger the
+// 50-move rule claimed draw) but in something like crazyhouse we would want
+// to search the entire move history.  For now we do that even though it's
+// slower.
+bool BoardDrawThreefoldRepetitionFull(BoardT *board, void *sgame)
+{
+    BoardT prevPositionsBoard;
+    int numRepeats = 0;
+    SaveGameT *mySgame = sgame;
+    // + 1 because the 1st compare might be the same ply
+    int searchPlies = board->ncpPlies + 1;
+
+    BoardInit(&prevPositionsBoard);
+    SaveGameGotoPly(mySgame, SaveGameLastPly(mySgame), &prevPositionsBoard,
+		    NULL);
+    do
+    {
+	if (board->ply != prevPositionsBoard.ply &&
+	    BoardPositionsSame(board, &prevPositionsBoard) &&
+	    ++numRepeats == 2)
+	{
+	    return true;
+	}
+    } while (--searchPlies > 0 &&
+	     SaveGameGotoPly(mySgame, SaveGameCurrentPly(mySgame) - 1,
+			     &prevPositionsBoard, NULL) == 0);
+    return false;
+}
 
 // Calculates (roughly) how 'valuable' a move is.
 int BoardCapWorthCalc(BoardT *board, MoveT *move)

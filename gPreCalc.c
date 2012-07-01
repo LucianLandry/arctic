@@ -1,22 +1,22 @@
-/***************************************************************************
-                gPreCalc.c - all constant (or init-time) globals.
-                             -------------------
-    copyright            : (C) 2007 by Lucian Landry
-    email                : lucian_b_landry@yahoo.com
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//              gPreCalc.c - all constant (or init-time) globals.
+//                           -------------------
+//  copyright            : (C) 2007 by Lucian Landry
+//  email                : lucian_b_landry@yahoo.com
+//--------------------------------------------------------------------------
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU Library General Public License as       *
- *   published by the Free Software Foundation; either version 2 of the    *
- *   License, or (at your option) any later version.                       *
- *                                                                         *
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//
+//   This program is free software; you can redistribute it and/or modify
+//   it under the terms of the GNU Library General Public License as
+//   published by the Free Software Foundation; either version 2 of the
+//   License, or (at your option) any later version.
+//
+//--------------------------------------------------------------------------
 
-#include <stdlib.h>   /* qsort() */
+#include <stdlib.h>   // qsort()
 #include <assert.h>
-#include <unistd.h>   /* sysconf() */
+#include "aSystem.h"
 #include "gPreCalc.h"
 #include "gDynamic.h"
 
@@ -360,10 +360,20 @@ static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [NUM_S
 }
 
 
-/* initialize gPreCalc. */
-void gPreCalcInit(int numHashEntries, int numCpuThreads)
+uint64 random64(void)
 {
-    int i, d, j, num;
+    return
+	// 64-bit (and above) platform support.
+	sizeof(long) >= sizeof(uint64) ? random() :
+	// 32-bit platform support.
+	(((uint64) random()) << 32) ^ ((uint64) random());
+}
+
+
+// initialize gPreCalc.
+void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
+{
+    int i, d, j;
     uint8 *ptr = gAllNormalMoves;
 
     /* initialize moves array. */
@@ -466,69 +476,23 @@ void gPreCalcInit(int numHashEntries, int numCpuThreads)
     {
 	for (j = 0; j < BQUEEN + 1; j++)
 	{
-	    gPreCalc.zobrist.coord[j] [i] = random();
+	    gPreCalc.zobrist.coord[j] [i] = random64();
 	}
 
-	num = random();
-	if (i >= 24 && i < 40)
-	{
-	    // Every (useful) ebyte zobrist needs 5 unique bits.  Here we use
-	    // bits 8-4.  The least significant (bit 4) is hardwired to '1' to
-	    // distinguish this from the "no enpassant" case.
-	    num &= ~0x1f0;
-	    num |= (((24 - i) << 5) | 0x10);  // FIXME this looks suspicious.
-	}
-	gPreCalc.zobrist.ebyte[i] = num;
+	gPreCalc.zobrist.ebyte[i] = random64();
 	
 	if (i < 16)
 	{
-	    num = random();
-	    // Make sure every cbyte zobrist has 4 unique bits.  Here, we use
-	    // bits 3-0.
-	    num &= ~0xf;
-	    num |= i;
-	    gPreCalc.zobrist.cbyte[i] = num;
+	    gPreCalc.zobrist.cbyte[i] = random64();
 	}
     }
-    num = random();
-    // 'turn' also needs a unique bit.  Here, we use bit 9.
-    num |= 0x200;
-    gPreCalc.zobrist.turn = num;
+    gPreCalc.zobrist.turn = random64();
 
-    /* initialize number of (known) processors. */
-    if (numCpuThreads != -1)
-    {
-	// Override our notion of numProcs.
-	gPreCalc.numProcs = numCpuThreads;
-    }
-    else if ((gPreCalc.numProcs = sysconf(_SC_NPROCESSORS_ONLN)) >
-	     MAX_NUM_PROCS)
-    {
-	gPreCalc.numProcs = MAX_NUM_PROCS;
-    }
-    gPreCalc.totalMemory = sysconf(_SC_PHYS_PAGES);
-    gPreCalc.totalMemory *= sysconf(_SC_PAGESIZE);
-
-    if (numHashEntries == -1)
-    {
-	/* User declined to specify how many entries they want.
-	   As a convenience, pick the nearest pow2 that uses (upto) 1/8
-	   total memory. */
-	numHashEntries = (gPreCalc.totalMemory / 8) / sizeof(HashPositionT);
-	while ((numHashEntries & (numHashEntries - 1)) != 0)
-	{
-	    /* Not a power of 2 (yet), so strip off a bit. */
-	    numHashEntries &= numHashEntries - 1;
-	}
-    }
-
-    /* Note: Having 10 unique bits means we need a transposition table
-       at least 2^10 (1024k) in size for proper hashing, if we do not want
-       to store castle bytes, ebytes, and turn as part of the position. */
-
-    /* remember transposition table size. */
-    gPreCalc.numHashEntries = numHashEntries;
-    gPreCalc.hashMask = numHashEntries - 1;
+    gPreCalc.userSpecifiedHashSize = userSpecifiedHashSize;
+    // initialize number of (known) processors.
+    gPreCalc.numProcs =
+	numCpuThreads != -1 ? numCpuThreads : // User override
+	SystemTotalProcessors();
 
     gPreCalc.normalStartingPieces = gNormalStartingPieces;
 }

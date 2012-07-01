@@ -23,6 +23,7 @@
 #include "log.h"
 #include "moveList.h"
 #include "switcher.h"
+#include "transTable.h"
 #include "ui.h"
 
 // Helper function.
@@ -41,14 +42,14 @@ static void compRefresh(GameT *game, ThinkContextT *th)
 	// Computer needs to make next move; let it do so.
 	GoaltimeCalc(game);
 	gUI->notifyThinking();
-	ThinkerCmdThink(th, &game->savedBoard);
+	ThinkerCmdThink(th, &game->savedBoard, &game->sgame);
     }
     else if (!game->bDone && game->control[turn ^ 1] && gVars.ponder)
     {
 	// Computer is playing other side (only) and is allowed to ponder.
 	// Do so.
 	gUI->notifyPonder();
-	ThinkerCmdPonder(th, &game->savedBoard);
+	ThinkerCmdPonder(th, &game->savedBoard, &game->sgame);
     }
     else
     {
@@ -139,7 +140,7 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
     if (board->ply == 29)
 	LogSetLevel(eLogDebug);
     if (board->ply == 30)
-	LogSetLevel(eLogEmerg);
+	LogSetLevel(eLogNormal);
 #endif
 
     turn = board->turn; // needs reset.
@@ -206,7 +207,7 @@ void GameNewEx(GameT *game, ThinkContextT *th, BoardT *board, int resetClocks,
     // hash hits re-ordering our moves, but that should not be a huge issue.
     if (resetHash)
     {
-	gHashInit();
+	TransTableReset();
 	gHistInit();
     }
     gPvInit();
@@ -235,7 +236,7 @@ int GameGotoPly(GameT *game, int ply, ThinkContextT *th)
     ThinkerCmdBail(th);
     gPvFastForward(plyDiff);
 
-    // We could gHashInit()/gHistInit() here, but if the user tracks
+    // We could TransTableReset()/gHistInit() here, but if the user tracks
     // back and forth through the history, we might not diverge that much.
     SaveGameGotoPly(&game->sgame, ply, &game->savedBoard, game->clocks);
     GameMoveCommit(game, NULL, th, 0);

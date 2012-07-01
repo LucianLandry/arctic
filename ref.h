@@ -153,6 +153,8 @@ typedef struct {
     int nonQNodes;    // non-quiesce node count
     int moveGenNodes; // how many times was mListGenerate() called
     int hashHitGood;  // hashtable hits that returned immediately.
+    int hashWroteNew; // how many times (in this ply) we wrote to a unique
+                      // hash entry.  Used for UCI hashfull stats.
 } CompStatsT;
 
 // bits which define ability to castle (other bits in 'cbyte' are reserved).
@@ -165,6 +167,6 @@ typedef struct {
 #define ALLCASTLE   (WHITECASTLE | BLACKCASTLE)
 
 // This is beyond the depth we can quiesce.
-#define HASH_NOENTRY -64
+#define HASH_NOENTRY -128
 
 #endif /* REF_H */

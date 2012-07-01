@@ -77,6 +77,7 @@ void ThinkerInit(ThinkContextT *th)
     th->slaveSock = socks[1];
 
     BoardInit(&th->searchArgs.localBoard);
+    SaveGameInit(&th->searchArgs.sgame);
     // These should not be really necessary, but for completeness' sake...
     th->searchArgs.alpha = EVAL_LOSS;
     th->searchArgs.beta = EVAL_WIN;
@@ -234,16 +235,18 @@ void ThinkerCmdBoardSet(ThinkContextT *th, BoardT *board)
 
 
 static void doThink(ThinkContextT *th, eThinkMsgT cmd, BoardT *board,
-		    MoveListT *mvlist)
+		    SaveGameT *sgame, MoveListT *mvlist)
 {
     // If we were previously thinking, just start over.
     ThinkerCmdBail(th);
 
     // Copy over search args.
-    if (board != NULL)
-    {
-	BoardCopy(&th->searchArgs.localBoard, board);
-    }
+    assert(board != NULL);
+    assert(sgame != NULL);
+
+    BoardCopy(&th->searchArgs.localBoard, board);
+    SaveGameCopy(&th->searchArgs.sgame, sgame);
+
     if (mvlist != NULL)
     {
 	memcpy(&th->searchArgs.mvlist, mvlist, sizeof(th->searchArgs.mvlist));
@@ -265,24 +268,26 @@ static void doThink(ThinkContextT *th, eThinkMsgT cmd, BoardT *board,
     compSendCmd(th, cmd);
 }
 
-void ThinkerCmdThinkEx(ThinkContextT *th, BoardT *board, MoveListT *mvlist)
+void ThinkerCmdThinkEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
+		       MoveListT *mvlist)
 {
-    return doThink(th, eCmdThink, board, mvlist);
+    return doThink(th, eCmdThink, board, sgame, mvlist);
 }
 
-void ThinkerCmdThink(ThinkContextT *th, BoardT *board)
+void ThinkerCmdThink(ThinkContextT *th, BoardT *board, SaveGameT *sgame)
 {
-    return doThink(th, eCmdThink, board, NULL);
+    return doThink(th, eCmdThink, board, sgame, NULL);
 }
 
-void ThinkerCmdPonderEx(ThinkContextT *th, BoardT *board, MoveListT *mvlist)
+void ThinkerCmdPonderEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
+			MoveListT *mvlist)
 {
-    return doThink(th, eCmdPonder, board, mvlist);
+    return doThink(th, eCmdPonder, board, sgame, mvlist);
 }
 
-void ThinkerCmdPonder(ThinkContextT *th, BoardT *board)
+void ThinkerCmdPonder(ThinkContextT *th, BoardT *board, SaveGameT *sgame)
 {
-    return doThink(th, eCmdPonder, board, NULL);
+    return doThink(th, eCmdPonder, board, sgame, NULL);
 }
 
 

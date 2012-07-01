@@ -21,16 +21,10 @@
 #include "list.h"
 #include "ref.h"
 
-typedef struct {
-    int zobrist;  // for hashing.  Incrementally updated w/each move.
-    // 4-bit version of board->coord[NUM_SQUARES].
-    uint8 hashCoord[NUM_SQUARES / 2]; 
-} PositionT;
-
 /* Inherits from ListElementT. */
 typedef struct {
     ListElementT el;
-    PositionT p;
+    uint64 zobrist;
 } PositionElementT;
 
 typedef struct {
@@ -38,16 +32,4 @@ typedef struct {
     int highBound;
 } PositionEvalT;
 
-
-/* Inherits from PositionT. */
-typedef struct {
-    PositionT p;
-    PositionEvalT eval;
-    MoveT move;       // stores preferred move for this position.
-    uint16 basePly;   // lets us evaluate if this entry is 'too old'.
-    int8 depth;       // needs to be plys from quiescing, due to incremental
-                      // search.
-} HashPositionT;
-
-
-#endif /* POSITION_H */
+#endif // POSITION_H

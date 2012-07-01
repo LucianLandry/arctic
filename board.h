@@ -30,15 +30,7 @@
 typedef struct {
     uint8 coord[NUM_SQUARES]; // all the squares on the board.
 
-    // The following 2 variables should be kept together, in this order.
-    // It is used by BoardPositionSave() which assumes it can cast this
-    // to a PositionT.
-    int zobrist;         // zobrist hash.  Incrementally updated w/each move.
-
-    uint8 hashCoord[NUM_SQUARES / 2]; // this is a 4-bit version of 'coord'.
-                                      // Useful for hashing, or possibly
-                                      // speeding up move generation (probably
-                                      // not).
+    uint64 zobrist;      // zobrist hash.  Incrementally updated w/each move.
 
     uint8 cbyte;         // castling byte.
 
@@ -119,9 +111,10 @@ typedef struct {
     uint8  cappiece;  // any captured piece.. does not include en passant.
     uint8  cbyte;     // castling, en passant bytes
     uint8  ebyte;
+    uint8  ncheck;
 
     int    ncpPlies;
-    uint32 zobrist;   // saved-off hash.
+    uint64 zobrist;   // saved-off hash.
     int    repeatPly; // needs to be signed, as it is the saved value of
                       // board->repeatPly.
 } UnMakeT;
@@ -147,11 +140,16 @@ void BoardTurnSet(BoardT *board, int turn);
 
 int BoardIsNormalStartingPosition(BoardT *board);
 
-int BoardDrawInsufficientMaterial(BoardT *board);
+bool BoardDrawInsufficientMaterial(BoardT *board);
 // Threefold repetition and the fifty-move rule are both claimed draws, that
 // is, they are not automatic.
-int BoardDrawThreefoldRepetition(BoardT *board);
-static inline int BoardDrawFiftyMove(BoardT *board)
+bool BoardDrawThreefoldRepetition(BoardT *board);
+
+// Slower but more accurate version of the above func.
+// Hack: 'sgame' is really SaveGameT, but we have header interdepencies.
+bool BoardDrawThreefoldRepetitionFull(BoardT *board, void *sgame);
+
+static inline bool BoardDrawFiftyMove(BoardT *board)
 {
     return board->ncpPlies >= 100;
 }
@@ -160,28 +158,19 @@ static inline void BoardPositionSave(BoardT *board)
 {
     PositionElementT *myElem =
 	&board->positions[board->ply & (NUM_SAVED_POSITIONS - 1)];
-    memcpy(&myElem->p,
-	   &board->zobrist,
-	   sizeof(PositionT));
+    myElem->zobrist = board->zobrist;
     ListPush(&board->posList[board->zobrist & (NUM_SAVED_POSITIONS - 1)],
 	     myElem);
 }
 
-
-static inline int BoardPositionHit(BoardT *board, PositionT *position)
+static inline bool BoardPositionHit(BoardT *board, uint64 zobrist)
 {
-    // A simple memcmp would suffice, but the inline zobrist check
-    // is liable to be faster.
-    return board->zobrist == position->zobrist &&
-	memcmp(board->hashCoord,
-	       position->hashCoord,
-	       sizeof(position->hashCoord)) == 0;
+    return board->zobrist == zobrist;
 }
 
-static inline int BoardPositionsSame(BoardT *board1, BoardT *board2)
-{
-    return BoardPositionHit(board1, (PositionT *) &board2->zobrist);
-}
+// This does a full positions check instead of just a zobrist check, so it is
+// slightly slower.
+bool BoardPositionsSame(BoardT *b1, BoardT *b2);
 
 int BoardCapWorthCalc(BoardT *board, MoveT *move);
 

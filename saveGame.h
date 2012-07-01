@@ -48,8 +48,18 @@ typedef struct {
 
 
 void SaveGameInit(SaveGameT *game);
+
+// Assumes 'dst' is non-NULL and has been initialized w/SaveGameInit().
+// Clobbers 'dst', but in a safe fashion.
+void SaveGameCopy(SaveGameT *dst, SaveGameT *src);
+
 void SaveGameMoveCommit(SaveGameT *game, MoveT *move, bigtime_t myTime);
 int SaveGameSave(SaveGameT *game);
+
+// Assumes 'sgame' has been initialized (w/SaveGameInit())
+// Returns: 0, if save successful, otherwise -1.
+// 'sgame' is guaranteed to be 'sane' after return, regardless of result.
+int SaveGameRestore(SaveGameT *sgame);
 int SaveGameRestore(SaveGameT *game);
 void SaveGamePositionSet(SaveGameT *game, BoardT *board);
 void SaveGameClocksSet(SaveGameT *sgame, ClockT *clocks[]);

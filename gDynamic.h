@@ -22,9 +22,7 @@
 #include "thinker.h"
 #include "board.h"
 #include "position.h"
-#include "aSpinlock.h"
 
-#define NUM_HASH_LOCKS 1024 // must be a power of 2.
 #define MAX_NUM_PROCS 8 // maximum number of processors we can take advantage
                         // of.
 
@@ -41,15 +39,10 @@ typedef struct {
                              // NO_LIMIT indicates no node limit.
     int randomMoves;         // bool: randomize moves? (default 0)
     int ponder;              // bool: allow computer to ponder? (default 0)
-    int resignThreshold;     // Computer will resign if its eval highbound
-                             // is <= this score.
-
-    // transposition table and associated locks (should have enough locks
-    // to avoid serious contention by multiple threads).
-    HashPositionT *hash; // transposition table.
-    SpinlockT hashLocks[NUM_HASH_LOCKS];
+    bool canResign;          // true iff engine is allowed to resign
 
     PvT pv; // Attempts to keep track of principal variation.
+    int gameCount;           // for stats keeping.
 } GDynamicT;
 extern GDynamicT gVars;
 

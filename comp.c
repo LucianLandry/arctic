@@ -20,14 +20,16 @@
 #include <errno.h>
 #include <stdlib.h>   // exit()
 #include <poll.h>     // poll(2)
+
+#include "aThread.h"
+#include "board.h"
+#include "gDynamic.h"
+#include "gPreCalc.h"
+#include "log.h"
+#include "position.h"
 #include "ref.h"
 #include "thinker.h"
-#include "position.h"
-#include "board.h"
-#include "gPreCalc.h"
-#include "gDynamic.h"
-#include "log.h"
-#include "aThread.h"
+#include "transTable.h"
 #include "uiUtil.h"
 
 // Since I spent a lot of time trying to do it, here is a treatise on why
@@ -85,14 +87,6 @@ static ThinkContextT *gThinker;
 // same argument for gStats, but it affects minimax() and trymove() as well!
 static CompStatsT gStats;
 
-#if 1
-#define SPIN_LOCK(lock) SpinlockLock(lock)
-#define SPIN_UNLOCK(lock) SpinlockUnlock(lock)
-#else // tests speedup w/locking disabled (safe with one compute thread)
-#define SPIN_LOCK(lock)
-#define SPIN_UNLOCK(lock)
-#endif
-
 #define HASH_MISS 1
 #define HASH_HIT 0
 
@@ -118,8 +112,6 @@ static int endGameEval(BoardT *board, int turn)
 
 #define QUIESCING (searchDepth < 0)
 
-
-
 // 'alpha' is the lowbound for the search (any move must be at least this
 // good).
 // It is also roughly equivalent to 'bestVal' (for any move so far), except
@@ -130,7 +122,6 @@ static int endGameEval(BoardT *board, int turn)
 //
 // 'lowBound' and 'highBound' are the possible limits of the best 'move' found
 // so far.
-
 
 static inline PositionEvalT invertEval(PositionEvalT eval)
 {
@@ -200,7 +191,7 @@ static PositionEvalT tryMove(BoardT *board, MoveT *move,
     PositionEvalT myEval;
     CvT *cv = &board->cv;
 
-    LogMove(eLogDebug, board, move);
+    LOGMOVE_DEBUG(board, move);
     BoardMoveMake(board, move, &unmake); // switches sides
 
     // It seems silly to do 2 checks for this and I should probably just
@@ -426,10 +417,8 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 
     int mightDraw; // bool.  Is it possible to hit a draw while evaluating from
 		   // this position.
-    HashPositionT *hp;
-    SpinlockT *hashLock;
+    HashInfoT hInfo;
     int hashHit;
-    // int hashDepth;
     MoveT hashMove;
     PositionEvalT hashEval;
     MoveT bestMove;
@@ -444,6 +433,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     PvT newPv;
     MoveListT mvlist;
     int strgh;
+    uint16 basePly = board->ply - board->depth;
 #ifdef ENABLE_DEBUG_LOGGING
     char tmpStr[6];
 #endif
@@ -531,69 +521,54 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 	/* (7 - ncpPlies below would work, but this should be better:) */
 	(searchDepth >= 3 - (board->ply - board->repeatPly));
 
-    hp = NULL;
-    hashLock = NULL;
-
-#if 0
-    /* partial hashhit support. */
-    hashHit = 0;
-    hashEval.lowBound = hashEval.highBound = 0;
-    hashDepth = HASH_NOENTRY;
-#endif
-
-    /* Is there a suitable hit in the transposition table? */
-    if ((!mightDraw || board->ncpPlies == 0) && gVars.hash != NULL)
+    // Is there a suitable hit in the transposition table?
+    if ((!mightDraw || board->ncpPlies == 0) &&
+	TransTableSize() &&
+	TransTableHit(&hInfo, board->zobrist))
     {
-	// maybe ...
-	hp = &gVars.hash[board->zobrist & gPreCalc.hashMask];
-	hashLock = &gVars.hashLocks[board->zobrist & (NUM_HASH_LOCKS - 1)];
-
-	/* (hp must be locked when it is read or written to.) */
-	SPIN_LOCK(hashLock);
-
-	if (BoardPositionHit(board, &hp->p) && hp->depth != HASH_NOENTRY)
-	{
-	    hashHit = (searchDepth <= hp->depth || QUIESCING);
-	    hashEval = hp->eval;
-	    hashMove = hp->move; // struct assign
-	    /* hashDepth = hp->depth; */
+	hashHit = (searchDepth <= hInfo.depth || QUIESCING);
+	hashEval = hInfo.eval;
+	hashMove = hInfo.move; // struct assign
 	
-	    if ( // know eval exactly?
-		(hashEval.highBound == hashEval.lowBound ||
-		 // know it's good enough?
-		 hashEval.lowBound >= beta ||
-		 // know it's bad enough?
-		 hashEval.highBound <= alpha) &&
+	if ( // know eval exactly?
+	    (hashEval.highBound == hashEval.lowBound ||
+	     // know it's good enough?
+	     hashEval.lowBound >= beta ||
+	     // know it's bad enough?
+	     hashEval.highBound <= alpha) &&
 
-		(hashHit ||
-		 // For detected win/loss, depth does not matter.
-		 hashEval.highBound <= EVAL_LOSS_THRESHOLD ||
-		 hashEval.lowBound >= EVAL_WIN_THRESHOLD))
+	    (hashHit ||
+	     // For detected win/loss, depth does not matter.
+	     hashEval.highBound <= EVAL_LOSS_THRESHOLD ||
+	     hashEval.lowBound >= EVAL_WIN_THRESHOLD))
+	{
+	    gStats.hashHitGood++;
+
+	    // re-record items in the hit hash position to "reinforce" it
+	    // against future removal:
+	    // 1) base ply for this move.
+	    if (hInfo.basePly != basePly)
 	    {
-		gStats.hashHitGood++;
-
-		// re-record items in the hit hash position to "reinforce" it
-		// against future removal:
-		// 1) base ply for this move.
-		hp->basePly = board->ply - board->depth;
-		// 2) search depth (in case of checkmate, it might go up.  Not
-		//    proven to be better.)
-		hp->depth = MAX(hp->depth, searchDepth);
-
-		LOG_DEBUG("hashHit alhb: %d %d %d %d %d %s 0x%x\n",
-			  alpha, hp->eval.lowBound, hp->eval.highBound, beta,
-			  hp->depth,
-			  moveToStr(tmpStr, &hashMove),
-			  board->zobrist);
-
-		SPIN_UNLOCK(hashLock);
-
-		/* record the move (if there is one). */
-		updatePv(board, goodPv, NULL, &hashMove, hashEval.lowBound);
-		return hashEval;
+		gStats.hashWroteNew++;
+		hInfo.basePly = basePly;
 	    }
+
+	    // 2) search depth (in case of checkmate, it might go up.  Not
+	    //    proven to be better.)
+	    hInfo.depth = MAX(hInfo.depth, searchDepth);
+
+	    TransTableWrite(&hInfo, board->zobrist);
+
+	    LOG_DEBUG("hashHit alhb: %d %d %d %d %d %s 0x%"PRIx64"\n",
+		      alpha, hashEval.lowBound, hashEval.highBound, beta,
+		      hInfo.depth,
+		      moveToStr(tmpStr, &hashMove),
+		      board->zobrist);
+
+	    /* record the move (if there is one). */
+	    updatePv(board, goodPv, NULL, &hashMove, hashEval.lowBound);
+	    return hashEval;
 	}
-	SPIN_UNLOCK(hashLock);
     }
     if (hashHitOnly != NULL)
     {
@@ -611,7 +586,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     {
 	memcpy(&mvlist, &th->searchArgs.mvlist, sizeof(MoveListT));
     }
-    LogMoveList(eLogDebug, &mvlist);
+    LOGMOVELIST_DEBUG(&mvlist);
 
     /* bestMove must be initialized before we goto out. */
     bestMove = gMoveNone; // struct assign
@@ -657,7 +632,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 	if (mvlist.lgh > 1)
 	{
 	    mlistSortByCap(&mvlist, board);
-	    LogMoveList(eLogDebug, &mvlist);
+	    LOGMOVELIST_DEBUG(&mvlist);
 	}
 
 	// If we find no better moves ...
@@ -891,102 +866,87 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 
 out:
 
-#if 0
-    /* Out.  Affects .04% of positions (max) while giving us a 2% (at least)
-       compute hit. */
-    if (hashHit &&
-	hashDepth > (QUIESCING ? -1 : searchDepth) &&
-	(hashEval.highBound < retVal.lowBound ||
-	 hashEval.lowBound > retVal.highBound))
-	/* partial hashhit.  We know this position is better (or worse) than
-	   advertised, but even though we (may) have a move associated with
-	   the hash position, we do not actually know the best move for this
-	   position -- in the case of <, it could be a complete garbage move.
-
-	   For this reason, if we use partial hashhit, we cannot hash this
-	   position (because we need to give it a move, and we have no idea
-	   what move to give it). */
+    // Should we replace the transposition table entry?
+    if (TransTableSize())
     {
-	/* If the hash eval is out of our range, at a greater
-	   depth, our current evaluation is clearly "wrong".  Because we
-	   must return an exact eval (not a range), the new eval will also be
-	   "wrong", but chances are it will be less so.
-	*/
-	if (hashEval.highBound < retVal.lowBound)
-	{
-	    SET_BOUND(hashEval.highBound, hashEval.highBound);
-	}
-	else
-	{
-	    SET_BOUND(hashEval.lowBound, hashEval.lowBound);
-	}
+	TransTableRead(&hInfo, board->zobrist);
 
-	gStats.hashHitPartial++;
-
-	/* record the move (if there is one). ... FIXME probably remove.
-	   This was useful when we changed the move to hashMove, but I do not
-	   think it is useful now. */
-	/* updatePv(board, goodPv, NULL, bestMove, retVal.lowBound); */
-
-	/* re-record base ply for this move.  I do this w/out taking a lock.
-	   hp->basePly should only affect our decision to replace a hash entry,
-	   and the write should be atomic, so this should be fairly
-	   harmless. */
-	hp->basePly = board->ply - board->depth;
-    } else
-#endif
-
-    /* Should we replace the transposition table entry? */
-    if (hp != NULL)
-    {
-	SPIN_LOCK(hashLock);
-
-        /* (HASH_NOENTRY should always trigger here) */
-	if (searchDepth > hp->depth ||
+        // (HASH_NOENTRY should always trigger here)
+	if (searchDepth > hInfo.depth ||
 	    // Replacing entries that came before this search is aggressive,
 	    // but it works better than a 'numPieces' comparison.  We use "!="
 	    // instead of "<" because we may move backwards in games as well
 	    // (undoing moves, or setting positions etc.)
-	    hp->basePly != board->ply - board->depth ||
-	    /* Otherwise, use the position that gives us as much info as
-	       possible, and after that the most recently used (ie this move).
-	    */
-	    (searchDepth == hp->depth &&
+	    hInfo.basePly != basePly ||
+	    // Otherwise, use the position that gives us as much info as
+	    // possible, and after that the most recently used (ie this move).
+	    (searchDepth == hInfo.depth &&
 	     (retVal.highBound - retVal.lowBound) <=
-	     (hp->eval.highBound - hp->eval.lowBound)))
+	     (hInfo.eval.highBound - hInfo.eval.lowBound)))
 	{
-	    /* Yes.  Update transposition table.
-	       Every single element of this structure should always be updated,
-	       since:
-	       -- it is not blanked for a newgame
-	       -- the hash entry might have been overwritten in the meantime
-	       (by another thread, or at a different ply). */
-	    memcpy(&hp->p, &board->zobrist, sizeof(PositionT));
+	    // Yes.  Update transposition table.
+	    // Every single element of this structure (except salt) should
+	    // always be updated, since:
+	    // -- it is not blanked for a newgame
+	    // -- the hash entry might have been overwritten in the meantime
+	    // (by another thread, or at a different ply). */
+	    hInfo.eval = retVal; // struct copy
+	    hInfo.depth = searchDepth;
+	    if (hInfo.basePly != basePly)
+	    {
+		gStats.hashWroteNew++;
+		hInfo.basePly = basePly;
+	    }
 
-	    hp->eval = retVal; /* struct copy */
-	    hp->depth = searchDepth;
-	    hp->basePly = board->ply - board->depth;
+	    // copy off best move (may be gMoveNone).
+	    hInfo.move = bestMove; // struct assign
 
-	    /* copy off best move (may be gMoveNone). */
-	    hp->move = bestMove; // struct assign
-
-	    LOG_DEBUG("hashupdate lhdp: %d %d %d %d %s 0x%x\n",
-		      hp->eval.lowBound, hp->eval.highBound,
-		      hp->depth, hp->basePly,
+	    TransTableWrite(&hInfo, board->zobrist);
+	    LOG_DEBUG("hashupdate lhdp: %d %d %d %d %s 0x%"PRIx64"\n",
+		      hInfo.eval.lowBound, hInfo.eval.highBound,
+		      hInfo.depth, hInfo.basePly,
 		      moveToStr(tmpStr, &bestMove),
 		      board->zobrist);
 	}
-
-	SPIN_UNLOCK(hashLock);
     }
 
     return retVal;
 }
 
 // These draws are claimed, not automatic.  Other draws are automatic.
-static bool canClaimDraw(BoardT *board)
+static bool canClaimDraw(BoardT *board, SaveGameT *sgame)
 {
-    return BoardDrawFiftyMove(board) || BoardDrawThreefoldRepetition(board);
+    // Testing only.  The whole point of BDTRF() is that it might properly
+    // catch (or not catch) draws that BDTR() won't.
+    // assert(BoardDrawThreefoldRepetition(board) ==
+    //        BoardDrawThreefoldRepetitionFull(board, sgame));
+    return
+	BoardDrawFiftyMove(board) ||
+	BoardDrawThreefoldRepetitionFull(board, sgame);
+}
+
+// This (currently hard-coded) routine tries to find a balance between trying
+// trying not to resign too early (for a human opponent at least) while still
+// giving up a clearly lost game.
+// There is currently no integration between this function and our move choice
+// (ie avoiding resignation vs avoiding mate), so we might sacrifice a queen
+// or something to avoid mate as long as possible, just to turn around and
+// resign on the next move.
+// Assumes the 'board' passed in is set to our turn.
+static bool shouldResign(BoardT *board, PositionEvalT myEval, bool bPonder)
+{
+    return
+        // do not resign while pondering; let opponent make move
+	// (or possibly run out of time)
+	!bPonder &&
+	// opponent has a clear mating strategy
+	myEval.highBound <= EVAL_LOSS_THRESHOLD &&
+	// We are down by at least a rook's worth of material
+	(board->playerStrength[board->turn ^ 1] -
+	 board->playerStrength[board->turn] >= EVAL_ROOK) &&
+	// We do not have a queen (the theory being that things could quickly
+	// turn around if the opponent makes a mistake)
+	board->pieceList[QUEEN | board->turn].lgh == 0;
 }
 
 
@@ -995,9 +955,6 @@ static void computermove(ThinkContextT *th, bool bPonder)
     PositionEvalT myEval;
     PvT pv;
     BoardT *board = &th->searchArgs.localBoard;
-    int turn = board->turn;
-    /* save off ncheck, minimax() clobbers it. */
-    int ncheck = board->ncheck[turn];
     int resigned = 0;
     MoveListT mvlist;
     UnMakeT unmake;
@@ -1017,7 +974,7 @@ static void computermove(ThinkContextT *th, bool bPonder)
     memset(&gStats, 0, sizeof(gStats));
 
     // If we can claim a draw, do so w/out thinking.
-    if (canClaimDraw(board))
+    if (canClaimDraw(board, &th->searchArgs.sgame))
     {
 	ThinkerRspDraw(th, move);
 	return;
@@ -1072,13 +1029,13 @@ static void computermove(ThinkContextT *th, bool bPonder)
 
 	    LOG_DEBUG("ply %d searching level %d\n", board->ply, board->level);
 	    myEval = minimax(board,
-			     // Could use resignThreshold here, but I guess we
-			     // would prefer the most accurate score possible.
+			     // Could use EVAL_LOSS_THRESHOLD here w/a
+			     // different resign strategy, but right now we
+			     // prefer the most accurate score possible.
 			     EVAL_LOSS + board->level,
 			     // Try to find the shortest mates possible.
 			     EVAL_WIN - (board->level + 1),
 			     &pv, th, NULL);
-	    board->ncheck[turn] = ncheck; // restore ncheck
 	    LOG_DEBUG("top-level eval: %d %d %d %d\n",
 		      EVAL_LOSS + (board->level + 2),
 		      myEval.lowBound,
@@ -1093,8 +1050,7 @@ static void computermove(ThinkContextT *th, bool bPonder)
 	    // Hacky.  Mark that we have completed search for this level.
 	    gVars.pv.depth = PV_COMPLETED_SEARCH;
 
-	    if ((!bPonder && myEval.highBound <= gVars.resignThreshold) ||
-		(bPonder && myEval.lowBound >= -gVars.resignThreshold))
+	    if (gVars.canResign && shouldResign(board, myEval, bPonder))
 	    {
 		// we're in a really bad situation
 		resigned = 1;
@@ -1132,9 +1088,8 @@ static void computermove(ThinkContextT *th, bool bPonder)
 
     /* If we can draw after this move, do so. */
     BoardMoveMake(board, move, &unmake);
-    bWillDraw = canClaimDraw(board);
+    bWillDraw = canClaimDraw(board, &th->searchArgs.sgame);
     BoardMoveUnmake(board, move, &unmake);    
-    board->ncheck[turn] = ncheck; /* restore ncheck */ 
 
     if (bWillDraw)
     {

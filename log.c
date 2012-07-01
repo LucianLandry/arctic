@@ -14,25 +14,29 @@
  *                                                                         *
  ***************************************************************************/
 
+#include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
+
 #include "log.h"
 #include "uiUtil.h"
 
-int gLogLevel = eLogEmerg;
+int gLogLevel = eLogNormal;
 static FILE *gLogFile = NULL;
+
+void LogInit(void)
+{
+    gLogFile = fopen("errlog", "w");
+    assert(gLogFile != NULL);
+    // turn off buffering -- useful when we're crashing, but slow.
+    setbuf(gLogFile, NULL);
+    // LogSetLevel(eLogDebug);
+}
 
 void LogSetLevel(int level)
 {
     gLogLevel = level;
 }
-
-
-void LogSetFile(FILE *logFile)
-{
-    gLogFile = logFile;
-}
-
 
 void LogFlush(void)
 {
@@ -55,8 +59,7 @@ int LogPrint(int level, const char *format, ...)
 }
 
 
-/* debugging funcs. */
-#ifdef ENABLE_DEBUG_LOGGING
+// debugging funcs.
 void LogMoveList(int level, MoveListT *mvlist)
 {
     char tmpStr[6];
@@ -145,7 +148,6 @@ void LogBoard(int level, BoardT *board)
 	LogPrint(level, "\n");
     }
 }
-#endif /* ENABLE_DEBUG_LOGGING */
 
 
 void LogMoveShow(int level, BoardT *board, MoveT *move, char *caption)

@@ -22,9 +22,11 @@
 #include "board.h"
 #include "moveList.h"
 #include "ref.h"
+#include "saveGame.h"
 
 typedef struct {
     // passed-in args.
+    SaveGameT sgame;    // (eCmdThink, eCmdPonder)
     BoardT localBoard;  // (eCmdThink, eCmdPonder, eCmdSearch)
     int alpha;          // (eCmdSearch)
     int beta;           // (eCmdSearch)
@@ -76,10 +78,12 @@ eThinkMsgT ThinkerRecvRsp(ThinkContextT *th, void *buffer, int bufLen);
 void ThinkerCmdSearch(ThinkContextT *th, int alpha, int beta, MoveT move);
 
 // 'board' is (optional) position to set before thinking.
-void ThinkerCmdThinkEx(ThinkContextT *th, BoardT *board, MoveListT *mvlist);
-void ThinkerCmdThink(ThinkContextT *th, BoardT *board);
-void ThinkerCmdPonderEx(ThinkContextT *th, BoardT *board, MoveListT *mvlist);
-void ThinkerCmdPonder(ThinkContextT *th, BoardT *board);
+void ThinkerCmdThinkEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
+		       MoveListT *mvlist);
+void ThinkerCmdThink(ThinkContextT *th, BoardT *board, SaveGameT *sgame);
+void ThinkerCmdPonderEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
+			MoveListT *mvlist);
+void ThinkerCmdPonder(ThinkContextT *th, BoardT *board, SaveGameT *sgame);
 void ThinkerCmdMoveNow(ThinkContextT *th);
 void ThinkerCmdBail(ThinkContextT *th);
 

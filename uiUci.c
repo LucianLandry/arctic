@@ -75,9 +75,11 @@
 
 #include "clockUtil.h"
 #include "gDynamic.h"
+#include "gPreCalc.h"
 #include "log.h"
 #include "moveList.h"
 #include "playloop.h"
+#include "transTable.h"
 #include "ui.h"
 #include "uiUtil.h"
 
@@ -119,16 +121,6 @@ static struct {
 
 // Forward declarations.
 static void uciNotifyMove(MoveT *move);
-
-// Just a bit of syntactic sugar.
-static bool matches(char *str, char *needle)
-{
-    int len = strlen(needle);
-    return
-	str == NULL ? 0 :
-	!strncmp(str, needle, len) &&
-	(isspace(str[len]) || str[len] == '\0');
-}
 
 static void uciNotifyError(char *reason)
 {
@@ -200,17 +192,30 @@ static char *findRecognizedToken(char *pStr)
 
 static void processUciCommand(void)
 {
+    char hashString[160];
+    int rv;
+    rv = snprintf(hashString, sizeof(hashString),
+		  "option name Hash type spin default %"PRId64
+		  " min 0 max %"PRId64"\n",
+		  (int64) TransTableDefaultSize() / (1024 * 1024),
+		  (int64) TransTableMaxSize() / (1024 * 1024));
+    assert(rv < sizeof(hashString)); // bail on truncated string
+
     // Respond appropriately to the "uci" command.
-    // TODO: in the future we should support:
-    // -- "Hash"
     printf("id name arctic %s.%s-%s\n"
 	   "id author Lucian Landry\n"
+	   "%s"
+	   // Though we do not care what "Ponder" is set to, we must
+	   // provide it as an option to signal (according to UCI) that the
+	   // engine can ponder at all.
 	   "option name Ponder type check default true\n"
 	   "option name RandomMoves type check default true\n"
 	   "option name UCI_EngineAbout type string default arctic %s.%s-%s by"
 	   " Lucian Landry\n"
 	   "uciok\n",
 	   VERSION_STRING_MAJOR, VERSION_STRING_MINOR, VERSION_STRING_PHASE,
+	   // Do not advertise a hash option if user overrode it.
+	   gPreCalc.userSpecifiedHashSize ? "" : hashString,
 	   VERSION_STRING_MAJOR, VERSION_STRING_MINOR, VERSION_STRING_PHASE);
 }
 
@@ -252,7 +257,7 @@ static void finishMoves(GameT *game, BoardT *fenBoard, MoveT *move, char *pToken
 	    // Assume the boards have diverged too much to preserve the hash
 	    // table, history window, etc.  This should be large enough to
 	    // not trigger in a normal case (ponder miss etc.)
-	    gHashInit();
+	    TransTableReset();
 	    gHistInit();
 	}
     }
@@ -279,7 +284,6 @@ static void finishMoves(GameT *game, BoardT *fenBoard, MoveT *move, char *pToken
 	GameMoveMake(game, &myMove);
     }
 }
-
 
 static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
 {
@@ -403,6 +407,72 @@ static int convertNextInteger(char **pToken, int *result, int atLeast,
 	return 1;
     }
     return 0;
+}
+
+// As above, but converts a 64-bit integer.
+static int convertNextInteger64(char **pToken, int64 *result, int64 atLeast,
+				char *context)
+{
+    *pToken = findNextToken(*pToken);
+    if (*pToken == NULL ||
+	sscanf(*pToken, "%"PRId64, result) < 1 ||
+	(atLeast >= 0 && *result < atLeast))
+    {
+	reportError(0, "%s: failed converting arg for %s",
+		    __func__, context);
+	return 1;
+    }
+    return 0;
+}
+
+static void processSetOptionCommand(char *inputStr)
+{
+    int64 hashSizeMB;
+    char *pToken;
+
+    if (gUciState.bSearching)
+    {
+	// The UCI spec says this command "will only be sent when the engine
+	// is waiting".
+	reportError(0, "%s: received 'setoption' while searching, IGNORING",
+		    __func__);
+	return;
+    }
+
+    // Process RandomMoves option if applicable.
+    // (UCI spec says option names and values "should not be case sensitive".)
+    if (matches(inputStr, "name") &&
+	matchesNoCase((pToken = findNextToken(inputStr)), "RandomMoves") &&
+	matches((pToken = findNextToken(pToken)), "value") &&
+	(matchesNoCase((pToken = findNextToken(pToken)), "true") ||
+	 matchesNoCase(pToken, "false")))
+    {
+	gVars.randomMoves = !strcasecmp(pToken, "true");
+    }
+    else if (!gPreCalc.userSpecifiedHashSize &&
+	     matches(inputStr, "name") &&
+	     matchesNoCase((pToken = findNextToken(inputStr)), "Hash") &&
+	     matches((pToken = findNextToken(pToken)), "value") &&
+	     convertNextInteger64(&pToken, &hashSizeMB, 0, "Hash") == 0 &&
+	     hashSizeMB <= (int64) TransTableMaxSize() / (1024 * 1024))
+    {
+	TransTableInit((int64) hashSizeMB * 1024 * 1024);
+    }
+    else if (matches(inputStr, "name") &&
+	     matchesNoCase((pToken = findNextToken(inputStr)), "Ponder") &&
+	     matches((pToken = findNextToken(pToken)), "value") &&
+	     (matchesNoCase((pToken = findNextToken(pToken)), "true") ||
+	      matchesNoCase(pToken, "false")))
+    {
+	// do nothing.  This is just a hint to the engine; UCI controls
+	// when we ponder.
+	; 
+    }
+    else
+    {
+	printf("info string %s: note: got option string \"%s\", ignoring\n",
+	       __func__, inputStr);
+    }
 }
 
 static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
@@ -642,14 +712,14 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
 	gVars.ponder = 1;
 	game->control[board->turn ^ 1] = 1;
 	ClockStart(game->clocks[board->turn ^ 1]);
-	ThinkerCmdPonderEx(th, board, &searchList);
+	ThinkerCmdPonderEx(th, board, &game->sgame, &searchList);
     }
     else
     {
 	game->control[board->turn] = 1;
 	ClockStart(game->clocks[board->turn]);
 	GoaltimeCalc(game);
-	ThinkerCmdThinkEx(th, board, &searchList);
+	ThinkerCmdThinkEx(th, board, &game->sgame, &searchList);
     }
 
     gUciState.bSearching = true;
@@ -663,7 +733,7 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
 // is set.
 static void uciPlayerMove(ThinkContextT *th, GameT *game)
 {
-    char *inputStr, *pToken;
+    char *inputStr;
     BoardT *board = &game->savedBoard; // shorthand.
 
     // Skip past any unrecognized stuff.
@@ -690,20 +760,7 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
     }
     else if (matches(inputStr, "setoption"))
     {
-	// Process RandomMoves option if applicable.
-	if (!strcmp((pToken = findNextToken(inputStr)), "name") &&
-	    !strcmp((pToken = findNextToken(pToken)), "RandomMoves") &&
-	    !strcmp((pToken = findNextToken(pToken)), "value") &&
-	    (!strcmp((pToken = findNextToken(pToken)), "true") ||
-	     !strcmp(pToken, "false")))
-	{
-	    gVars.randomMoves = !strcmp(pToken, "true");
-	}
-	else
-	{
-	    printf("info string %s: note: got option string \"%s\", ignoring\n",
-		   __func__, inputStr);
-	}
+	processSetOptionCommand(findNextToken(inputStr));
     }
     else if (matches(inputStr, "register"))
     {
@@ -722,6 +779,7 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
 	else
 	{
 	    // Just setup a new game.
+	    gVars.gameCount++;
 	    setForceMode(th, game);
 	    gUciState.bBadPosition = false;
 	    gUciState.bGotUciNewGame = true;
@@ -752,7 +810,7 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
 	}
 	ClockStart(game->clocks[board->turn]);
 	GoaltimeCalc(game);
-	ThinkerCmdThinkEx(th, board, &gUciState.searchList);
+	ThinkerCmdThinkEx(th, board, &game->sgame, &gUciState.searchList);
     }
     else if (matches(inputStr, "stop") && gUciState.bSearching)
     {
@@ -829,8 +887,16 @@ static char *buildStatsString(char *result, GameT *game, CompStatsT *stats)
     // (Convert bigtime to milliseconds)
     int timeTaken = ClockTimeTaken(game->clocks[game->savedBoard.turn]) / 1000;
     int nps = (int) (((uint64) nodes) * 1000 / (timeTaken ? timeTaken : 1));
+    int charsWritten;
 
-    sprintf(result, "time %d nodes %d nps %d", timeTaken, nodes, nps);
+    charsWritten = sprintf(result, "time %d nodes %d nps %d",
+			   timeTaken, nodes, nps);
+    if (TransTableNumEntries())
+    {
+	sprintf(&result[charsWritten], " hashfull %d",
+		(int) (((uint64) stats->hashWroteNew) * 1000 /
+		       TransTableNumEntries()));
+    }
     return result;
 }
 
@@ -841,6 +907,7 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
     char statsString[80];
     bool bDisplayPv = true;
     PvT *pv = &pvArgs->pv; // shorthand
+    bool chopFirst = false;
 
     // Save away a next move to ponder on, if possible.
     gUciState.result.ponderMove =
@@ -863,14 +930,14 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
 	// interaction between Polyglot and (Fruit,Stockfish).  This does mean
 	// we will actually ponder 1 ply deeper than advertised, and we may
 	// get two "depth 1" searches (actually levels 0 and 1).
-	PvFastForward(pv, 1);
-	if (pv->moves[0].src == FLAG)
-	{
-	    bDisplayPv = false;
-	}
+	chopFirst = true;
     }
 
-    buildMoveString(lanString, sizeof(lanString), pv, NULL);
+    if (buildMoveString(lanString, sizeof(lanString), pv, &game->savedBoard,
+			false, chopFirst) < 1)
+    {
+	bDisplayPv = false;
+    }
 
     if (abs(pv->eval) >= EVAL_WIN_THRESHOLD)
     {
@@ -883,7 +950,7 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
 	snprintf(evalString, sizeof(evalString), "cp %d", pv->eval);
     }
 
-    // Sending a fairly basic string here.  hashfull would be nice to implement.
+    // Sending a fairly basic string here.
     printf("info depth %d score %s %s%s%s\n",
 	   pv->level + 1, evalString,
 	   buildStatsString(statsString, game, &pvArgs->stats),
@@ -947,8 +1014,9 @@ UIFuncTableT *uiUciInit(void)
 #endif
     // There is no standard way I am aware of for a UCI engine to resign
     // so until I figure out how Polyglot might interpret it, we have to
-    // play until the bitter end.
-    gVars.resignThreshold = EVAL_LOSS;
+    // play until the bitter end.  Even then, we probably want to work w/all
+    // UCI interfaces.
+    gVars.canResign = false;
 
     return &uciUIFuncTable;
 }
