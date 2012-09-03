@@ -17,13 +17,15 @@
 #include <stddef.h> // NULL
 #include <stdlib.h> // exit(3)
 #include <assert.h>
-#include "ref.h"
-#include "log.h"
+
+#include "comp.h"
 #include "gDynamic.h"
 #include "gPreCalc.h"
+#include "log.h"
+#include "ref.h"
 #include "ui.h"
 #include "uiUtil.h"
-#include "comp.h"
+#include "transTable.h"
 
 // #define DEBUG_CONSISTENCY_CHECK
 
@@ -48,9 +50,9 @@ static inline void CoordUpdateZ(BoardT *board, uint8 i, uint8 newVal)
 
 // This is useful for generating a hash for the initial board position, or
 // (slow) validating the incrementally-updated hash.
-static int BoardZobristCalc(BoardT *board)
+static uint64 BoardZobristCalc(BoardT *board)
 {
-    int retVal = 0;
+    uint64 retVal = 0;
     int i;
     for (i = 0; i < NUM_SQUARES; i++)
     {
@@ -93,7 +95,7 @@ int BoardConsistencyCheck(BoardT *board, char *failString, int checkz)
 	}
 #endif
     }
-    for (i = 0; i < BQUEEN + 1; i++)
+    for (i = 0; i < NUM_PIECE_TYPES; i++)
     {
 	for (j = 0; j < board->pieceList[i].lgh; j++)
 	{
@@ -113,7 +115,7 @@ int BoardConsistencyCheck(BoardT *board, char *failString, int checkz)
     if (checkz && board->zobrist != BoardZobristCalc(board))
     {
 	LOG_EMERG("BoardConsistencyCheck(%s): failure in zobrist calc "
-		  "(%"PRIx64", %x).\n",
+		  "(%"PRIx64", %"PRIx64").\n",
 		  failString, board->zobrist, BoardZobristCalc(board));
 	LogPieceList(board);
 	exit(0);
@@ -323,6 +325,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
     board->ply++;
     board->turn ^= 1;
     board->zobrist ^= gPreCalc.zobrist.turn;
+    TransTablePrefetch(board->zobrist);
     board->ncheck[board->turn] = move->chk;
 
     // Adjust ncpPlies appropriately.
@@ -350,7 +353,6 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
 	    }
 	}
     }
-
 #ifdef DEBUG_CONSISTENCY_CHECK
     BoardConsistencyCheck(board, "BoardMoveMake2", 1);
 #endif
@@ -605,7 +607,7 @@ void BoardRandomize(BoardT *board)
     CoordListT *pieceList;
 
     memset(randPos, 0, sizeof(randPos));
-    for (i = 0; i < BQUEEN + 1; i++)
+    for (i = 0; i < NUM_PIECE_TYPES; i++)
     {
 	pieceList = &board->pieceList[i];
 

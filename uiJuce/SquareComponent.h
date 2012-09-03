@@ -1,7 +1,7 @@
 //--------------------------------------------------------------------------
-//                playloop.h - main loop and support routines.
+//           SquareComponent.h - UI representation of a board square.
 //                           -------------------
-//  copyright            : (C) 2008 by Lucian Landry
+//  copyright            : (C) 2012 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
 //--------------------------------------------------------------------------
 
@@ -14,23 +14,28 @@
 //
 //--------------------------------------------------------------------------
 
-#ifndef PLAYLOOP_H
-#define PLAYLOOP_H
+#ifndef SQUARE_COMPONENT_H
+#define SQUARE_COMPONENT_H
 
-#include "game.h"
-#include "thinker.h"
+#include "juce_gui_basics/juce_gui_basics.h" // juce::Component
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+class SquareComponent : public juce::Component
+{
+public:
+    SquareComponent();
+    ~SquareComponent();
+    void paint(juce::Graphics &g); // override
+    void colourChanged(); // override
+    void resized(); // overridden from Component
 
-// Synchronous move-now support.
-void PlayloopCompMoveNowAndSync(GameT *game, ThinkContextT *th);
-// Main play loop.
-void PlayloopRun(GameT *game, ThinkContextT *th);
+    void setPieceType(int pieceType);
+private:
+    juce::Colour colour;
 
-#ifdef __cplusplus
-}
-#endif
+    juce::ScopedPointer<juce::Drawable> piece;
+    int _pieceType;
 
-#endif // PLAYLOOP_H
+    void transformPiece();
+};
+
+#endif // SQUARE_COMPONENT_H

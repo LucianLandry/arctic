@@ -24,6 +24,10 @@
 #include "ref.h"
 #include "saveGame.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     // passed-in args.
     SaveGameT sgame;    // (eCmdThink, eCmdPonder)
@@ -136,5 +140,9 @@ typedef struct {
     ThinkContextT *th;
 } SearcherArgsT;
 void ThinkerSearchersCreate(int numThreads, void *threadFunc);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // THINKER_H

@@ -363,9 +363,7 @@ static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [NUM_S
 uint64 random64(void)
 {
     return
-	// 64-bit (and above) platform support.
-	sizeof(long) >= sizeof(uint64) ? random() :
-	// 32-bit platform support.
+	// Even on a 64-bit platform, RAND_MAX may only be 32 bits.
 	(((uint64) random()) << 32) ^ ((uint64) random());
 }
 
@@ -431,7 +429,7 @@ void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
 
 
     /* initialize check array. */
-    for (i = 0; i < BQUEEN + 1; i++)
+    for (i = 0; i < NUM_PIECE_TYPES; i++)
     {
 	for (j = 0; j < NUM_PLAYERS; j++)
 	{
@@ -450,7 +448,7 @@ void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
     for (i = 0; i < DIRFLAG + 1; i++)
     {
 	/* (the other elements are static and therefore already '0') */
-	for (j = BISHOP; j < BQUEEN + 1; j++)
+	for (j = BISHOP; j < NUM_PIECE_TYPES; j++)
 	{
 	    switch(j | 1)
 	    {
@@ -474,7 +472,7 @@ void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
     /* initialize zobrist hashing. */
     for (i = 0; i < NUM_SQUARES; i++)
     {
-	for (j = 0; j < BQUEEN + 1; j++)
+	for (j = 0; j < NUM_PIECE_TYPES; j++)
 	{
 	    gPreCalc.zobrist.coord[j] [i] = random64();
 	}

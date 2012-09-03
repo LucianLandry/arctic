@@ -20,6 +20,10 @@
 
 #include "aTypes.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define VERSION_STRING_MAJOR "1"
 #define VERSION_STRING_MINOR "1"
 #define VERSION_STRING_PHASE "devel" // or beta, release
@@ -39,8 +43,14 @@
 // Boord coordinates start at the southwest corner of board (0), increments
 // by 1 as we move to the right, and increments by row-length (8) as we move
 // up.
-#define Rank(x) ((x) >> 3)
-#define File(x) ((x) & 7)
+static inline int Rank(int i)
+{
+    return i >> 3;
+}
+static inline int File(int i)
+{
+    return i & 7;
+}
 
 // Given a rank (0-7) and file (0-7), generate the board coordinate.
 static inline int toCoord(int rank, int file)
@@ -53,21 +63,23 @@ static inline int toCoord(int rank, int file)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MIN3(a, b, c) (MIN((a), (MIN((b), (c)))))
 
-/* (0x0 is reserved for empty position.) */
-#define KING   0x2 /*  010b */
-#define PAWN   0x4 /*  100b */
-#define NIGHT  0x6 /*  110b */
-#define BISHOP 0x8 /* 1000b */
-#define ROOK   0xa /* 1010b */
-#define QUEEN  0xc /* 1100b */
+#define EMPTY  0x0 // empty position
+#define KING   0x2 //  010b
+#define PAWN   0x4 //  100b
+#define NIGHT  0x6 //  110b
+#define BISHOP 0x8 // 1000b
+#define ROOK   0xa // 1010b
+#define QUEEN  0xc // 1100b
 
-/* These are the corresponding black pieces. */
+// These are the corresponding black pieces.
 #define BKING   (KING | 1)
 #define BPAWN   (PAWN | 1)
 #define BNIGHT  (NIGHT | 1)
 #define BBISHOP (BISHOP | 1)
 #define BROOK   (ROOK | 1)
 #define BQUEEN  (QUEEN | 1)
+
+#define NUM_PIECE_TYPES (BQUEEN + 1)
 
 /* Is the piece capable of attacking like a rook or bishop. */
 #define ATTACKROOK(piece)   ((piece) >= ROOK)
@@ -168,5 +180,9 @@ typedef struct {
 
 // This is beyond the depth we can quiesce.
 #define HASH_NOENTRY -128
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* REF_H */

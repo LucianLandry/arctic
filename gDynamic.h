@@ -23,6 +23,10 @@
 #include "board.h"
 #include "position.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define MAX_NUM_PROCS 8 // maximum number of processors we can take advantage
                         // of.
 
@@ -62,5 +66,9 @@ void PvRewind(PvT *pv, int numPlies);
 void PvFastForward(PvT *pv, int numPlies);
 
 void CvInit(CvT *cv);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // GDYNAMIC_H

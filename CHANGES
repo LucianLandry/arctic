@@ -15,8 +15,6 @@ multiple-computer/clustering search.
     We will probably need to use a custom protocol for this.  The closest
     "standard" way to do what I want would be UCI, + alpha/beta constraint
     option to "go", plus a way to easily unmake/make moves on an internal board.
-If checkmate, use the shortest mate sequence possible (would probably tweak
-	eval slightly).  This is just icing and not really necessary.
 Find a way to advance the pawn in the endgame w/out it getting crowded out by
 	other moves (this is less bad after I implemented PV)?  Do I give pawn
 	rank a bonus?  Or make it a preferred move?
@@ -44,6 +42,8 @@ Bugfix: must use llabs() instead of abs() for handling time.
 Reimplemented transposition table (presumably a better one), and added hooks
         for controlling it to uiUci/uiXboard.
 Use a "smarter" resign strategy (try not to resign too early)
+Add command-line option to override default UI.
+uiNcurses: make cursor look nicer on Linux console; fix UIBarfString() backspace
 
 Version 10:
 Implemented depth-1 futility pruning.

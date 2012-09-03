@@ -1,18 +1,18 @@
-/***************************************************************************
-                   uiUtil.h - UI-oriented utility functions.
-                             -------------------
-    copyright            : (C) 2007 by Lucian Landry
-    email                : lucian_b_landry@yahoo.com
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//                 uiUtil.h - UI-oriented utility functions.
+//                           -------------------
+//  copyright            : (C) 2007 by Lucian Landry
+//  email                : lucian_b_landry@yahoo.com
+//--------------------------------------------------------------------------
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU Library General Public License as       *
- *   published by the Free Software Foundation; either version 2 of the    *
- *   License, or (at your option) any later version.                       *
- *                                                                         *
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//
+//   This program is free software; you can redistribute it and/or modify
+//   it under the terms of the GNU Library General Public License as
+//   published by the Free Software Foundation; either version 2 of the
+//   License, or (at your option) any later version.
+//
+//--------------------------------------------------------------------------
 
 #ifndef UIUTIL_H
 #define UIUTIL_H
@@ -23,6 +23,10 @@
 #include "game.h"
 #include "ref.h"       // Rank(), File()
 #include "switcher.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // Piece conversion routines.
 int asciiToNative(uint8 ascii);
@@ -94,4 +98,8 @@ char *ChopBeforeNewLine(char *s);
 
 void uiThreadInit(ThinkContextT *th, GameT *game);
 
-#endif /* UIUTIL_H */
+#ifdef __cplusplus
+}
+#endif
+
+#endif // UIUTIL_H

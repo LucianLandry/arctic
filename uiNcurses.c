@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 #include <ctype.h>  // isupper()
+#include <locale.h> // setlocale()
 #include <string.h> // strlen()
 #include <stdlib.h> // exit()
 #include <assert.h>
@@ -210,6 +211,21 @@ static void UINotifyPV(GameT *game, PvRspArgsT *pvArgs)
 #define CURSOR_NOBLINK 0
 #define CURSOR_BLINK 1
 #define CURSOR_HIDE 2
+
+#if 0
+// Use UTF-8 characters.  These work but I am already used to the slashes.
+#define CURSOR_NW "\xe2\x94\x8c"
+#define CURSOR_NE "\xe2\x94\x90"
+#define CURSOR_SW "\xe2\x94\x94"
+#define CURSOR_SE "\xe2\x94\x98"
+#else
+// Non-UTF8 fallback.
+#define CURSOR_NW "\\"
+#define CURSOR_NE "/"
+#define CURSOR_SW "/"
+#define CURSOR_SE "\\"
+#endif
+
 /* draws cursor at appropriate coordinate, according to mode 'mode'. */
 static void UICursorDraw(int coord, int mode)
 {
@@ -222,14 +238,16 @@ static void UICursorDraw(int coord, int mode)
 	textbackground(BOARDCOL);
     textcolor(/* BROWN */ YELLOW + (mode == CURSOR_BLINK ? BLINK : 0));
     gotoxy(x, y);
-    cprintf("%s %s",
-	    mode == CURSOR_HIDE ? "  " : "\\ ",
-	    mode == CURSOR_HIDE ? "  " : " /");
-    gotoxy(x, y + 2);
-    cprintf("%s %s",
-	    mode == CURSOR_HIDE ? "  " : "/ ",
-	    mode == CURSOR_HIDE ? "  " : " \\");
 
+    // Printing 1 char at a time is necessary because of the way the linux
+    // console handles blinking characters (read: not well)
+    cprintf("%s", mode == CURSOR_HIDE ? " " : CURSOR_NW);
+    gotoxy(x + 4, y);
+    cprintf("%s", mode == CURSOR_HIDE ? " " : CURSOR_NE);
+    gotoxy(x, y + 2);
+    cprintf("%s", mode == CURSOR_HIDE ? " " : CURSOR_SW);
+    gotoxy(x + 4, y + 2);
+    cprintf("%s", mode == CURSOR_HIDE ? " " : CURSOR_SE);
     textbackground(BLACK);	/* get rid of that annoying blink */
     textcolor(BLACK);
     gotoxy(SQUARE_WIDTH * 8 + 7, 24);
@@ -406,6 +424,7 @@ static void UIBoardRefresh(const BoardT *board)
     const uint8 *bcoord = board->coord;
 
     for (y = 0; y < 8; y++)
+    {
 	for (x = 0; x < 8; x++, i++)
 	{
 	    if ((x + y) % 2)
@@ -426,6 +445,7 @@ static void UIBoardRefresh(const BoardT *board)
 	    /* Draw a piece (or lack thereof). */
 	    putch(nativeToBoardAscii(bcoord[i]));
 	}
+    }
     textbackground(BLACK);
 }
 
@@ -540,7 +560,7 @@ static char *UIBarfString(char *myStr, int myStrLen,
 	}
 	else if (chr == BACKSPACE && curStrLen > 0) // backspace
 	{
-	    myStr[curStrLen--] = '\0';
+	    myStr[--curStrLen] = '\0';
 	    gotoxy(--x, y);
 	    cprintf(" ");
 	    gotoxy(x, y);
@@ -954,7 +974,6 @@ static void UINotifyPonder(void)
     UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
 }
 
-
 static void UINotifyReady(void)
 {
     gotoxy(OPTIONS_X, 24);
@@ -962,7 +981,6 @@ static void UINotifyReady(void)
     cprintf("Ready            ");
     UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
 }
-
 
 static void UINotifyComputerStats(GameT *game, CompStatsT *stats)
 {
@@ -1007,9 +1025,28 @@ static void UIMovelistShow(MoveListT *mvlist)
     UIBarf("possible moves.");
 }
 
+// Do any UI-specific initialization.
+static void UIInit(GameT *game)
+{
+    setlocale(LC_CTYPE, ""); // necessary for a UTF-8 console cursor
+    // set cursor invisible (ncurses).  Hacky, but geez.
+    initconio();
+    if (curs_set(0) == ERR)
+    {
+	assert(0);
+    }
+    clrscr();
+    gBoardIf.col[0] = LIGHTCYAN;
+    gBoardIf.col[1] = LIGHTGRAY;
+    gBoardIf.flipped = 0;
+    gBoardIf.cursCoord = 0;
 
-/* this function intended to get player input and adjust variables
-   accordingly */
+    UIBoardDraw();
+    UITicksDraw();
+    UIOptionsDraw(game);    
+}
+
+// This function intended to get player input and adjust variables accordingly.
 static void UIPlayerMove(ThinkContextT *th, GameT *game)
 {
     MoveT *foundMove;
@@ -1199,16 +1236,16 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     GameMoveCommit(game, &myMove, th, 0);
 }
 
-static int UIShouldCommitMoves(void)
+static bool UIShouldCommitMoves(void)
 {
-    return 1;
+    return true;
 }
 
 static void UINotifyMove(MoveT *move) { }
 
-
 static UIFuncTableT myUIFuncTable =
 {
+    .init = UIInit,
     .playerMove = UIPlayerMove,
     .boardRefresh = UIBoardRefresh,
     .exit = UIExit,
@@ -1227,25 +1264,7 @@ static UIFuncTableT myUIFuncTable =
     .shouldCommitMoves = UIShouldCommitMoves
 };
 
-
-/* Do any UI-specific initialization. */
-UIFuncTableT *uiNcursesInit(GameT *game)
+UIFuncTableT *uiNcursesOps(void)
 {
-    initconio();
-    /* set cursor invisible (ncurses).  Hacky, but geez. */
-    if (curs_set(0) == ERR)
-    {
-	assert(0);
-    }
-    clrscr();
-    gBoardIf.col[0] = LIGHTCYAN;
-    gBoardIf.col[1] = LIGHTGRAY;
-    gBoardIf.flipped = 0;
-    gBoardIf.cursCoord = 0;
-
-    UIBoardDraw();
-    UITicksDraw();
-    UIOptionsDraw(game);    
-
     return &myUIFuncTable;
 }

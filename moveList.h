@@ -20,6 +20,10 @@
 #include "aTypes.h"
 #include "board.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // The large number of moves is in case somebody decides to use 'edit position'
 // to setup a bunch of queens on the board :P ... 238 is as high as I got.
 #define MLIST_MAX_MOVES 240
@@ -43,5 +47,8 @@ void mlistMoveDelete(MoveListT *mvlist, int idx);
 void mlistMoveAdd(MoveListT *mvlist, BoardT *board, MoveT *move);
 int calcNCheck(BoardT *board, int myturn, char *context);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif // MOVELIST_H

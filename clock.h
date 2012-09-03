@@ -19,6 +19,10 @@
 
 #include "aTypes.h" // bigtime_t
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     bigtime_t startTime; // This time is put on the clock whenever the clock
                          // is reset.  It is not the time the clock started
@@ -127,5 +131,8 @@ bool TimeStringIsValid(char *str);
 bigtime_t TimeStringToBigTime(char *str);
 char *TimeStringFromBigTime(char *result, bigtime_t myTime);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif // CLOCK_H

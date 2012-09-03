@@ -1,7 +1,7 @@
 //--------------------------------------------------------------------------
-//                playloop.h - main loop and support routines.
+//                   PieceCache.h - caches the piece images.
 //                           -------------------
-//  copyright            : (C) 2008 by Lucian Landry
+//  copyright            : (C) 2012 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
 //--------------------------------------------------------------------------
 
@@ -14,23 +14,25 @@
 //
 //--------------------------------------------------------------------------
 
-#ifndef PLAYLOOP_H
-#define PLAYLOOP_H
+#ifndef PIECECACHE_H
+#define PIECECACHE_H
 
-#include "game.h"
-#include "thinker.h"
+#include "juce_gui_basics/juce_gui_basics.h" // juce::Drawable
+#include "ref.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+class PieceCache
+{
+public:
+    PieceCache();
+    ~PieceCache();
+    bool initSucceeded();
+    juce::Drawable *getNew(int pieceType);
+    juce::ScopedPointer<juce::Drawable> cache[NUM_PIECE_TYPES];
+private:
+    bool loaded;
+};
 
-// Synchronous move-now support.
-void PlayloopCompMoveNowAndSync(GameT *game, ThinkContextT *th);
-// Main play loop.
-void PlayloopRun(GameT *game, ThinkContextT *th);
+// For now this is meant to be used as a singleton class.
+extern PieceCache *gPieceCache;
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif // PLAYLOOP_H
+#endif // PIECECACHE_H

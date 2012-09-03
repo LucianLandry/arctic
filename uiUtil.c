@@ -1,19 +1,18 @@
-/***************************************************************************
-                   uiUtil.c - UI-oriented utility functions.
-                             -------------------
-    copyright            : (C) 2007 by Lucian Landry
-    email                : lucian_b_landry@yahoo.com
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//                 uiUtil.c - UI-oriented utility functions.
+//                           -------------------
+//  copyright            : (C) 2007 by Lucian Landry
+//  email                : lucian_b_landry@yahoo.com
+//--------------------------------------------------------------------------
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU Library General Public License as       *
- *   published by the Free Software Foundation; either version 2 of the    *
- *   License, or (at your option) any later version.                       *
- *                                                                         *
- ***************************************************************************/
-
+//--------------------------------------------------------------------------
+//
+//   This program is free software; you can redistribute it and/or modify
+//   it under the terms of the GNU Library General Public License as
+//   published by the Free Software Foundation; either version 2 of the
+//   License, or (at your option) any later version.
+//
+//--------------------------------------------------------------------------
 
 #include <assert.h>
 #include <ctype.h>  // tolower()
@@ -33,11 +32,11 @@
 UIFuncTableT *gUI;
 
 /* (one extra space for \0.) */
-static char gPieceUITable[BQUEEN + 2] = "  KkPpNnBbRrQq";
+static char gPieceUITable[NUM_PIECE_TYPES + 1] = "  KkPpNnBbRrQq";
 
 int nativeToAscii(uint8 piece)
 {
-    return piece > BQUEEN ? ' ' : gPieceUITable[piece];
+    return piece >= NUM_PIECE_TYPES ? ' ' : gPieceUITable[piece];
 }
 
 
@@ -655,6 +654,10 @@ typedef struct {
 static void uiThread(UiArgsT *args)
 {
     UiArgsT myArgs = *args; // struct copy
+
+    gUI->init(myArgs.game);
+
+    // Prevent main thread from continuing until UI has initialized.
     ThreadNotifyCreated("uiThread", args);
 
     SwitcherRegister(&myArgs.game->sw);

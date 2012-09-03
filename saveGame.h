@@ -21,6 +21,10 @@
 #include "clock.h"
 #include "board.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     MoveT move;
     bigtime_t myTime; // Time left on player's clock after move 'move'
@@ -77,5 +81,9 @@ static inline int SaveGameLastPly(SaveGameT *sgame)
 {
     return sgame->numPlies + sgame->firstPly;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // SAVEGAME_H

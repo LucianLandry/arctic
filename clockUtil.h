@@ -20,10 +20,18 @@
 #include "aTypes.h"
 #include "game.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void ClocksReset(GameT *game);
 void ClocksStop(GameT *game);
 void ClocksPrint(GameT *game, char *context);
 void GoaltimeCalc(GameT *game);
 bigtime_t getBigTime(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // CLOCKUTIL_H

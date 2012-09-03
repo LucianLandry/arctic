@@ -19,6 +19,10 @@
 
 #include <semaphore.h> /* sem_t */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define SWITCHER_MAX_USERS 2
 
 typedef struct {
@@ -31,5 +35,9 @@ typedef struct {
 void SwitcherInit(SwitcherContextT *sw);
 void SwitcherRegister(SwitcherContextT *sw);
 void SwitcherSwitch(SwitcherContextT *sw);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SWITCHER_H */

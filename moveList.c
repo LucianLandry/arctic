@@ -958,43 +958,53 @@ void mlistSortByCap(MoveListT *mvlist, BoardT *board)
     }
 }
 
+#define MOVES_EQUAL(move1, move2) \
+    (*((int *) &(move1)) == *((int *) &(move2)))
 
+// In current profiles, this needs to be fast, so the code is pointerrific.
 void mlistFirstMove(MoveListT *mvlist, MoveT *move)
 {
-    int i;
-    MoveT myMove;
+    MoveT myMove = *move;
+    MoveT *start = &mvlist->moves[0];
+    MoveT *end = start + mvlist->lgh;
+    MoveT *mv;
+    MoveT tmp;
 
-    /* Find the move in question. */
-    for (i = 0; i < mvlist->lgh; i++)
+    myMove.chk = 0;
+
+    // Find the move in question.
+    for (mv = start; mv < end; mv++)
     {
-	if (!memcmp(&mvlist->moves[i], move, 3))
+	tmp = *mv;
+	tmp.chk = 0;
+	// Most of the speedup comes from here; it is much faster than
+	// checking !memcmp(mv, move, 3).
+	if (MOVES_EQUAL(myMove, tmp))
 	{
-	    myMove = mvlist->moves[i]; // struct assign
-	    break;
+	    // 'insrt' points to the first non-preferred move.
+	    MoveT *insrt = start + mvlist->insrt;
+	    myMove = *mv; // save off the found move
+
+	    if (mv >= insrt)
+	    {
+		// This was a non-preferred move.  Move the 1st non-preferred
+		// move into its spot.
+		*mv = *insrt;
+		// Move the 1st move to the last preferred move.
+		*insrt = *start;
+		mvlist->insrt++;
+	    }
+	    else
+	    {
+		// This move was preferred.  Move the first move into its spot.
+		*mv = *start;
+	    }
+	    *start = myMove; // Now replace the first move.
+	    return;
 	}
     }
 
-    if (i >= mvlist->lgh)
-    {
-	return; // missing or nonsensical move.  Do nothing.
-    }
-
-    if (i >= mvlist->insrt)
-    {
-	// This was a non-cool move.  Move the 1st non-cool move into its
-	// spot.
-	mvlist->moves[i] = mvlist->moves[mvlist->insrt];
-	// Move the 1st move to the last cool move.
-	mvlist->moves[mvlist->insrt++] = mvlist->moves[0];
-    }
-    else
-    {
-	// This was a cool move.  Move the first move into its spot.
-	mvlist->moves[i] = mvlist->moves[0];
-    }
-
-    // Now replace the first move.
-    mvlist->moves[0] = myMove; // struct assign
+    // At this point we have a missing or non-sensical move.  Just return.
 }
 
 

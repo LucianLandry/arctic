@@ -1,7 +1,7 @@
 //--------------------------------------------------------------------------
-//                playloop.h - main loop and support routines.
+//              PieceComponent.h - UI representation of a piece.
 //                           -------------------
-//  copyright            : (C) 2008 by Lucian Landry
+//  copyright            : (C) 2012 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
 //--------------------------------------------------------------------------
 
@@ -14,23 +14,19 @@
 //
 //--------------------------------------------------------------------------
 
-#ifndef PLAYLOOP_H
-#define PLAYLOOP_H
+#ifndef PIECE_COMPONENT_H
+#define PIECE_COMPONENT_H
 
-#include "game.h"
-#include "thinker.h"
+#include "juce_gui_basics/juce_gui_basics.h" // juce::Drawable
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+class PieceComponent : public juce::Drawable
+{
+public:
+    PieceComponent(int type);
+    ~PieceComponent();
+    int getType();
+private:
+    int type;
+};
 
-// Synchronous move-now support.
-void PlayloopCompMoveNowAndSync(GameT *game, ThinkContextT *th);
-// Main play loop.
-void PlayloopRun(GameT *game, ThinkContextT *th);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif // PLAYLOOP_H
+#endif // PIECE_COMPONENT_H

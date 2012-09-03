@@ -25,6 +25,10 @@
 
 #include <pthread.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #if 1 // True spinlock implementation.
 typedef pthread_spinlock_t SpinlockT;
 static inline int SpinlockInit(SpinlockT *lock)
@@ -53,6 +57,10 @@ static inline void SpinlockLock(SpinlockT *lock)
 static inline void SpinlockUnlock(SpinlockT *lock)
 {
     pthread_mutex_unlock(lock);
+}
+#endif
+
+#ifdef __cplusplus
 }
 #endif
 

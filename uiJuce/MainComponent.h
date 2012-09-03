@@ -1,7 +1,7 @@
 //--------------------------------------------------------------------------
-//                playloop.h - main loop and support routines.
+//                 MainComponent.h - content of main window
 //                           -------------------
-//  copyright            : (C) 2008 by Lucian Landry
+//  copyright            : (C) 2012 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
 //--------------------------------------------------------------------------
 
@@ -14,23 +14,20 @@
 //
 //--------------------------------------------------------------------------
 
-#ifndef PLAYLOOP_H
-#define PLAYLOOP_H
+#ifndef MAINCOMPONENT_H
+#define MAINCOMPONENT_H
 
-#include "game.h"
-#include "thinker.h"
+#include "juce_gui_basics/juce_gui_basics.h" // juce::Component
+#include "BoardComponent.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+class MainComponent : public juce::Component
+{
+public:
+    MainComponent();
+    ~MainComponent();
+    void resized(); // override
+private:
+    BoardComponent bc;
+};
 
-// Synchronous move-now support.
-void PlayloopCompMoveNowAndSync(GameT *game, ThinkContextT *th);
-// Main play loop.
-void PlayloopRun(GameT *game, ThinkContextT *th);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif // PLAYLOOP_H
+#endif // MAINCOMPONENT_H

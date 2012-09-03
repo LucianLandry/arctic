@@ -85,7 +85,7 @@
 // but I'm trying to avoid passing around extra args to updatePv().
 static ThinkContextT *gThinker;
 // same argument for gStats, but it affects minimax() and trymove() as well!
-static CompStatsT gStats;
+CompStatsT gStats;
 
 #define HASH_MISS 1
 #define HASH_HIT 0
@@ -348,10 +348,10 @@ static int potentialImprovement(BoardT *board)
 // Returns the evaluation of the found move
 // (if no move found, 'cookie' is set to -1).
 // Side effect: removes the move from the list.
-PositionEvalT tryNextHashMove(BoardT *board, int alpha, int beta,
-			      PvT *newPv, ThinkContextT *th,
-			      MoveListT *mvlist, int *cookie,
-			      MoveT *hashMove)
+static PositionEvalT tryNextHashMove(BoardT *board, int alpha, int beta,
+				     PvT *newPv, ThinkContextT *th,
+				     MoveListT *mvlist, int *cookie,
+				     MoveT *hashMove)
 {
     PositionEvalT myEval = {EVAL_LOSS, EVAL_LOSS};
     int hashHitOnly = HASH_MISS;
@@ -417,8 +417,6 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 
     int mightDraw; // bool.  Is it possible to hit a draw while evaluating from
 		   // this position.
-    HashInfoT hInfo;
-    int hashHit;
     MoveT hashMove;
     PositionEvalT hashEval;
     MoveT bestMove;
@@ -434,9 +432,6 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     MoveListT mvlist;
     int strgh;
     uint16 basePly = board->ply - board->depth;
-#ifdef ENABLE_DEBUG_LOGGING
-    char tmpStr[6];
-#endif
 
     // I'm trying to use lazy initialization for this function.
     goodPv->depth = 0;
@@ -523,52 +518,13 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 
     // Is there a suitable hit in the transposition table?
     if ((!mightDraw || board->ncpPlies == 0) &&
-	TransTableSize() &&
-	TransTableHit(&hInfo, board->zobrist))
+	TransTableQuickHitTest(board->zobrist) &&
+	TransTableHit(&hashEval, &hashMove, board->zobrist, searchDepth,
+		      basePly, alpha, beta))
     {
-	hashHit = (searchDepth <= hInfo.depth || QUIESCING);
-	hashEval = hInfo.eval;
-	hashMove = hInfo.move; // struct assign
-	
-	if ( // know eval exactly?
-	    (hashEval.highBound == hashEval.lowBound ||
-	     // know it's good enough?
-	     hashEval.lowBound >= beta ||
-	     // know it's bad enough?
-	     hashEval.highBound <= alpha) &&
-
-	    (hashHit ||
-	     // For detected win/loss, depth does not matter.
-	     hashEval.highBound <= EVAL_LOSS_THRESHOLD ||
-	     hashEval.lowBound >= EVAL_WIN_THRESHOLD))
-	{
-	    gStats.hashHitGood++;
-
-	    // re-record items in the hit hash position to "reinforce" it
-	    // against future removal:
-	    // 1) base ply for this move.
-	    if (hInfo.basePly != basePly)
-	    {
-		gStats.hashWroteNew++;
-		hInfo.basePly = basePly;
-	    }
-
-	    // 2) search depth (in case of checkmate, it might go up.  Not
-	    //    proven to be better.)
-	    hInfo.depth = MAX(hInfo.depth, searchDepth);
-
-	    TransTableWrite(&hInfo, board->zobrist);
-
-	    LOG_DEBUG("hashHit alhb: %d %d %d %d %d %s 0x%"PRIx64"\n",
-		      alpha, hashEval.lowBound, hashEval.highBound, beta,
-		      hInfo.depth,
-		      moveToStr(tmpStr, &hashMove),
-		      board->zobrist);
-
-	    /* record the move (if there is one). */
-	    updatePv(board, goodPv, NULL, &hashMove, hashEval.lowBound);
-	    return hashEval;
-	}
+	// record the move (if there is one).
+	updatePv(board, goodPv, NULL, &hashMove, hashEval.lowBound);
+	return hashEval;
     }
     if (hashHitOnly != NULL)
     {
@@ -866,48 +822,11 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 
 out:
 
-    // Should we replace the transposition table entry?
     if (TransTableSize())
     {
-	TransTableRead(&hInfo, board->zobrist);
-
-        // (HASH_NOENTRY should always trigger here)
-	if (searchDepth > hInfo.depth ||
-	    // Replacing entries that came before this search is aggressive,
-	    // but it works better than a 'numPieces' comparison.  We use "!="
-	    // instead of "<" because we may move backwards in games as well
-	    // (undoing moves, or setting positions etc.)
-	    hInfo.basePly != basePly ||
-	    // Otherwise, use the position that gives us as much info as
-	    // possible, and after that the most recently used (ie this move).
-	    (searchDepth == hInfo.depth &&
-	     (retVal.highBound - retVal.lowBound) <=
-	     (hInfo.eval.highBound - hInfo.eval.lowBound)))
-	{
-	    // Yes.  Update transposition table.
-	    // Every single element of this structure (except salt) should
-	    // always be updated, since:
-	    // -- it is not blanked for a newgame
-	    // -- the hash entry might have been overwritten in the meantime
-	    // (by another thread, or at a different ply). */
-	    hInfo.eval = retVal; // struct copy
-	    hInfo.depth = searchDepth;
-	    if (hInfo.basePly != basePly)
-	    {
-		gStats.hashWroteNew++;
-		hInfo.basePly = basePly;
-	    }
-
-	    // copy off best move (may be gMoveNone).
-	    hInfo.move = bestMove; // struct assign
-
-	    TransTableWrite(&hInfo, board->zobrist);
-	    LOG_DEBUG("hashupdate lhdp: %d %d %d %d %s 0x%"PRIx64"\n",
-		      hInfo.eval.lowBound, hInfo.eval.highBound,
-		      hInfo.depth, hInfo.basePly,
-		      moveToStr(tmpStr, &bestMove),
-		      board->zobrist);
-	}
+	// Update the transposition table entry if needed.
+	TransTableConditionalUpdate(retVal, bestMove, board->zobrist,
+				    searchDepth, basePly);
     }
 
     return retVal;

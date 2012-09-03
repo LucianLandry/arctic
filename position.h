@@ -21,6 +21,10 @@
 #include "list.h"
 #include "ref.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Inherits from ListElementT. */
 typedef struct {
     ListElementT el;
@@ -31,5 +35,9 @@ typedef struct {
     int lowBound;
     int highBound;
 } PositionEvalT;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // POSITION_H

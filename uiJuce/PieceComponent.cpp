@@ -1,7 +1,7 @@
 //--------------------------------------------------------------------------
-//                playloop.h - main loop and support routines.
+//             PieceComponent.cpp - UI representation of a piece.
 //                           -------------------
-//  copyright            : (C) 2008 by Lucian Landry
+//  copyright            : (C) 2012 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
 //--------------------------------------------------------------------------
 
@@ -14,23 +14,14 @@
 //
 //--------------------------------------------------------------------------
 
-#ifndef PLAYLOOP_H
-#define PLAYLOOP_H
+#include "PieceComponent.h"
 
-#include "game.h"
-#include "thinker.h"
+using namespace juce;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-// Synchronous move-now support.
-void PlayloopCompMoveNowAndSync(GameT *game, ThinkContextT *th);
-// Main play loop.
-void PlayloopRun(GameT *game, ThinkContextT *th);
-
-#ifdef __cplusplus
+PieceComponent::PieceComponent(int type)
+{
 }
-#endif
 
-#endif // PLAYLOOP_H
+PieceComponent::~PieceComponent()
+{
+}

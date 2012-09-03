@@ -19,10 +19,21 @@
 
 #include "thinker.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void CompThreadInit(ThinkContextT *th);
 // Returns current variation for main board. 
 CvT *CompMainCv(void);
 // Returns current search level for main board.
 int CompCurrentLevel(void);
+
+// Exposing this externally so transposition-table code can update it.
+extern CompStatsT gStats;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // COMP_H

@@ -1,7 +1,7 @@
 //--------------------------------------------------------------------------
-//                playloop.h - main loop and support routines.
+//                  MainMenuBarModel.h - main menubar model
 //                           -------------------
-//  copyright            : (C) 2008 by Lucian Landry
+//  copyright            : (C) 2012 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
 //--------------------------------------------------------------------------
 
@@ -14,23 +14,24 @@
 //
 //--------------------------------------------------------------------------
 
-#ifndef PLAYLOOP_H
-#define PLAYLOOP_H
+#include "juce_gui_basics/juce_gui_basics.h" // juce::MainMenuBarModel
 
-#include "game.h"
-#include "thinker.h"
+#ifndef MAINMENUBARMODEL_H
+#define MAINMENUBARMODEL_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+class MainMenuBarModel : public juce::MenuBarModel
+{
+public:
+    MainMenuBarModel();
+    ~MainMenuBarModel();
 
-// Synchronous move-now support.
-void PlayloopCompMoveNowAndSync(GameT *game, ThinkContextT *th);
-// Main play loop.
-void PlayloopRun(GameT *game, ThinkContextT *th);
+    // overridden from parent.  These are 'const' in Juce 2.0.
+    juce::StringArray getMenuBarNames();
+    juce::PopupMenu getMenuForIndex(int topLevelMenuIndex,
+					  const juce::String &menuName);
+    void menuItemSelected(int menuItemID, int topLevelMenuIndex); 
+private:
+    juce::PopupMenu gameMenu;
+};
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif // PLAYLOOP_H
+#endif // MAINMENUBARMODEL_H

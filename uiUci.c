@@ -170,7 +170,8 @@ static char *findRecognizedToken(char *pStr)
     for (; pStr != NULL; pStr = findNextToken(pStr))
     {
 	// Check all engine-to-GUI commands.
-	if (matches(pStr, "uci") ||
+	if (matches(pStr, "xboard") ||
+	    matches(pStr, "uci") ||
 	    matches(pStr, "debug") ||
 	    matches(pStr, "isready") ||
 	    matches(pStr, "setoption") ||
@@ -190,10 +191,42 @@ static char *findRecognizedToken(char *pStr)
     return NULL;
 }
 
-static void processUciCommand(void)
+static void uciInit(GameT *ignore)
+{
+    static bool initialized;
+
+    if (initialized)
+    {
+	return;
+    }
+
+    // Set unbuffered I/O (obviously necessary for output, also necessary for
+    // input if we want to poll() correctly.)
+    setbuf(stdout, NULL);
+    setbuf(stdin, NULL);
+
+    // gUciState is already cleared (since it is global).
+    // Initialize whatever fields we need to.
+    gUciState.ponderMove = gMoveNone;
+
+#if 1 // bldbg: goes out for debugging
+    // use random moves.
+    gVars.randomMoves = 1;
+#endif
+    // There is no standard way I am aware of for a UCI engine to resign
+    // so until I figure out how Polyglot might interpret it, we have to
+    // play until the bitter end.  Even then, we probably want to work w/all
+    // UCI interfaces.
+    gVars.canResign = false;
+    initialized = true;
+}
+
+void processUciCommand(void)
 {
     char hashString[160];
     int rv;
+
+    uciInit(NULL);
     rv = snprintf(hashString, sizeof(hashString),
 		  "option name Hash type spin default %"PRId64
 		  " min 0 max %"PRId64"\n",
@@ -217,6 +250,9 @@ static void processUciCommand(void)
 	   // Do not advertise a hash option if user overrode it.
 	   gPreCalc.userSpecifiedHashSize ? "" : hashString,
 	   VERSION_STRING_MAJOR, VERSION_STRING_MINOR, VERSION_STRING_PHASE);
+
+    // switch to uiUci if we have not already.
+    gUI = uiUciOps();
 }
 
 // Helper function for processPositionCommand().  Process a board once it has
@@ -741,10 +777,13 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
 	findRecognizedToken(
 	    ChopBeforeNewLine(getStdinLine(MAXBUFLEN, &game->sw)));
 
-    if (matches(inputStr, "uci"))
+    if (matches(inputStr, "xboard"))
     {
-	// we should never get this command here (it should be invoked by
-	// uiUciInit()) but if we do, respond to it as best as we can.
+	// Special case: switch to xboard interface.
+	return processXboardCommand();
+    }
+    else if (matches(inputStr, "uci"))
+    {
 	processUciCommand();
     }
     else if (matches(inputStr, "debug"))
@@ -965,9 +1004,9 @@ static void uciNotifyComputerStats(GameT *game, CompStatsT *stats)
     printf("info %s\n", buildStatsString(statsString, game, stats));
 }
 
-static int uciShouldNotCommitMoves(void)
+static bool uciShouldNotCommitMoves(void)
 {
-    return 0;
+    return false;
 }
 
 static void uciBoardRefresh(const BoardT *board) { }
@@ -976,47 +1015,28 @@ static void uciStatusDraw(GameT *game) { }
 static void uciNotifyTick(GameT *game) { }
 static void uciNotifyCheckmated(int turn) { }
 
-static UIFuncTableT uciUIFuncTable =
+UIFuncTableT *uiUciOps(void)
 {
-    .playerMove = uciPlayerMove,
-    .boardRefresh = uciBoardRefresh,
-    .exit = uciNoop,
-    .statusDraw = uciStatusDraw,
-    .notifyTick = uciNotifyTick,
-    .notifyMove = uciNotifyMove,
-    .notifyError = uciNotifyError,
-    .notifyPV = uciNotifyPV,
-    .notifyThinking = uciNoop,
-    .notifyPonder = uciNoop,
-    .notifyReady = uciNoop,
-    .notifyComputerStats = uciNotifyComputerStats,
-    .notifyDraw = uciNotifyDraw,
-    .notifyCheckmated = uciNotifyCheckmated,
-    .notifyResign = uciNotifyResign,
-    .shouldCommitMoves = uciShouldNotCommitMoves
-};
-
-
-UIFuncTableT *uiUciInit(void)
-{
-    // gUciState is already cleared (since it is global).
-    // Initialize whatever fields we need to.
-    gUciState.ponderMove = gMoveNone;
-
-    // We arrive here when uiXboard has received "uci".
-    // We assume uiXboard has already set unbuffered I/O (for input and
-    // output).
-    processUciCommand();
-
-#if 1 // bldbg: goes out for debugging
-    // use random moves.
-    gVars.randomMoves = 1;
-#endif
-    // There is no standard way I am aware of for a UCI engine to resign
-    // so until I figure out how Polyglot might interpret it, we have to
-    // play until the bitter end.  Even then, we probably want to work w/all
-    // UCI interfaces.
-    gVars.canResign = false;
+    static UIFuncTableT uciUIFuncTable =
+    {
+	.init = uciInit,
+	.playerMove = uciPlayerMove,
+	.boardRefresh = uciBoardRefresh,
+	.exit = uciNoop,
+	.statusDraw = uciStatusDraw,
+	.notifyTick = uciNotifyTick,
+	.notifyMove = uciNotifyMove,
+	.notifyError = uciNotifyError,
+	.notifyPV = uciNotifyPV,
+	.notifyThinking = uciNoop,
+	.notifyPonder = uciNoop,
+	.notifyReady = uciNoop,
+	.notifyComputerStats = uciNotifyComputerStats,
+	.notifyDraw = uciNotifyDraw,
+	.notifyCheckmated = uciNotifyCheckmated,
+	.notifyResign = uciNotifyResign,
+	.shouldCommitMoves = uciShouldNotCommitMoves
+    };
 
     return &uciUIFuncTable;
 }

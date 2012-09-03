@@ -22,6 +22,12 @@
 #include <inttypes.h> // C99 support for platform-agnostic printf() of 64-bit
                       // types (PRId64 for example)
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef unsigned int uint;
+
 typedef uint8_t      uint8;
 typedef int8_t       int8;
 typedef uint16_t     uint16;
@@ -32,5 +38,9 @@ typedef int64_t      int64;
 // Time in microseconds.  Inspired by BeOS (only not; we need to support
 // negative times, too.)
 typedef int64 bigtime_t;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // ATYPES_H

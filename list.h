@@ -34,6 +34,10 @@
 // another.
 // For this reason, *any* list_element_t must be memset(0)d before use!
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct list_element_t
 {
     struct list_t *pOwner;
@@ -112,5 +116,9 @@ void ListMove(ListT *destList, ListT *sourceList, int numElements);
 // debug.
 void ListElementPrint(ListElementT *listElement);
 void ListPrint(ListT *list); 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // LIST_H

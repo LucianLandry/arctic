@@ -23,7 +23,12 @@
 #include "game.h"
 #include "ref.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
+    void (*init)(GameT *game);
     void (*playerMove)(ThinkContextT *th, GameT *game);
     void (*boardRefresh)(const BoardT *board);
     void (*exit)(void);
@@ -39,17 +44,26 @@ typedef struct {
     void (*notifyDraw)(char *reason, MoveT *move);
     void (*notifyCheckmated)(int turn);
     void (*notifyResign)(int turn);
-    int (*shouldCommitMoves)(void);
+    bool (*shouldCommitMoves)(void);
 } UIFuncTableT;
 extern UIFuncTableT *gUI;
 
 // uiNcurses.c
-UIFuncTableT *uiNcursesInit(GameT *game);
+UIFuncTableT *uiNcursesOps(void);
 
 // uiXboard.c
-UIFuncTableT *uiXboardInit(void);
+UIFuncTableT *uiXboardOps(void);
+void processXboardCommand(void);
 
 // uiUci.c
-UIFuncTableT *uiUciInit(void);
+UIFuncTableT *uiUciOps(void);
+void processUciCommand(void);
+
+// uiJuce.c
+UIFuncTableT *uiJuceOps(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // UI_H

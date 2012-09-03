@@ -38,17 +38,17 @@
 
 static void usage(char *programName)
 {
-    printf("usage: %s [-h=<hashtablesize>] [-p=<numcputhreads>]\n"
+    printf("usage: %s [-h=<hashtablesize>] [-p=<numcputhreads>] [--ui=<console,juce,uci,xboard>]\n"
 	   "\t'hashtablesize' examples: 200000, 100k, 0M, 1G\n"
 	   // as picked by TransTableDefaultSize()
 	   "\t'hashtablesize' default == MIN(1/3 total memory, 512M)\n"
 	   "\t(specifying 'hashtablesize' overrides any xboard/uci option)\n\n"
 	   "\t'numcputhreads' in range 1-%d\n"
-	   "\t'numcputhreads' default == number of online processors\n",
+	   "\t'numcputhreads' default == number of online processors\n\n"
+	   "\t'ui' default == console (if stdin is terminal), or xboard (otherwise)\n",
 	   programName, MAX_NUM_PROCS);
     exit(0);
 }
-
 
 // Parse a user parameter like "400k", "1G", "25M" and return a real number.
 // Since this is applied to memory, kibibytes/mebibytes/gibibytes are assumed.
@@ -100,12 +100,17 @@ static int64 IECStringToInt64(char *str)
     return val;
 }
 
-
-static int isPow2(int c)
+static bool isPow2(int c)
 {
     return c > 0 && (c & (c - 1)) == 0;
 }
 
+static bool isValidUI(char *str)
+{
+    return
+	!strcmp(str, "console") || !strcmp(str, "juce") ||
+	!strcmp(str, "uci") || !strcmp(str, "xboard");
+}
 
 // Do some init-time sanity checking to confirm various assumptions.
 static void startupSanityCheck(void)
@@ -113,7 +118,6 @@ static void startupSanityCheck(void)
     // Some structure sanity checks we probably should not rely on.
     assert(NUM_SAVED_POSITIONS >= 128 && isPow2(NUM_SAVED_POSITIONS));
 }
-
 
 int main(int argc, char *argv[])
 {
@@ -123,6 +127,7 @@ int main(int argc, char *argv[])
     int i;
     ThinkContextT th;
     GameT game;
+    char uiString[80] = "";
 
     startupSanityCheck();
 
@@ -151,6 +156,14 @@ int main(int argc, char *argv[])
 		usage(argv[0]);
 	    }	    
 	}
+	else if (!strncmp(argv[i], "--ui=", 5))
+	{
+	    if (sscanf(argv[i], "--ui=%79s", uiString) != 1 ||
+		!isValidUI(uiString))
+	    {
+		usage(argv[0]);
+	    }
+	}
 	else
 	{
 	    // Unrecognized argument.
@@ -176,14 +189,18 @@ int main(int argc, char *argv[])
 
     GameInit(&game);
     
-    gUI = isatty(fileno(stdin)) && isatty(fileno(stdout)) ?
-	uiNcursesInit(&game) : uiXboardInit();
-
-    GameNew(&game, &th);
+    gUI =
+	!strcmp(uiString, "juce") ? uiJuceOps() :
+	!strcmp(uiString, "console") ? uiNcursesOps() :
+	!strcmp(uiString, "xboard") ? uiXboardOps() :
+	!strcmp(uiString, "uci") ? uiUciOps() :
+	isatty(fileno(stdin)) && isatty(fileno(stdout)) ?
+	uiNcursesOps() : uiXboardOps();
 
     CompThreadInit(&th);
     uiThreadInit(&th, &game);
 
+    GameNew(&game, &th);
     gUI->notifyReady();
     ClockStart(game.clocks[0]);
 

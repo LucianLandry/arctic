@@ -1,10 +1,8 @@
 //--------------------------------------------------------------------------
-//
-//                  aSystem.h - system platform utilities.
+//              BoardComponent.h - UI representation of a board.
 //                           -------------------
 //  copyright            : (C) 2012 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
-//
 //--------------------------------------------------------------------------
 
 //--------------------------------------------------------------------------
@@ -16,21 +14,28 @@
 //
 //--------------------------------------------------------------------------
 
-#ifndef ASYSTEM_H
-#define ASYSTEM_H
+#ifndef BOARD_COMPONENT_H
+#define BOARD_COMPONENT_H
 
-#include "aTypes.h" // int64 etc.
+#include "juce_gui_basics/juce_gui_basics.h" // juce::Component
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "board.h"
+#include "ref.h" // NUM_SQUARES
 
-void SystemEnableCoreFile(void);
-int64 SystemTotalMemory(void);
-int SystemTotalProcessors(void);
+#include "SquareComponent.h"
 
-#ifdef __cplusplus
-}
-#endif
+class BoardComponent : public juce::Component
+{
+public:
+    BoardComponent();
+    ~BoardComponent();
+    void resized(); // override
+    void refresh(BoardT *board); // re-draw the component using the contents
+                                 // of 'Board'
+private:
+    SquareComponent squares[NUM_SQUARES];
+    int Rank(int i);
+    int File(int i);
+};
 
-#endif // ASYSTEM_H
+#endif // BOARD_COMPONENT_H

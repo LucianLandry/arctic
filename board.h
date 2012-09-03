@@ -23,6 +23,10 @@
 #include "position.h"
 #include "list.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // This MUST be a power of 2 (to make our hashing work), and MUST be at least
 // 128 to account for the 50-move rule (100 plies == 50 moves)
 #define NUM_SAVED_POSITIONS 128
@@ -47,7 +51,7 @@ typedef struct {
 
     // This is a way to quickly look up the number and location of any
     // type of piece on the board.
-    CoordListT pieceList[BQUEEN + 1];
+    CoordListT pieceList[NUM_PIECE_TYPES];
 
     uint8 *pPiece[NUM_SQUARES]; // Given a coordinate, this points back to the
                                 // exact spot in the pieceList that refers to
@@ -173,5 +177,9 @@ static inline bool BoardPositionHit(BoardT *board, uint64 zobrist)
 bool BoardPositionsSame(BoardT *b1, BoardT *b2);
 
 int BoardCapWorthCalc(BoardT *board, MoveT *move);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // BOARD_H

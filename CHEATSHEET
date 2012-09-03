@@ -6,7 +6,7 @@ diff modified files against index (does not include untracked files, there is
     no one-liner way to do that): git diff
 diff files in index against last commit: git diff --cached
 add all (unignored) untracked files to index + remove deleted files from index:
-    git add --all
+    git add --all --verbose
 commit everything, including tracked files not in the index yet, but not
     including untracked files: git commit --all
 
@@ -15,10 +15,65 @@ commit everything, including tracked files not in the index yet, but not
 USING CMAKE:
 
 cd <builddir>
-cmake ../src # generates Makefiles
+# generates Makefiles.
+# If Juce has been built with "Debugging enabled" checked in the Introjucer,
+# you MUST define JUCE_DEBUG or else you will get weird runtime errors.
+# If Juce has been built w/out debugging, you MUST NOT define JUCE_DEBUG or else
+# you will ... wait for it ... get weird runtime errors.
+cmake -D JUCE_PATH=/home/blandry/juce -D JUCE_DEBUG=1 ../src
 make
 
+No true build log is normally generated, but if you need one, you can do:
+make VERBOSE=1
+
 Documentation is at http://www.cmake.org.
+
+-------------------------------------------------------------------------------
+
+PROFILING:
+Two options:
+1) go into CMakeLists.txt, set the profiling options, build+run, then run gprof
+   on the output.
+2) perf record -g ./arctic; perf report > (reportfile)
+
+
+-------------------------------------------------------------------------------
+
+BUILDING JUCE:
+Download juce 2.0, and unpack it such that it shows up as ${HOME}/juce.
+cd ${HOME}/juce/extras/static\ library
+../Introjucer/Builds/Linux/build/Introjucer juce.jucer
+# tweak as necessary (adding Linux release), then save project, preferably as
+# another file like juceb.jucer.  Then
+cd Builds/Linux
+make clean
+make
+
+Current download instructions for Juce's latest git version (not currently used) are:
+git clone --depth 1 git://github.com/julianstorer/JUCE.git
+cd extras/Introjucer/Builds/Linux
+make # builds Introjucer
+cd ../../../static\ library
+../Introjucer/Builds/Linux/build/Introjucer juce.jucer
+
+-------------------------------------------------------------------------------
+JUCE GOTCHAS:
+
+-- Hitting a "JUCE Assertion failure" when building with the debug library
+   under Linux will result in the process becoming a zombie at exit.  This is
+   because the mechanism juce_isRunningUnderDebugger() uses to find its result
+   is a hack (calling ptrace(PT_DETACH...) from a child thread), and apparently
+   does not work on any thread except the main one.  To be fair I don't think
+   there's a good way to do it, or I would have submitted a patch.
+   In the meantime, we should avoid sloppy code that hits these failures.
+
+-------------------------------------------------------------------------------
+
+USING ARCTIC FROM CONSOLE:
+
+gnome-terminal has funky color handling and the background shows up as dark
+    gray instead of black.  The linux console has a dark background, but the
+    flashing is messed up.  Only workaround so far is to use konsole or xterm.
 
 -------------------------------------------------------------------------------
 

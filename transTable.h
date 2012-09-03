@@ -20,15 +20,9 @@
 #include "aTypes.h"
 #include "position.h"
 
-typedef struct {
-    PositionEvalT eval;
-    int8 salt;        // add a bit of extra randomness to cut down on
-                      // accidental aliasing.
-    int8 depth;       // needs to be plys from quiescing, due to incremental
-                      // search.
-    uint16 basePly;   // lets us evaluate if this entry is 'too old'.
-    MoveT move;       // stores preferred move for this position.
-} HashInfoT;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // Pass this to TransTable(Lazy)Init() to let it pick a semi-sensible default.
 #define TRANSTABLE_DEFAULT_SIZE (-1)
@@ -58,14 +52,22 @@ size_t TransTableDefaultSize(void);
 // Return the current size of the transposition table.
 size_t TransTableSize(void);
 
-// Read an entry from the transposition table w/out checking if there is a hit.
-void TransTableRead(HashInfoT *result, uint64 zobrist);
+// Pre-cache a transtable entry for later use.
+void TransTablePrefetch(uint64 zobrist);
 
-// Read the transposition table; return 'true' if the entry matched 'zobrist'
-// or 'false' otherwise.
-bool TransTableHit(HashInfoT *result, uint64 zobrist);
+// Run this before the full (slower) TransTableHit() func.
+bool TransTableQuickHitTest(uint64 zobrist);
 
-// Write an entry to the transposition table.
-void TransTableWrite(HashInfoT *hInfo, uint64 zobrist);
+// Fills in 'hashEval' and 'hashMove' iff we had a successful hit.
+// Assumes a non-zero-size hash.
+bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
+		   int searchDepth, uint16 basePly, int alpha, int beta);
+
+void TransTableConditionalUpdate(PositionEvalT eval, MoveT move, uint64 zobrist,
+				 int searchDepth, uint16 basePly);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // TRANSTABLE_H

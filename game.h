@@ -24,6 +24,10 @@
 #include "switcher.h"
 #include "thinker.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     SaveGameT sgame;
     int control[NUM_PLAYERS]; // 0 if player controls; 1 if computer
@@ -77,5 +81,9 @@ static inline int GameLastPly(GameT *game)
 {
     return SaveGameLastPly(&game->sgame);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // GAME_H

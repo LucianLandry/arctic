@@ -1,18 +1,18 @@
-/***************************************************************************
-                        log.h - debugging log support.
-                             -------------------
-    copyright            : (C) 2007 by Lucian Landry
-    email                : lucian_b_landry@yahoo.com
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//                      log.h - debugging log support.
+//                           -------------------
+//  copyright            : (C) 2007 by Lucian Landry
+//  email                : lucian_b_landry@yahoo.com
+//--------------------------------------------------------------------------
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU Library General Public License as       *
- *   published by the Free Software Foundation; either version 2 of the    *
- *   License, or (at your option) any later version.                       *
- *                                                                         *
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//
+//   This program is free software; you can redistribute it and/or modify
+//   it under the terms of the GNU Library General Public License as
+//   published by the Free Software Foundation; either version 2 of the
+//   License, or (at your option) any later version.
+//
+//--------------------------------------------------------------------------
 
 #ifndef LOG_H
 #define LOG_H
@@ -20,6 +20,10 @@
 #include "aTypes.h"
 #include "board.h"
 #include "moveList.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 enum {
     eLogEmerg,
@@ -76,4 +80,8 @@ void LogBoard(int level, BoardT *board);
 
 #endif // ifdef ENABLE_DEBUG_LOGGING
 
-#endif /* LOG_H */
+#ifdef __cplusplus
+}
+#endif
+
+#endif // LOG_H

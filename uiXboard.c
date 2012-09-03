@@ -139,6 +139,41 @@ static void xboardEditPosition(BoardT *board, SwitcherContextT *sw)
     }
 }
 
+static void xboardInit(GameT *ignore)
+{
+    static bool initialized;
+    if (initialized)
+    {
+	return;
+    }
+
+    // Set unbuffered I/O (obviously necessary for output, also necessary for
+    // input if we want to poll() correctly.)
+    setbuf(stdout, NULL);
+    setbuf(stdin, NULL);
+
+    // In practice, with a normal search, we search at least depth 15 in
+    // the (extreme) endgame.
+    gVars.maxLevel = NO_LIMIT;
+    initialized = true;
+}
+
+void processXboardCommand(void)
+{
+    struct sigaction ignoreSig;
+    int err;
+
+    // We are definitely doing xboard.  So do some xboard-specific
+    // stuff. ... such as ignoring SIGINT.  Also switch to uiXboard
+    // if we have not already.
+    xboardInit(NULL);
+    memset(&ignoreSig, 0, sizeof(struct sigaction));
+    ignoreSig.sa_flags = SA_RESTART;
+    ignoreSig.sa_handler = SIG_IGN;
+    err = sigaction(SIGINT, &ignoreSig, NULL);
+    assert(err == 0);
+    gUI = uiXboardOps();
+}
 
 // This runs as a coroutine with the main thread, and can switch off to it
 // at any time.  If it simply exits, it will immediately be called again.
@@ -150,7 +185,6 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
     int64 i64;
     BoardT *board = &game->savedBoard; // shorthand.
     BoardT tmpBoard;
-    struct sigaction ignoreSig;
 
     // Move-related stuff.
     MoveT myMove;
@@ -169,8 +203,8 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 
     if (matches(inputStr, "uci"))
     {
-	// Special case.  Switch to UCI interface.
-	gUI = uiUciInit();
+        // Special case.  Switch to UCI interface.
+	return processUciCommand();
     }
 
     // Ignore certain commands...
@@ -209,13 +243,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 
     else if (matches(inputStr, "xboard"))
     {
-	// We are definitely doing xboard.  So do some xboard-specific
-	// stuff. ... such as ignoring SIGINT.
-	memset(&ignoreSig, 0, sizeof(struct sigaction));
-	ignoreSig.sa_flags = SA_RESTART;
-	ignoreSig.sa_handler = SIG_IGN;
-	err = sigaction(SIGINT, &ignoreSig, NULL);
-	assert(err == 0);
+	processXboardCommand();
     }
 
     else if (sscanf(inputStr, "protover %d", &protoVersion) == 1 &&
@@ -613,9 +641,9 @@ static void xboardNotifyPV(GameT *game, PvRspArgsT *pvArgs)
 	   pvArgs->stats.nodes, mySanString);
 }
 
-int xboardShouldCommitMoves(void)
+static bool xboardShouldCommitMoves(void)
 {
-    return 1;
+    return true;
 }
 
 static void xboardNotifyComputerStats(GameT *game, CompStatsT *stats) { }
@@ -624,37 +652,28 @@ static void xboardNoop(void) { }
 static void xboardStatusDraw(GameT *game) { }
 static void xboardNotifyTick(GameT *game) { }
 
-static UIFuncTableT xboardUIFuncTable =
+UIFuncTableT *uiXboardOps(void)
 {
-    .playerMove = xboardPlayerMove,
-    .boardRefresh = xboardBoardRefresh,
-    .exit = xboardNoop,
-    .statusDraw = xboardStatusDraw,
-    .notifyTick = xboardNotifyTick,
-    .notifyMove = xboardNotifyMove,
-    .notifyError = xboardNotifyError,
-    .notifyPV = xboardNotifyPV,
-    .notifyThinking = xboardNoop,
-    .notifyPonder = xboardNoop,
-    .notifyReady = xboardNoop,
-    .notifyComputerStats = xboardNotifyComputerStats,
-    .notifyDraw = xboardNotifyDraw,
-    .notifyCheckmated = xboardNotifyCheckmated,
-    .notifyResign = xboardNotifyResign,
-    .shouldCommitMoves = xboardShouldCommitMoves
-};
-
-
-UIFuncTableT *uiXboardInit(void)
-{
-    // Set unbuffered I/O (obviously necessary for output, also necessary for
-    // input if we want to poll() correctly.)
-    setbuf(stdout, NULL);
-    setbuf(stdin, NULL);
-
-    // In practice, with a normal search, we search at least depth 15 in
-    // the (extreme) endgame.
-    gVars.maxLevel = NO_LIMIT;
+    static UIFuncTableT xboardUIFuncTable =
+    {
+	.init = xboardInit,
+	.playerMove = xboardPlayerMove,
+	.boardRefresh = xboardBoardRefresh,
+	.exit = xboardNoop,
+	.statusDraw = xboardStatusDraw,
+	.notifyTick = xboardNotifyTick,
+	.notifyMove = xboardNotifyMove,
+	.notifyError = xboardNotifyError,
+	.notifyPV = xboardNotifyPV,
+	.notifyThinking = xboardNoop,
+	.notifyPonder = xboardNoop,
+	.notifyReady = xboardNoop,
+	.notifyComputerStats = xboardNotifyComputerStats,
+	.notifyDraw = xboardNotifyDraw,
+	.notifyCheckmated = xboardNotifyCheckmated,
+	.notifyResign = xboardNotifyResign,
+	.shouldCommitMoves = xboardShouldCommitMoves
+    };
 
     return &xboardUIFuncTable;
 }

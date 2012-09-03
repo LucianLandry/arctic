@@ -1,7 +1,7 @@
 //--------------------------------------------------------------------------
-//                playloop.h - main loop and support routines.
+//                     MainWindow.h - main JUCE window
 //                           -------------------
-//  copyright            : (C) 2008 by Lucian Landry
+//  copyright            : (C) 2012 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
 //--------------------------------------------------------------------------
 
@@ -14,23 +14,24 @@
 //
 //--------------------------------------------------------------------------
 
-#ifndef PLAYLOOP_H
-#define PLAYLOOP_H
+#ifndef MAINWINDOW_H
+#define MAINWINDOW_H
 
-#include "game.h"
-#include "thinker.h"
+#include "juce_gui_basics/juce_gui_basics.h" // juce::DocumentWindow
+#include "MainComponent.h"
+#include "MainMenuBarModel.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+class MainWindow : public juce::DocumentWindow
+{
+public:
+    MainWindow();
+    ~MainWindow();
+    // must override since juce:DocumentWindow::closeButtonPressed() is a noop
+    void closeButtonPressed();
+    // void resized(); // override
+private:
+    MainMenuBarModel mmbm;
+    MainComponent mc;
+};
 
-// Synchronous move-now support.
-void PlayloopCompMoveNowAndSync(GameT *game, ThinkContextT *th);
-// Main play loop.
-void PlayloopRun(GameT *game, ThinkContextT *th);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif // PLAYLOOP_H
+#endif // MAINWINDOW_H

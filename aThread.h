@@ -19,6 +19,10 @@
 
 #include <semaphore.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Base class.  Meant to be opaque.
 typedef struct {
     sem_t *mySem; // used for sync.
@@ -46,5 +50,8 @@ void ThreadCreate(void *childFunc, void *args);
 // 'args' must be the same arguments passed to 'childFunc' above.
 void ThreadNotifyCreated(char *name, void *args);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif // ATHREAD_H

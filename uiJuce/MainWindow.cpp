@@ -1,10 +1,8 @@
 //--------------------------------------------------------------------------
-//
-//                  aSystem.h - system platform utilities.
+//                     MainWindow.cpp - main JUCE window
 //                           -------------------
 //  copyright            : (C) 2012 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
-//
 //--------------------------------------------------------------------------
 
 //--------------------------------------------------------------------------
@@ -16,21 +14,32 @@
 //
 //--------------------------------------------------------------------------
 
-#ifndef ASYSTEM_H
-#define ASYSTEM_H
+#include <stdio.h>
 
-#include "aTypes.h" // int64 etc.
+#include "ref.h" // MIN()
+#include "MainWindow.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+using namespace juce;
 
-void SystemEnableCoreFile(void);
-int64 SystemTotalMemory(void);
-int SystemTotalProcessors(void);
-
-#ifdef __cplusplus
+MainWindow::MainWindow()
+    : DocumentWindow (JUCEApplication::getInstance()->getApplicationName(),
+                      Colours::lightgrey,
+                      DocumentWindow::allButtons)
+{
+    centreWithSize (500, 400);
+    setContentNonOwned(&mc, false);
+    setResizable(true, false);
+    setMenuBar(&mmbm);
+    setVisible(true);
 }
-#endif
 
-#endif // ASYSTEM_H
+MainWindow::~MainWindow()
+{
+    printf("bldbg:MainWindow::~MainWindow()\n");
+    setMenuBar(0);
+}
+
+void MainWindow::closeButtonPressed()
+{
+    JUCEApplication::getInstance()->systemRequestedQuit();
+}
