@@ -150,53 +150,70 @@ void PlayloopRun(GameT *game, ThinkContextT *th)
 {
     struct pollfd pfds[2];
     int res;
-    int pollTimeout;
-    int moveNowOnTimeout; // bool.
+
+    int tickTimeout, moveNowTimeout, pollTimeout;
+    bool moveNowOnTimeout;
     bigtime_t myTime, myPerMoveTime;
     int turn;
 
-    /* setup the pollfd array. */
+    // Setup the pollfd array.
     pfds[0].fd = fileno(stdin);
     pfds[0].events = POLLIN;
     pfds[1].fd = th->masterSock;
     pfds[1].events = POLLIN;
 
-    while(1)
+    while (1)
     {
+	tickTimeout = -1;
+	moveNowTimeout = -1;
 	pollTimeout = -1;
 	turn = game->savedBoard.turn;
-	moveNowOnTimeout = 0;
+	moveNowOnTimeout = false;
 	myTime = ClockGetTime(game->clocks[turn]);
 	myPerMoveTime = ClockGetPerMoveTime(game->clocks[turn]);
 	myTime = MIN(myTime, myPerMoveTime);
 
-	if (ClockIsRunning(game->clocks[turn]) &&
+	// In ClocksICS mode, the clock will run on the first move even though
+	// we would rather it not.  Making it run makes the time recalc in the
+	// poll loop much more robust (since many things might happen to the
+	// clock in the meanwhile).
+	// But, it means we should skip any tick notification.
+	if (!ClocksICS(game) &&
+	    ClockIsRunning(game->clocks[turn]) &&
 	    myTime != CLOCK_TIME_INFINITE)
 	{
 	    // Try to keep the UI time display refreshed.
 
 	    // Start by finding usec until next tick.
-	    pollTimeout =
+	    tickTimeout =
 		(myTime < 0 ?
 		 // Avoid machine-dependent behavior of / and % w/negative
 		 // numbers.
 		 1000000 - (llabs(myTime) % 1000000) :
 		 myTime % 1000000); // normal case (positive)
 
-	    pollTimeout /= 1000; // ... converted to msec
-	    pollTimeout += 1; // ... and adjusted for division truncation
-
-	    // Do we need to move before the next polltimeout?
-	    if (game->control[turn] &&
-		game->goalTime[turn] != CLOCK_TIME_INFINITE &&
-		(myTime - game->goalTime[turn]) / 1000 < pollTimeout)
-	    {
-		// Yes.
-		moveNowOnTimeout = 1;
-		pollTimeout = (myTime - game->goalTime[turn]) / 1000;
-		pollTimeout = MAX(pollTimeout, 0);
-	    }
+	    tickTimeout /= 1000; // ... converted to msec
+	    tickTimeout += 1; // ... and adjusted for division truncation
 	}
+
+	// The computer cannot currently decide for itself when to move, so
+	// we decide for it.
+	if (ClockIsRunning(game->clocks[turn]) &&
+	    game->control[turn] &&
+	    game->goalTime[turn] != CLOCK_TIME_INFINITE)
+	{
+	    // Yes.
+	    moveNowTimeout = (myTime - game->goalTime[turn]) / 1000;
+	    moveNowTimeout = MAX(moveNowTimeout, 0);	    
+
+	    moveNowOnTimeout = tickTimeout == -1 || moveNowTimeout < tickTimeout;
+	}
+
+	pollTimeout =
+	    tickTimeout != -1 && moveNowTimeout != -1 ?
+	    MIN(tickTimeout, moveNowTimeout) :
+	    tickTimeout != -1 ? tickTimeout :
+	    moveNowTimeout;
 
 	// poll for input from either stdin (UI), or the computer, or timeout.
 	res = poll(pfds, 2, pollTimeout);

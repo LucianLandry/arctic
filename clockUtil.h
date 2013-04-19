@@ -27,6 +27,7 @@ extern "C" {
 void ClocksReset(GameT *game);
 void ClocksStop(GameT *game);
 void ClocksPrint(GameT *game, char *context);
+bool ClocksICS(GameT *game);
 void GoaltimeCalc(GameT *game);
 bigtime_t getBigTime(void);
 

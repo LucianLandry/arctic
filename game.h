@@ -43,6 +43,8 @@ typedef struct {
     ClockT origClocks[NUM_PLAYERS]; // Clocks are reset to these values at
                                     // beginning of new game.  This can be set
                                     // w/out affecting saveGame's start clocks.
+    bool icsClocks;  // Are we in 'icsMode', where clocks do not start ticking
+                     // (or have increments applied) until the 2nd move?
 
     // Computer only: time we want to move at.  For instance if == 30000000,
     // we want to move when there is 30 seconds left on our clock.

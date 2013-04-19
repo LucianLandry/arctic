@@ -95,6 +95,9 @@ xboard -size bulky -ncp
 # play arctic against older version
 xboard -size bulky -defaultHashSize 508 -debug -debugFile ~/xboard.debug -thinking -xponder -mode TwoMachines -scp ./arctic -fcp ../../arcticExe/arctic10
 
+# play arctic against older version (white)
+xboard -size bulky -defaultHashSize 508 -debug -debugFile ~/xboard.debug -thinking -xponder -mode TwoMachines -fcp ./arctic -scp ../../arcticExe/arctic10
+
 # play human on FICS
 xboard -size bulky -ics -icshost freechess.org # no timeseal
 xboard -size bulky -ics -icshost 69.36.243.188 -icshelper timeseal.Linux

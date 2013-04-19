@@ -356,6 +356,12 @@ void ClocksPrint(GameT *game, char *context)
 }
 
 
+// Syntactic sugar.
+bool ClocksICS(GameT *game)
+{
+    return game->icsClocks && game->savedBoard.ply < 2;
+}
+
 // Expected number of moves in a game.  Actually a little lower, as this is
 // biased toward initial moves.  The idea is that we would rather have less
 // time at the end to think about a won position than more time to think about
@@ -365,6 +371,10 @@ void ClocksPrint(GameT *game, char *context)
 // lag, in usec (however, normally we rely on timeseal to compensate for
 // network lag)
 #define MIN_TIME 500000
+// The clock doesn't run on the first move in an ICS game.
+// But as a courtesy, refuse to think over 5 seconds (unless our clock has
+// infinite time anyway)
+#define ICS_FIRSTMOVE_LIMIT 5000000
 void GoaltimeCalc(GameT *game)
 {
     int turn = game->savedBoard.turn;
@@ -382,9 +392,14 @@ void GoaltimeCalc(GameT *game)
     myInc = ClockGetInc(myClock);
 
     safeMoveLimit =
-	myPerMoveLimit == CLOCK_TIME_INFINITE ?
-	myPerMoveLimit :
-	MAX(myPerMoveLimit - MIN_TIME, 0);
+	myPerMoveLimit == CLOCK_TIME_INFINITE ?	CLOCK_TIME_INFINITE :
+	myPerMoveLimit - MIN_TIME;	
+
+    if (ClocksICS(game))
+    {
+	safeMoveLimit = MIN(safeMoveLimit, ICS_FIRSTMOVE_LIMIT);
+    }
+    safeMoveLimit = MAX(safeMoveLimit, 0);
 
     // Degenerate case.
     if (ClockIsInfinite(myClock))
@@ -392,7 +407,7 @@ void GoaltimeCalc(GameT *game)
 	game->goalTime[turn] =
 	    myPerMoveLimit == CLOCK_TIME_INFINITE ?
 	    CLOCK_TIME_INFINITE :
-	    myTime - safeMoveLimit;
+	    safeMoveLimit;
 	return;
     }
 
@@ -417,7 +432,6 @@ void GoaltimeCalc(GameT *game)
 		 0);
 
 	calcTime += (ClockGetStartTime(myClock) * numIncs) / GAME_NUM_MOVES;
-
 	// However, say we have :30 on the clock, 10 moves to make, and a one-
 	// minute increment every two moves.  We want to burn only :15.
 	altCalcTime = safeTime / MIN(GAME_NUM_MOVES,
@@ -431,6 +445,8 @@ void GoaltimeCalc(GameT *game)
     {
 	numIncs = GAME_NUM_MOVES - 1;
 	calcTime += (myInc * numIncs) / GAME_NUM_MOVES;
+	// Fix cases like 10 second start time, 22 second increment
+	calcTime = MIN(calcTime, safeTime);
     }
 
     // Do not think over any per-move limit.

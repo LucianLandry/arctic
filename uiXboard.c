@@ -56,12 +56,14 @@ static struct {
 #define ENGINE_CLOCK (&game->actualClocks[1])
 
 
+#if 0 // not needed, presently
 // bool, and hopefully self-explanatory.  The "force mode" definition is
 // more or less given in the documentation for the "force" command.
 static int inForceMode(GameT *game)
 {
     return !game->control[0] && !game->control[1];
 }
+#endif
 
 
 static void xboardNotifyError(char *reason)
@@ -192,6 +194,11 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
     // These are for time controls.
     int centiSeconds, mps;
     char baseStr[20];
+
+    // Other various commands' vars.
+    char icsStr[255];
+    int ourRating, oppRating;
+
     int base;
     bigtime_t baseTime = 0;
     int inc, perMoveLimit;
@@ -214,10 +221,6 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 	     matches(inputStr, "draw") ||
 	     matches(inputStr, "hint") ||
 	     matches(inputStr, "name") ||
-	     // ('rating' could be useful to implement when determining how
-	     //  to evaluate a draw.)
-	     matches(inputStr, "rating") ||
-	     matches(inputStr, "ics") ||
 	     matches(inputStr, "computer"))
     {
 	LOG_DEBUG("ignoring cmd: %s", inputStr);
@@ -252,7 +255,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 	// Note: we do not care if these features are accepted or rejected.
 	// We try to handle all input as well as possible.
 	printf("feature analyze=0 myname=arctic%s.%s-%s variants=normal "
-	       "colors=0 ping=1 setboard=1 memory=%d done=1\n",
+	       "colors=0 ping=1 setboard=1 memory=%d done=1 debug=1 ics=1\n",
 	       VERSION_STRING_MAJOR, VERSION_STRING_MINOR,
 	       VERSION_STRING_PHASE, !gPreCalc.userSpecifiedHashSize);
     }
@@ -510,6 +513,25 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 	gXboardState.post = 0;
     }
 
+    else if (sscanf(inputStr, "rating %d %d", &ourRating, &oppRating) == 2)
+    {
+	// 'rating' could be useful to implement when determining how
+	// to evaluate a draw.  However, right now I only use it to force
+	// ICS mode as a backup for when the xboard UI does not understand the
+	// "ics" command.
+	game->icsClocks = 1;
+    }
+
+    else if (sscanf(inputStr, "ics %20s", icsStr) == 1)
+    {
+	// Turn this on iff not playing against a local opponent.
+	// Assuming for now that every ICS server we care about (namely, FICS)
+	// does the funky "clocks do not start ticking on the first move, and
+	// no increment is applied after the first move" thing.  If some servers
+	// differ (ICC?) then we'll just have to adjust.
+	game->icsClocks = strcmp(icsStr, "-");
+    }
+
     else if (sscanf(inputStr, "memory %"PRId64, &i64) == 1)
     {
 	// If user overrode, it cannot be set here.
@@ -564,11 +586,14 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 
 	gXboardState.newgame = 0;
 	gVars.ponder = gXboardState.ponder;
+#if 0 // I think GameMoveCommit takes care of this, and in any case,
+      // would override it.
 	if (!inForceMode(game))
 	{
 	    ClockStop(OPPONENT_CLOCK);
 	    ClockStart(ENGINE_CLOCK);
 	}
+#endif
 	GameMoveCommit(game, &myMove, th, 0);
     }
 

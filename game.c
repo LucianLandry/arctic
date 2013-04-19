@@ -25,6 +25,7 @@
 #include "switcher.h"
 #include "transTable.h"
 #include "ui.h"
+#include <stdio.h> // debug
 
 // Helper function.
 // Assume a change in thinking is necessary.
@@ -116,8 +117,18 @@ void GameMoveMake(GameT *game, MoveT *move)
 	LOG_DEBUG("making move (%d %d): ",
 		  board->ply >> 1, turn);
 	LogMove(eLogDebug, board, move);
-	BoardMoveMake(board, move, NULL);
-	ClockApplyIncrement(myClock, board->ply);
+
+	if (ClocksICS(game)) // have to check this before we make the move
+	{
+	    BoardMoveMake(board, move, NULL);
+	    // normally would expect this to trigger on plies 1 and 2.
+	    ClockReset(myClock); // pretend like nothing happened to the clock
+	}
+	else
+	{
+	    BoardMoveMake(board, move, NULL);
+	    ClockApplyIncrement(myClock, board->ply);
+	}
 	SaveGameMoveCommit(&game->sgame, move, ClockGetTime(myClock));
 	
         // switched sides to another player.
