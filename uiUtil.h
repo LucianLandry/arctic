@@ -28,31 +28,24 @@
 extern "C" {
 #endif
 
+static inline char AsciiFile(cell_t coord)
+{
+    return File(coord) + 'a';
+}
+
+static inline char AsciiRank(cell_t coord)
+{
+    return Rank(coord) + '1';
+}
+
 // Piece conversion routines.
 int asciiToNative(uint8 ascii);
 int nativeToAscii(uint8 piece);
 int nativeToBoardAscii(uint8 piece);
 
-#define AsciiFile(coord) (File(coord) + 'a')
-#define AsciiRank(coord) (Rank(coord) + '1')
-
 // Given input like 'a1', returns something like '0'
 // (or FLAG, if not a sensible coord)
 int asciiToCoord(char *inputStr);
-
-// Converts a move into (extended) human-readable format.
-// Returns 'result' (should be at least 6 bytes in length).
-char *moveToStr(char *result, MoveT *move);
-// Returns 'result' (should be at least 11 bytes in length).
-char *moveToFullStr(char *result, MoveT *move);
-
-// Writes out moves in SAN (Nf3) if 'useSan' == true,
-// otherwise long algebraic notation (g1f3) is used.
-// Iff 'chopFirst' is true, the first move is not written (but still checked for
-// legality).
-// Returns the number of moves successfully converted.
-int buildMoveString(char *dstStr, int dstLen, PvT *pv, BoardT *board,
-		    bool useSan, bool chopFirst);
 
 #define FEN_STARTSTRING \
     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -72,11 +65,16 @@ int reportError(int silent, char *errorFormatStr, ...)
 // Stop everything (including clocks) and wait for further input, basically.
 void setForceMode(ThinkContextT *th, GameT *game);
 
+// Token support routines.
+char *findNextNonWhiteSpace(char *pStr);
+char *findNextWhiteSpace(char *pStr);
+char *findNextWhiteSpaceOrNull(char *pStr);
+
 // Return whether or not 'inputStr' looks like a move.
 // NULL "inputStr"s are not moves.
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation.
-bool isMove(char *inputStr, MoveT *resultMove);
+bool isMove(char *inputStr, MoveT *resultMove, BoardT *board);
 
 // Return whether or not 'inputStr' looks like a legal move.
 // NULL "inputStr"s are not legal moves.

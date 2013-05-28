@@ -28,12 +28,14 @@
 #include "comp.h" // CompCurrentLevel()
 #include "conio.h"
 #include "gDynamic.h"
+#include "gPreCalc.h"
 #include "log.h"
+#include "pv.h"
 #include "saveGame.h"
 #include "transTable.h"
 #include "ui.h"
 #include "uiUtil.h"
-
+#include "variant.h"
 
 #define SYSTEMCOL       GREEN
 #define TICKCOL         BLUE
@@ -59,7 +61,6 @@ static void UIPrintBoardStatus(BoardT *board)
 {
     // all shorthand.
     int ncheck = board->ncheck[board->turn];
-    int cbyte = board->cbyte;
     int ebyte = board->ebyte;
 
     textcolor(LIGHTGRAY);
@@ -67,10 +68,10 @@ static void UIPrintBoardStatus(BoardT *board)
     // print castle status.
     gotoxy(OPTIONS_X, 14);
     cprintf("castle QKqk: %c%c%c%c",
-	    cbyte & WHITEQCASTLE ? 'y' : 'n',
-	    cbyte & WHITEKCASTLE ? 'y' : 'n',
-	    cbyte & BLACKQCASTLE ? 'y' : 'n',
-	    cbyte & BLACKKCASTLE ? 'y' : 'n');
+	    BoardCanCastleOOO(board, 0) ? 'y' : 'n',
+	    BoardCanCastleOO(board, 0)  ? 'y' : 'n',
+	    BoardCanCastleOOO(board, 1) ? 'y' : 'n',
+	    BoardCanCastleOO(board, 1)  ? 'y' : 'n');
 
     // print en passant status.
     gotoxy(OPTIONS_X, 15);
@@ -170,10 +171,11 @@ static void UINotifyPV(GameT *game, PvRspArgsT *pvArgs)
     char evalString[20];
     int len;
     PvT *pv = &pvArgs->pv; // shorthand.
+    MoveStyleT pvStyle = {mnSAN, csOO, true};
 
     // Get a suitable string of moves to print.
-    if (buildMoveString(mySanString, sizeof(mySanString), pv, &game->savedBoard,
-			true, false) < 1)
+    if (PvBuildMoveString(pv, mySanString, sizeof(mySanString), &pvStyle,
+			  &game->savedBoard) < 1)
     {
 	return;
     }
@@ -593,6 +595,7 @@ static void UIEditPosition(BoardT *board)
     int c, chr, i;
     int *coord = &gBoardIf.cursCoord; // shorthand.
     char validChars[] = "WwEeCcDdSs PpRrNnBbQqKk";
+
     int cbyte; // tmpvars
 
     UIEditOptionsDraw();
@@ -637,23 +640,14 @@ static void UIEditPosition(BoardT *board)
 	    case 'C':
 	    case 'c':
 		cbyte = board->cbyte;
-		/* (possibly) set cbyte. */
-		switch(*coord)
+		// (possibly) set cbyte.
+		if (~gPreCalc.castleMask[*coord])
 		{
-		case 0:
-		    cbyte |= WHITEQCASTLE; break;
-		case 4:
-		    cbyte |= (WHITEQCASTLE | WHITEKCASTLE); break;
-		case 7:
-		    cbyte |= WHITEKCASTLE; break;
-		case 56:
-		    cbyte |= BLACKQCASTLE; break;
-		case 60:
-		    cbyte |= (BLACKQCASTLE | BLACKKCASTLE); break;
-		case 63:
-		    cbyte |= BLACKKCASTLE; break;
-		default:
-		    cbyte = 0; break;
+		    cbyte |= ~gPreCalc.castleMask[*coord];
+		}
+		else
+		{
+		    cbyte = 0;
 		}
 		BoardCbyteSet(board, cbyte);
 		break;
@@ -853,7 +847,7 @@ static void UIGetCommand(uint8 command[], GameT *game)
 	}
 	if (c == ENTER && gettingsrc)
 	{
-            // ignore attempts to set a blank src
+            // (ignore attempts to set a blank src)
 	    if (board->coord[*coord])
 	    {
 		command[0] = *coord;
@@ -1010,17 +1004,18 @@ static void UINotifyResign(int turn)
 }
 
 
-static void UIMovelistShow(MoveListT *mvlist)
+static void UIMovelistShow(MoveListT *mvlist, BoardT *board)
 {
     int i;
-    char result[15];
+    char result[MOVE_STRING_MAX];
+    MoveStyleT msUI = {mnSAN, csOO, true};
 
     textcolor(SYSTEMCOL);
     gotoxy(1, 1);
 
     for (i = 0; i < mvlist->lgh; i++)
     {
-	cprintf("%s ", moveToFullStr(result, &mvlist->moves[i]));
+	cprintf("%s ", MoveToString(result, mvlist->moves[i], &msUI, board));
     }
     UIBarf("possible moves.");
 }
@@ -1190,7 +1185,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     mlistGenerate(&movelist, board, 0);
     if (comstr[0] == 'G')	/* display moves */
     {
-	UIMovelistShow(&movelist);
+	UIMovelistShow(&movelist, board);
 	UIBoardDraw();
 	UITicksDraw();
 	UIOptionsDraw(game);
@@ -1203,6 +1198,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     /* Suppose we have a valid move.  Can we find it in the movelist? */
     myMove.src = comstr[0];
     myMove.dst = comstr[1];
+    MoveUnmangleCastle(&myMove, board);
 
     /* search movelist for comstr */
     if ((foundMove = mlistSearch(&movelist, &myMove, 2)) == NULL)
@@ -1216,8 +1212,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     ThinkerCmdBail(th);
 
     /* Do we need to promote? */
-    if (ISPAWN(board->coord[myMove.src]) &&
-	(myMove.dst > 55 || myMove.dst < 8))
+    if (MoveIsPromote(myMove, board))
     {
 	while ((chr = UIBarf("Promote piece to (q, r, b, n)? >")) != 'q' &&
 	       chr != 'r' && chr != 'b' && chr != 'n')
@@ -1241,7 +1236,7 @@ static bool UIShouldCommitMoves(void)
     return true;
 }
 
-static void UINotifyMove(MoveT *move) { }
+static void UINotifyMove(MoveT move) { }
 
 static UIFuncTableT myUIFuncTable =
 {

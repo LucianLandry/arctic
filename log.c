@@ -23,6 +23,7 @@
 
 int gLogLevel = eLogNormal;
 static FILE *gLogFile = NULL;
+static const MoveStyleT gMoveStyleLog = { mnCAN, csK2, true};
 
 void LogInit(void)
 {
@@ -58,11 +59,10 @@ int LogPrint(int level, const char *format, ...)
     return rv;
 }
 
-
 // debugging funcs.
 void LogMoveList(int level, MoveListT *mvlist)
 {
-    char tmpStr[6];
+    char tmpStr[MOVE_STRING_MAX];
     int i;
     if (level > gLogLevel)
     {
@@ -73,7 +73,7 @@ void LogMoveList(int level, MoveListT *mvlist)
 	     mvlist->lgh, mvlist->insrt, mvlist->capOnly);
     for (i = 0; i < mvlist->lgh; i++)
     {
-	LogPrint(level, "%s ", moveToStr(tmpStr, &mvlist->moves[i]));
+	LogPrint(level, "%s ", MoveToString(tmpStr, mvlist->moves[i], &gMoveStyleLog, NULL));
     }
     LogPrint(level, "}\n");
 }
@@ -88,7 +88,7 @@ void LogMove(int level, BoardT *board, MoveT *move)
     char chkstr[10];
     char levelstr[160];
     char *myLevelstr;
-    char tmpStr[6];
+    char tmpStr[MOVE_STRING_MAX];
 
     if (level > gLogLevel)
     {
@@ -122,7 +122,7 @@ void LogMove(int level, BoardT *board, MoveT *move)
     }
     LogPrint(level, "%s%s%s%s%s\n",
 	     levelstr,
-	     moveToStr(tmpStr, move),
+	     MoveToString(tmpStr, *move, &gMoveStyleLog, NULL),
 	     capstr, promostr, chkstr);
 }
 
@@ -153,9 +153,9 @@ void LogBoard(int level, BoardT *board)
 void LogMoveShow(int level, BoardT *board, MoveT *move, char *caption)
 {
     int ascii, i, j;
-    char tmpStr[6];
+    char tmpStr[MOVE_STRING_MAX];
 
-    LogPrint(level, "%s:\nMove was %s\n", caption, moveToStr(tmpStr, move));
+    LogPrint(level, "%s:\nMove was %s\n", caption, MoveToString(tmpStr, *move, &gMoveStyleLog, NULL));
 
     for (i = 7; i >= 0; i--)
     {

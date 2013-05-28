@@ -22,6 +22,7 @@
 #include "thinker.h"
 #include "board.h"
 #include "position.h"
+#include "pv.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -58,14 +59,6 @@ void gPvUpdate(PvT *goodPv);
 void gPvDecrement(MoveT *move);
 void gPvRewind(int numPlies);
 void gPvFastForward(int numPlies);
-
-// I do not have a better place to put these right now.  FIXME?
-void PvInit(PvT *pv);
-void PvDecrement(PvT *pv, MoveT *move);
-void PvRewind(PvT *pv, int numPlies);
-void PvFastForward(PvT *pv, int numPlies);
-
-void CvInit(CvT *cv);
 
 #ifdef __cplusplus
 }

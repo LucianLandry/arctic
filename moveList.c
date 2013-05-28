@@ -15,13 +15,15 @@
 //--------------------------------------------------------------------------
 
 #include <assert.h>
-#include <string.h>
 #include <stdlib.h>
-#include "moveList.h"
-#include "gPreCalc.h"
+#include <string.h>
+
 #include "gDynamic.h"
+#include "gPreCalc.h"
 #include "log.h"
+#include "moveList.h"
 #include "uiUtil.h"
+#include "variant.h"
 
 typedef union {    // stores pin info.
     uint64 ll[8];
@@ -45,6 +47,7 @@ static int nopose(uint8 *coord, int src, int dest, int hole)
 // checks to see if there are any occupied squares between src and dest.
 // returns: 0 if blocked, 1 if nopose.  Note:  doesn't check if dir == DIRFLAG
 // (none) or 8 (knight attack), so shouldn't be called in that case.
+// Also does not check if src == dst.
 {
     int dir = gPreCalc.dir[src] [dest];
     uint8 *to = gPreCalc.moves[dir] [src];
@@ -59,7 +62,6 @@ static int nopose(uint8 *coord, int src, int dest, int hole)
     }
     return 1; // notice we always hit dest before we hit end of list.
 }
-
 
 // These need -O2 to win, probably.
 // Return the 'to' coordinate if a given move results in a check, or FLAG
@@ -92,18 +94,28 @@ static int nopose(uint8 *coord, int src, int dest, int hole)
      gPreCalc.dir[from] [dc] == gPreCalc.dir[to] [dc] ? FLAG : \
      (dc))
 
-
-// Hopefully, 'promote' can be optimized out in the fast case.
-static inline int isPreferredMove(BoardT *board, int from, int to, int dc,
-				  int chk, int promote)
+static inline bool HistoryWindowHit(BoardT *board, int from, int to)
 {
-    // capture, promo, check, or history move w/ depth?  Want good spot.
-    return board->coord[to] || promote || dc != FLAG || chk != FLAG ||
-	(board->level - board->depth > 1 &&
-	 abs(gVars.hist[board->turn] [from] [to]
-	     - board->ply) < gVars.hiswin);
+    return
+	board->level - board->depth > 1 && // disable when quiescing.
+	abs(gVars.hist[board->turn] [from] [to]	- board->ply) < gVars.hiswin;
 }
 
+// Does not take promotion or castling into account.
+static inline bool isPreferredMoveFast(BoardT *board, int from, int to, int dc,
+				       int chk)
+{
+    // capture, promo, check, or history move w/ depth?  Want good spot.
+    return board->coord[to] || dc != FLAG || chk != FLAG ||
+	HistoryWindowHit(board, from, to);
+}
+
+static inline bool isPreferredMove(BoardT *board, int from, int to, int dc,
+				   int chk, int promote)
+{
+    return (from != to && board->coord[to]) || promote || dc != FLAG ||
+	chk != FLAG || HistoryWindowHit(board, from, to);
+}
 
 // optimization thoughts:
 // -- change mvlist structure to get rid of memcpy() (separate insert list)
@@ -112,13 +124,13 @@ static inline int isPreferredMove(BoardT *board, int from, int to, int dc,
 //    all our moves are "preferred".
 
 // unconditional add.  Better watch...
-static void addmove(MoveListT *mvlist, BoardT *board, int from, int to,
-		    int dc, int chk)
+static void addMoveFast(MoveListT *mvlist, BoardT *board, int from, int to,
+			int dc, int chk)
 {
     MoveT *move;
 
     assert(mvlist->lgh != MLIST_MAX_MOVES);
-    if (isPreferredMove(board, from, to, dc, chk, 0))
+    if (isPreferredMoveFast(board, from, to, dc, chk))
     {
 	// capture, promo, check, or history move w/ depth?  Want good spot.
 	mvlist->moves[mvlist->lgh++] =
@@ -140,9 +152,9 @@ static void addmove(MoveListT *mvlist, BoardT *board, int from, int to,
 
 
 // A slightly slower version of the above that takes the possibility of
-// promotion into consideration.
-static void addmovePromote(MoveListT *mvlist, BoardT *board, int from,
-			   int to, int promote, int dc, int chk)
+// promotion and castling into consideration.
+static void addMove(MoveListT *mvlist, BoardT *board, int from, int to,
+		    int promote, int dc, int chk)
 {
     MoveT *move;
 
@@ -166,51 +178,41 @@ static void addmovePromote(MoveListT *mvlist, BoardT *board, int from,
 
 void mlistMoveAdd(MoveListT *mvlist, BoardT *board, MoveT *move)
 {
-    addmovePromote(mvlist, board, move->src, move->dst, move->promote,
-		   FLAG, move->chk);
+    addMove(mvlist, board, move->src, move->dst, move->promote,
+	    FLAG, move->chk);
 }
 
 
 // An even slower version that calculates whether a piece gives check on the
-// fly.
-static void addmoveCalcChk(MoveListT *mvlist, BoardT *board, int from,
+// fly.  As an optimization, this version also does not support castling!!
+static void addMoveCalcChk(MoveListT *mvlist, BoardT *board, int from,
 			   int to, int promote, int dc)
 {
     int chk, chkpiece;
     int ekcoord = mvlist->ekcoord;
     uint8 *coord = board->coord;
 
-    // See if moving piece actually does any checking.
-    if (ISKING(coord[from]) &&
-	((to - from) & 0x3) == 2) // slower:  abs(to - from) == 2
-	// castling manuever, special case.
+    chkpiece = promote ? promote : board->coord[from];
+    switch(chkpiece | 1)
     {
-	chk = ROOKCHK(coord, (to + from) >> 1, from, ekcoord);
+    case BNIGHT:
+	chk = NIGHTCHK(to, ekcoord);
+	break;
+    case BQUEEN:
+	chk = QUEENCHK(coord, to, from, ekcoord);
+	break;
+    case BBISHOP:
+	chk = BISHOPCHK(coord, to, from, ekcoord);
+	break;
+    case BROOK:
+	chk = ROOKCHK(coord, to, from, ekcoord);
+	break;
+    case BPAWN:
+	chk = PAWNCHK(to, ekcoord, board->turn);
+	break;
+    default : chk = FLAG; // ie, king.
     }
-    else
-    {
-	chkpiece = promote ? promote : board->coord[from];
-	switch(chkpiece | 1)
-	{
-	case BNIGHT:
-	    chk = NIGHTCHK(to, ekcoord);
-	    break;
-	case BQUEEN:
-	    chk = QUEENCHK(coord, to, from, ekcoord);
-	    break;
-	case BBISHOP:
-	    chk = BISHOPCHK(coord, to, from, ekcoord);
-	    break;
-	case BROOK:
-	    chk = ROOKCHK(coord, to, from, ekcoord);
-	    break;
-	case BPAWN:
-	    chk = PAWNCHK(to, ekcoord, board->turn);
-	    break;
-	default : chk = FLAG; // ie, king.
-	}
-    }
-    addmovePromote(mvlist, board, from, to, promote, dc, chk);
+    addMove(mvlist, board, from, to, promote, dc, chk);
 }
 
 
@@ -219,14 +221,14 @@ static void promo(MoveListT *mvlist, BoardT *board, int from, int to,
 // generate all the moves for a promoting pawn.
 {
     uint8 *coord = board->coord;
-    addmovePromote(mvlist, board, from, to, QUEEN | turn, dc,
-		   QUEENCHK(coord, to, from, mvlist->ekcoord));
-    addmovePromote(mvlist, board, from, to, NIGHT | turn, dc,
-		   NIGHTCHK(to, mvlist->ekcoord));
-    addmovePromote(mvlist, board, from, to, ROOK | turn, dc,
-		   ROOKCHK(coord, to, from, mvlist->ekcoord));
-    addmovePromote(mvlist, board, from, to, BISHOP | turn, dc,
-		   BISHOPCHK(coord, to, from, mvlist->ekcoord));
+    addMove(mvlist, board, from, to, QUEEN | turn, dc,
+	    QUEENCHK(coord, to, from, mvlist->ekcoord));
+    addMove(mvlist, board, from, to, NIGHT | turn, dc,
+	    NIGHTCHK(to, mvlist->ekcoord));
+    addMove(mvlist, board, from, to, ROOK | turn, dc,
+	    ROOKCHK(coord, to, from, mvlist->ekcoord));
+    addMove(mvlist, board, from, to, BISHOP | turn, dc,
+	    BISHOPCHK(coord, to, from, mvlist->ekcoord));
 }
 
 
@@ -454,6 +456,30 @@ static int attacked(CoordListT *attList, BoardT *board, int from, int turn,
 }
 
 
+static bool castleAttacked(BoardT *board, int src, int dest)
+// returns: 'true' iff any square between 'src' and 'dest' is attacked,
+// *not* including 'src' (we already presume that is not attacked) but including
+// 'dst'.
+// Note:  doesn't check if dir == DIRFLAG (none) or 8 (knight attack), so shouldn't be called in that case.
+// Also does not check if src == dst.
+{
+    int dir = gPreCalc.dir[src] [dest];
+    uint8 *to = gPreCalc.moves[dir] [src];
+    uint8 turn = board->turn;
+
+    while (1)
+    {
+	if (attacked(NULL, board, *to, turn, turn))
+	    return true; // some sq on the way to dest is occupied.
+	if (*to == dest)
+	    break;
+	to++;
+    }
+    // (we should always hit dest before we hit end of list.)
+    return false;
+}
+
+
 static void cappose(MoveListT *mvlist, BoardT *board, uint8 attcoord,
 		    PinsT *pinlist, int turn, uint8 kcoord,
 		    PinsT *dclist)
@@ -514,7 +540,7 @@ static void cappose(MoveListT *mvlist, BoardT *board, uint8 attcoord,
 		}
 		if (ISPAWN(board->coord[src]) && (dest < 8 || dest > 55))
 		    promo(mvlist, board, src, dest, turn, dc);
-		else addmoveCalcChk(mvlist, board, src, dest, enpassPiece, dc);
+		else addMoveCalcChk(mvlist, board, src, dest, enpassPiece, dc);
 	    }
 	}
 	if (ISNIGHT(board->coord[attcoord]))
@@ -538,18 +564,18 @@ static inline void probe(MoveListT *mvlist, BoardT *board, uint8 *moves,
     for (; (to = *moves) != FLAG; moves++)
     {
 	if ((i = CHECK(coord[to], turn)) > capOnly)
-	    addmove(mvlist, board, from, to, dc,
+	    addMoveFast(mvlist, board, from, to, dc,
 #if 0
-		    gPreCalc.attacks[gPreCalc.dir[to] [ekcoord]]
-		    [mypiece] &&
-		    nopose(coord, to, ekcoord, from) ?
-		    to : FLAG
+			gPreCalc.attacks[gPreCalc.dir[to] [ekcoord]]
+			[mypiece] &&
+			nopose(coord, to, ekcoord, from) ?
+			to : FLAG
 #else
-		    (mypiece == BQUEEN ?
-		     QUEENCHK(coord, to, from, ekcoord) :
-		     mypiece == BBISHOP ?
-		     BISHOPCHK(coord, to, from, ekcoord) :
-		     ROOKCHK(coord, to, from, ekcoord))
+			(mypiece == BQUEEN ?
+			 QUEENCHK(coord, to, from, ekcoord) :
+			 mypiece == BBISHOP ?
+			 BISHOPCHK(coord, to, from, ekcoord) :
+			 ROOKCHK(coord, to, from, ekcoord))
 #endif
 		);
 	if (i != UNOCCD) /* Occupied.  Can't probe further. */
@@ -607,9 +633,9 @@ static void pawnmove(MoveListT *mvlist, BoardT *board, int from, int turn,
 		else
 		{
 		    /* normal capture. */
-		    addmove(mvlist, board, from, to,
-			    CALCDC(dc, from, to),
-			    PAWNCHK(to, mvlist->ekcoord, turn));
+		    addMoveFast(mvlist, board, from, to,
+				CALCDC(dc, from, to),
+				PAWNCHK(to, mvlist->ekcoord, turn));
 		}
 	    }
 
@@ -633,10 +659,10 @@ static void pawnmove(MoveListT *mvlist, BoardT *board, int from, int turn,
 		else if (pawnchk == FLAG && dc2 != FLAG)
 		    pawnchk = dc2;
 
-		addmovePromote(mvlist, board, from, to,
-			       board->coord[board->ebyte],
-			       dc1,
-			       pawnchk);
+		addMove(mvlist, board, from, to,
+			board->coord[board->ebyte],
+			dc1,
+			pawnchk);
 	    }
 	}
     }
@@ -657,42 +683,73 @@ static void pawnmove(MoveListT *mvlist, BoardT *board, int from, int turn,
 	    /* check e2e4-like moves */
 	    if ((from > 47 || from < 16) &&
 		CHECK(coord[(to2 = *(++moves))], turn) == UNOCCD)
-		addmove(mvlist, board, from, to2,
-			CALCDC(dc, from, to2),
-			PAWNCHK(to2, mvlist->ekcoord, turn));
+		addMoveFast(mvlist, board, from, to2,
+			    CALCDC(dc, from, to2),
+			    PAWNCHK(to2, mvlist->ekcoord, turn));
 	    /* add e2e3-like moves. */
-	    addmove(mvlist, board, from, to,
-		    CALCDC(dc, from, to),
-		    PAWNCHK(to, mvlist->ekcoord, turn));
+	    addMoveFast(mvlist, board, from, to,
+			CALCDC(dc, from, to),
+			PAWNCHK(to, mvlist->ekcoord, turn));
 	}
     }
 }
 
-
-static void kingcastlemove(MoveListT *mvlist, BoardT *board, int from,
-			   int turn)
+static void checkCastle(MoveListT *mvlist, BoardT *board, int kSrc, int kDst,
+			int rSrc, int rDst, bool isCastleOO)
 {
+    // 'src' assumed to == castling->start.king.
     uint8 *coord = board->coord;
 
-    if (!mvlist->capOnly /* assumed true: && board->ncheck[turn] == FLAG */)
+    // Chess 960 castling rules (from wikipedia):
+    //  "All squares between the king's initial and final squares
+    //   (including the final square), and all squares between the
+    //   rook's initial and final squares (including the final square),
+    //   must be vacant except for the king and castling rook."
+    if (
+	// Check if rook can move.
+	(rSrc == rDst ||
+	 ((coord[rDst] == 0 || rDst == kSrc) &&
+	  nopose(coord, rSrc, rDst, kSrc))) &&
+	// Check if king can move.
+	(kSrc == kDst ||
+	 ((coord[kDst] == 0 || kDst == rSrc) &&
+	  nopose(coord, kSrc, kDst, rSrc) &&
+	  !castleAttacked(board, kSrc, kDst))))
     {
-	/* check for kingside castle */
-	if (((board->cbyte >> turn) & 1) &&
-	    !coord[from + 1] && !coord[from + 2] &&
-	    !attacked(NULL, board, from + 1, turn, turn) &&
-	    !attacked(NULL, board, from + 2, turn, turn))
-	    addmove(mvlist, board, from, from + 2, FLAG,
-		    ROOKCHK(coord, from + 1, from, mvlist->ekcoord));
-	/* check queenside castle */
-	if (((board->cbyte >> (turn + 2)) & 1) &&
-	    !coord[from - 1] && !coord[from - 2] && !coord[from - 3] &&
-	    !attacked(NULL, board, from - 1, turn, turn) &&
-	    !attacked(NULL, board, from - 2, turn, turn))
-	    addmove(mvlist, board, from, from - 2, FLAG,
-		    ROOKCHK(coord, from - 1, from, mvlist->ekcoord));
+	int sq =
+	    isCastleOO ? board->turn : (1 << NUM_PLAYERS_BITS) | board->turn;
+	addMove(mvlist, board, sq, sq, 0, FLAG,
+		ROOKCHK(coord, rDst, kSrc, mvlist->ekcoord));
     }
 }
 
+static void kingcastlemove(MoveListT *mvlist, BoardT *board, int src,
+			   int turn)
+{
+    // 'src' assumed to == castling->start.king.
+    if (!mvlist->capOnly) // assumed true: && board->ncheck[turn] == FLAG
+    {
+	CastleCoordsT *castling = &gVariant->castling[turn];
+
+	// check for kingside castle
+	if (BoardCanCastleOO(board, turn))
+	{
+	    checkCastle(mvlist, board,
+			src, castling->endOO.king,
+			castling->start.rookOO, castling->endOO.rook,
+			true);
+	}
+
+	// check for queenside castle.
+	if (BoardCanCastleOOO(board, turn))
+	{
+	    checkCastle(mvlist, board,
+			src, castling->endOOO.king,
+			castling->start.rookOOO, castling->endOOO.rook,
+			false);
+	}
+    }
+}
 
 static void kingmove(MoveListT *mvlist, BoardT *board, int from, int turn,
 		     int dc)
@@ -701,7 +758,7 @@ static void kingmove(MoveListT *mvlist, BoardT *board, int from, int turn,
     uint8 to;
     uint8 *coord = board->coord;
 
-    static const int preferredKDirs[2] [9] =
+    static const int preferredKDirs[NUM_PLAYERS] [9] =
 	/* prefer increase rank for White... after that, favor center,
 	   queenside, and kingside moves, in that order.  Similar for Black,
 	   but decrease rank.
@@ -719,9 +776,9 @@ static void kingmove(MoveListT *mvlist, BoardT *board, int from, int turn,
 	       did this while figuring out the castling moves. ... but I doubt
 	       it's a win. */
 	    !attacked(NULL, board, to, turn, turn))
-	    addmove(mvlist, board, from, to,
-		    CALCDC(dc, from, to),
-		    FLAG);
+	    addMoveFast(mvlist, board, from, to,
+			CALCDC(dc, from, to),
+			FLAG);
     }
 }
 
@@ -770,8 +827,8 @@ static void nightmove(MoveListT *mvlist, BoardT *board, int from, int turn,
     for (; *moves != FLAG; moves++)
     {
 	if (CHECK(board->coord[*moves], turn) > mvlist->capOnly)
-	    addmove(mvlist, board, from, *moves, dc,
-		    NIGHTCHK(*moves, mvlist->ekcoord));
+	    addMoveFast(mvlist, board, from, *moves, dc,
+			NIGHTCHK(*moves, mvlist->ekcoord));
     }
 }
 
@@ -826,17 +883,17 @@ void mlistGenerate(MoveListT *mvlist, BoardT *board, int capOnly)
     mvlist->ekcoord = ekcoord;
     mvlist->capOnly = capOnly;
 
-    static const int preferredQDirs[2] [9] =
+    static const int preferredQDirs[NUM_PLAYERS] [9] =
 	/* prefer increase rank for White... after that, favor center,
 	   kingside, and queenside moves, in that order.  Similar for Black,
 	   but decrease rank.
 	*/
 	{{1, 2, 0, 3, 7, 5, 4, 6, FLAG},
 	 {5, 4, 6, 3, 7, 1, 2, 0, FLAG}};
-    static const int preferredBDirs[2] [5] =
+    static const int preferredBDirs[NUM_PLAYERS] [5] =
 	{{2, 0, 4, 6, FLAG},
 	 {4, 6, 2, 0, FLAG}};
-    static const int preferredRDirs[2] [5] =
+    static const int preferredRDirs[NUM_PLAYERS] [5] =
 	{{1, 3, 7, 5, FLAG},
 	 {5, 3, 7, 1, FLAG}};
 

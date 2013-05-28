@@ -18,25 +18,39 @@
 #define BOARD_H
 
 #include <string.h>   // memcmp(3)
+
 #include "aTypes.h"
-#include "ref.h"
-#include "position.h"
 #include "list.h"
+#include "move.h"
+#include "position.h"
+#include "pv.h"
+#include "ref.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+typedef struct {
+    int lgh;
+    cell_t coords[NUM_SQUARES]; // src coord.  Not usually larger than 16, but
+                                // with edit-position (or bughouse) we might get
+                                // extra pieces ...
+} CoordListT;
+
 // This MUST be a power of 2 (to make our hashing work), and MUST be at least
 // 128 to account for the 50-move rule (100 plies == 50 moves)
 #define NUM_SAVED_POSITIONS 128
 
-typedef struct {
-    uint8 coord[NUM_SQUARES]; // all the squares on the board.
+typedef struct BoardS {
+    cell_t coord[NUM_SQUARES]; // all the squares on the board.
 
-    uint64 zobrist;      // zobrist hash.  Incrementally updated w/each move.
+    uint64 zobrist;  // zobrist hash.  Incrementally updated w/each move.
 
-    uint8 cbyte;         // castling byte.
+    uint8 cbyte;     // castling byte.
+                     // Format is 1q-0q-1k-0k, where (1,0) is the turn number
+                     // and (q,k) is OOO or OO castling.  If NUM_PLAYERS is
+                     // expanded, then the offset to the OOO castling bits
+                     // increases.
 
     uint8 ebyte;         // en passant byte.  Set to the destination coord
                          // of an a2a4-style move (or FLAG otherwise).
@@ -83,7 +97,7 @@ typedef struct {
     // repeat, not the original), otherwise -1).
     int repeatPly;
 
-    // Saved positions.  Used to detect 3-fold repitition.  The fifty-move
+    // Saved positions.  Used to detect 3-fold repetition.  The fifty-move
     // rule limits the number I need to 100, and 128 is the next power-of-2
     // which makes calculating the appropriate position for a given ply easy.
     //
@@ -110,12 +124,12 @@ typedef struct {
     CvT cv;    // current variation for this board.  Useful for debugging.
 } BoardT;
 
-
 typedef struct {
+    MoveT  move;      // saved move
     uint8  cappiece;  // any captured piece.. does not include en passant.
     uint8  cbyte;     // castling, en passant bytes
-    uint8  ebyte;
-    uint8  ncheck;
+    cell_t ebyte;
+    cell_t ncheck;
 
     int    ncpPlies;
     uint64 zobrist;   // saved-off hash.
@@ -128,7 +142,7 @@ void BoardInit(BoardT *board);
 
 // 'unmake' is filled in by BoardMakeMove() and used by BoardUnmakeMove().
 void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake);
-void BoardMoveUnmake(BoardT *board, MoveT *move, UnMakeT *unmake);
+void BoardMoveUnmake(BoardT *board, UnMakeT *unmake);
 int BoardSanityCheck(BoardT *board, int silent);
 int BoardConsistencyCheck(BoardT *board, char *failString, int checkz);
 void BoardRandomize(BoardT *board);
@@ -177,6 +191,22 @@ static inline bool BoardPositionHit(BoardT *board, uint64 zobrist)
 bool BoardPositionsSame(BoardT *b1, BoardT *b2);
 
 int BoardCapWorthCalc(BoardT *board, MoveT *move);
+
+// These functions only (obviously) return whether it *may be* possible to
+// castle now or in the future.
+static inline bool BoardCanCastleOO(BoardT *board, int turn)
+{
+    return (board->cbyte >> turn) & CASTLEOO;
+}
+static inline bool BoardCanCastleOOO(BoardT *board, int turn)
+{
+    return (board->cbyte >> turn) & CASTLEOOO;
+}
+// (Returns true iff the side can castle at all)
+static inline bool BoardCanCastle(BoardT *board, int turn)
+{
+    return (board->cbyte >> turn) & CASTLEBOTH;
+}
 
 #ifdef __cplusplus
 }

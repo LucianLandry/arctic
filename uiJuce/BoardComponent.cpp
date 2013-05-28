@@ -38,7 +38,7 @@ BoardComponent::BoardComponent()
 
     // Give the squares pieces.
     BoardT myBoard;
-    BoardSet(&myBoard, gPreCalc.normalStartingPieces, ALLCASTLE, FLAG, 0, 0,
+    BoardSet(&myBoard, gPreCalc.normalStartingPieces, CASTLEALL, FLAG, 0, 0,
 	     0);
     refresh(&myBoard);
 };

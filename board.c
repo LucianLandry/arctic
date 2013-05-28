@@ -26,27 +26,105 @@
 #include "ui.h"
 #include "uiUtil.h"
 #include "transTable.h"
+#include "variant.h"
 
 // #define DEBUG_CONSISTENCY_CHECK
 
 // Incremental update.  To be used everytime when board->coord[i] is updated.
 // (This used to update a compressed equivalent of coord called 'hashCoord',
 //  but now is just syntactic sugar.)
-static inline void CoordUpdate(BoardT *board, uint8 i, uint8 newVal)
+static inline void coordUpdate(BoardT *board, uint8 i, uint8 piece)
 {
-    board->coord[i] = newVal;
+    board->coord[i] = piece;
 }
 
-
-static inline void CoordUpdateZ(BoardT *board, uint8 i, uint8 newVal)
+static inline void coordUpdateZ(BoardT *board, uint8 i, uint8 piece)
 {
     board->zobrist ^=
-        (gPreCalc.zobrist.coord[board->coord[i]] [i] ^
-         gPreCalc.zobrist.coord[newVal] [i]);
-    CoordUpdate(board, i, newVal);
+        gPreCalc.zobrist.coord[board->coord[i]] [i] ^
+	gPreCalc.zobrist.coord[piece] [i];
+    coordUpdate(board, i, piece);
 }
 
+static void pieceAdd(BoardT *board, int coord, uint8 piece)
+{
+    board->pPiece[coord] =
+	&board->pieceList[piece].coords[board->pieceList[piece].lgh++];
+    *board->pPiece[coord] = coord;
+    board->totalStrength += WORTH(piece);
+    board->playerStrength[piece & 1] += WORTH(piece);
+    coordUpdate(board, coord, piece);
+}
 
+// Do everything necessary to add a piece to the board (except
+// manipulating ebyte/cbyte).
+static inline void pieceAddZ(BoardT *board, int coord, uint8 piece)
+{
+    pieceAdd(board, coord, piece);
+    board->zobrist ^= gPreCalc.zobrist.coord[piece] [coord];
+}
+
+static void pieceCapture(BoardT *board, int coord, uint8 piece)
+{
+    uint8 *pieceListCoord = board->pPiece[coord];
+
+    board->playerStrength[piece & 1] -= WORTH(piece);
+    board->totalStrength -= WORTH(piece);
+
+    // change coord in pieceList and dec pieceList lgh.
+    *pieceListCoord = board->pieceList[piece].coords
+	[--board->pieceList[piece].lgh];
+    // reset the end pPiece ptr to its new location.
+    board->pPiece[*pieceListCoord] = pieceListCoord;
+}
+
+// like pieceRemoveZ(), except assumes another piece will shortly fill this
+// spot.  This might take on another meaning if we ever add variants like
+// Crazyhouse.
+static inline void pieceCaptureZ(BoardT *board, int coord, uint8 piece)
+{
+    pieceCapture(board, coord, piece);
+    board->zobrist ^= gPreCalc.zobrist.coord[piece] [coord];
+}
+
+// Do everything necessary to remove a piece from the board (except
+// manipulating ebyte/cbyte and the zobrist).
+static inline void pieceRemove(BoardT *board, int coord, uint8 piece)
+{
+    pieceCapture(board, coord, piece);
+    board->pPiece[coord] = NULL;
+    coordUpdate(board, coord, 0);
+}
+
+// Do everything necessary to remove a piece from the board (except
+// manipulating ebyte/cbyte).
+static inline void pieceRemoveZ(BoardT *board, int coord, uint8 piece)
+{
+    pieceCaptureZ(board, coord, piece);
+    board->pPiece[coord] = NULL;
+    coordUpdate(board, coord, 0);
+}
+
+static void pieceMove(BoardT *board, int src, int dst, uint8 piece)
+{
+    // Modify the pointer info in pPiece,
+    // and the coords in the pieceList.
+    *(board->pPiece[dst] = board->pPiece[src]) = dst;
+    coordUpdate(board, dst, piece);
+
+    // These last two bits are technically unnecessary when we are unmaking a
+    // move *and* it was a capture.
+    board->pPiece[src] = NULL;
+    coordUpdate(board, src, 0);
+}
+
+static inline void pieceMoveZ(BoardT *board, int src, int dst, uint8 piece)
+{
+    pieceMove(board, src, dst, piece);
+    board->zobrist ^=
+        gPreCalc.zobrist.coord[piece] [dst] ^
+	gPreCalc.zobrist.coord[piece] [src];
+}
 
 // This is useful for generating a hash for the initial board position, or
 // (slow) validating the incrementally-updated hash.
@@ -67,6 +145,120 @@ static uint64 BoardZobristCalc(BoardT *board)
 }
 
 
+static inline uint8 cbyteCalcFromSrcDst(uint8 cbyte, uint8 src, uint8 dst)
+{
+    return cbyte == 0 ? 0 :
+	cbyte & gPreCalc.castleMask[src] & gPreCalc.castleMask[dst];
+}
+
+static inline uint8 cbyteCalcFromCastle(uint8 cbyte, uint8 turn)
+{
+    return cbyte & ~(CASTLEBOTH << turn);
+}
+
+static inline void cbyteUpdate(BoardT *board, int newcbyte)
+{
+    if (newcbyte != board->cbyte)
+    {
+	board->zobrist ^=
+	    (gPreCalc.zobrist.cbyte[board->cbyte] ^
+	     gPreCalc.zobrist.cbyte[newcbyte]);
+	board->cbyte = newcbyte;
+    }
+}
+
+
+static inline void ebyteUpdate(BoardT *board, int newebyte)
+{
+    if (newebyte != board->ebyte)
+    {
+	if (board->ebyte != FLAG)
+	    board->zobrist ^= gPreCalc.zobrist.ebyte[board->ebyte];
+	if (newebyte != FLAG)
+	    board->zobrist ^= gPreCalc.zobrist.ebyte[newebyte];
+	board->ebyte = newebyte;
+    }
+}
+
+
+// Updates castle status.
+static void BoardCbyteUpdate(BoardT *board)
+{
+    int cbyte = board->cbyte; // shorthand
+    int i;
+    uint8 *coord;
+    CastleStartCoordsT *castleStart;
+
+    if (cbyte == 0)
+    {
+	return; // be lazy when possible
+    }
+
+    coord = board->coord; // shorthand
+    
+    for (i = 0; i < NUM_PLAYERS; i++)
+    {
+	castleStart = &gVariant->castling[i].start;
+
+	if (coord[castleStart->king] != (KING | i))
+	{
+	    // No O-O or O-O-O castling.
+	    cbyte &= ~(CASTLEBOTH << i);
+	}
+	else
+	{
+	    if (coord[castleStart->rookOO] != (ROOK | i))
+	    {
+		// No O-O castling.
+		cbyte &= ~(CASTLEOO << i);
+	    }
+	    if (coord[castleStart->rookOOO] != (ROOK | i))
+	    {
+		// No O-O-O castling.
+		cbyte &= ~(CASTLEOOO << i);
+	    }
+	}
+    }
+
+    cbyteUpdate(board, cbyte);
+}
+
+// Returns if an index is between 'start' and 'finish' (inclusive).
+static int serialBetween(int i, int start, int finish)
+{
+    return start <= finish ?
+	i >= start && i <= finish : // 'normal' case.
+	i >= start || i <= finish;
+}
+
+static inline int BoardPositionElemToIdx(BoardT *board, PositionElementT *elem)
+{
+    return elem - board->positions;
+}
+
+static void getCastleCoords(BoardT *board,
+			    bool castleOO, // alternative is OOO
+			    uint8 *kSrc, uint8 *kDst,
+			    uint8 *rSrc, uint8 *rDst)
+{
+    CastleCoordsT *castling = &gVariant->castling[board->turn];
+
+    *kSrc = castling->start.king;
+
+    if (castleOO) // O-O castling
+    {
+	*rSrc = castling->start.rookOO;
+	*kDst = castling->endOO.king;
+	*rDst = castling->endOO.rook;
+    }
+    else // assume O-O-O castling
+    {
+	*rSrc = castling->start.rookOOO;
+	*kDst = castling->endOOO.king;
+	*rDst = castling->endOOO.rook;
+    }
+}
+
 // returns 0 on success, 1 on failure.
 int BoardConsistencyCheck(BoardT *board, char *failString, int checkz)
 {
@@ -82,8 +274,8 @@ int BoardConsistencyCheck(BoardT *board, char *failString, int checkz)
 	    exit(0);
 	    return 1;
 	}
-#if 1 // bldbg: trying this.  This requires a slight bit of extra work in
-      // BoardMove(Un)Make().  But it is the principle of least surprise.
+	// This requires a slight bit of extra work in BoardMove(Un)Make().
+	// But it is the principle of least surprise.
 	else if (board->coord[i] == 0 && board->pPiece[i] != NULL)
 	{
 	    LOG_EMERG("BoardConsistencyCheck(%s): dangling pPiece at %c%c.\n",
@@ -93,7 +285,6 @@ int BoardConsistencyCheck(BoardT *board, char *failString, int checkz)
 	    exit(0);
 	    return 1;
 	}
-#endif
     }
     for (i = 0; i < NUM_PIECE_TYPES; i++)
     {
@@ -125,99 +316,6 @@ int BoardConsistencyCheck(BoardT *board, char *failString, int checkz)
 }
 
 
-static void pieceAdd(BoardT *board, int coord, uint8 piece)
-{
-    board->pPiece[coord] =
-	&board->pieceList[piece].coords[board->pieceList[piece].lgh++];
-    *board->pPiece[coord] = coord;
-    board->totalStrength += WORTH(piece);
-    board->playerStrength[piece & 1] += WORTH(piece);
-}
-
-
-static void pieceDelete(BoardT *board, int coord, uint8 piece)
-{
-    board->playerStrength[piece & 1] -= WORTH(piece);
-    board->totalStrength -= WORTH(piece);
-
-    // change coord in pieceList and dec pieceList lgh.
-    *board->pPiece[coord] = board->pieceList[piece].coords
-	[--board->pieceList[piece].lgh];
-    // set the end pPiece.
-    board->pPiece[*board->pPiece[coord]] = board->pPiece[coord];
-}
-
-
-static inline void cbyteUpdate(BoardT *board, int newcbyte)
-{
-    if (newcbyte != board->cbyte)
-    {
-	board->zobrist ^=
-	    (gPreCalc.zobrist.cbyte[board->cbyte] ^
-	     gPreCalc.zobrist.cbyte[newcbyte]);
-	board->cbyte = newcbyte;
-    }
-}
-
-
-static inline void ebyteUpdate(BoardT *board, int newebyte)
-{
-    if (newebyte != board->ebyte)
-    {
-	if (board->ebyte != FLAG)
-	    board->zobrist ^= gPreCalc.zobrist.ebyte[board->ebyte];
-	if (newebyte != FLAG)
-	    board->zobrist ^= gPreCalc.zobrist.ebyte[newebyte];
-	board->ebyte = newebyte;
-    }
-}
-
-
-// Updates castle status.
-static void BoardCbyteUpdate(BoardT *board)
-{
-    uint8 *coord = board->coord;
-    int cbyte = board->cbyte;
-
-    if (coord[0] != ROOK)
-	cbyte &= ~WHITEQCASTLE;	// no white queen castle.
-    if (coord[7] != ROOK)
-	cbyte &= ~WHITEKCASTLE;	// no white king castle.
-    if (coord[4] != KING)
-	cbyte &= ~WHITECASTLE;	// no white queen or king castle.
-    if (coord[56] != BROOK)
-	cbyte &= ~BLACKQCASTLE;	// no black queen castle.
-    if (coord[63] != BROOK)
-	cbyte &= ~BLACKKCASTLE;	// no black king castle.
-    if (coord[60] != BKING)
-	cbyte &= ~BLACKCASTLE;	// no black queen or king castle.
-
-    cbyteUpdate(board, cbyte);
-}
-
-
-// These are the rook-moves involved in normal castling.
-static MoveT gWKRookCastleMove = {7, 5, 0, 0};
-static MoveT gWQRookCastleMove = {0, 3, 0, 0};
-static MoveT gBKRookCastleMove = {63, 61, 0, 0};
-static MoveT gBQRookCastleMove = {56, 59, 0, 0};
-
-
-// Returns if an index is between 'start' and 'finish' (inclusive).
-static int serialBetween(int i, int start, int finish)
-{
-    return start <= finish ?
-	i >= start && i <= finish : // 'normal' case.
-	i >= start || i <= finish;
-}
-
-
-static inline int BoardPositionElemToIdx(BoardT *board, PositionElementT *elem)
-{
-    return elem - board->positions;
-}
-
-
 void BoardInit(BoardT *board)
 {
     // blank everything.
@@ -225,6 +323,131 @@ void BoardInit(BoardT *board)
     CvInit(&board->cv);
 }
 
+#if 0 // unused so far
+// Like BoardMoveMake(), but do not actually make the move, just calculate
+// a new zobrist.
+uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
+{
+    uint64 zobrist = board->zobrist;
+    int enpass = ISPAWN(move->promote); // en passant capture?
+    int promote = move->promote && !enpass;
+    uint8 src = move->src;
+    uint8 dst = move->dst;
+    uint8 *coord = board->coord;
+    uint8 mypiece = coord[src];
+    uint8 cappiece = coord[dst];
+    uint8 ebyte = board->ebyte;
+    uint8 cbyte = board->cbyte, newcbyte;
+
+    zobrist ^= gPreCalc.zobrist.turn;
+
+    if (ebyte != FLAG)
+    {
+	board->zobrist ^= gPreCalc.zobrist.ebyte[ebyte];
+    }
+
+    if (MoveIsCastle(*move))
+    {
+        // Castling case, handle this specially (it can be relatively inefficient).
+	uint8 turn = board->turn; // shorthand
+	uint8 kSrc, kDst, rSrc, rDst;
+	uint8 kPiece = KING | turn;
+	uint8 rPiece = ROOK | turn;
+
+	getCastleCoords(board,
+			MoveIsCastleOO(*move),
+			&kSrc, &kDst, &rSrc, &rDst);
+
+	newcbyte = cbyteCalcFromCastle(cbyte, turn);
+
+	kSrc = castling->start.king;
+
+	zobrist ^=
+	    // Move the king to its destination.  This is "simple"
+	    // since we can assume no capture, en passant, or promotion takes
+	    // place.
+	    gPreCalc.zobrist.coord[kPiece] [kDst] ^
+	    gPreCalc.zobrist.coord[kPiece] [kSrc] ^
+
+	    // Do the same for the rook.
+	    gPreCalc.zobrist.coord[rPiece] [rDst] ^
+	    gPreCalc.zobrist.coord[rPiece] [rSrc] ^
+
+	    // And update the castling status.
+	    gPreCalc.zobrist.cbyte[cbyte] ^
+	    gPreCalc.zobrist.cbyte[newcbyte];
+    }
+    else
+    {
+	// Normal case.
+	zobrist ^=
+	    // replace piece (if any) at destination ...
+	    gPreCalc.zobrist.coord[cappiece] [dst] ^
+	    // ... with the new piece that is supposed to be there ...
+	    gPreCalc.zobrist.coord[promote ? move->promote : mypiece] [dst] ^
+	    // ... and remove the src piece from the source.
+	    gPreCalc.zobrist.coord[mypiece] [src];
+
+	if (abs(dst - src) == 16 && ISPAWN(mypiece)) // pawn moved 2
+	{
+	    zobrist ^= gPreCalc.zobrist.ebyte[dst];
+	}
+	else if (enpass)
+	{
+	    // Remove the pawn at the en passant square.
+	    zobrist ^=
+		gPreCalc.zobrist.coord[coord[ebyte]] [ebyte];
+	}
+	else if ((newcbyte = cbyteCalcFromSrcDst(cbyte, src, dst)) != board->cbyte)
+	{
+	    zobrist ^=
+		gPreCalc.zobrist.cbyte[cbyte] ^
+		gPreCalc.zobrist.cbyte[newcbyte];
+	}
+    }
+
+    TransTablePrefetch(zobrist);
+    return zobrist;
+}
+#endif
+
+static void doCastleMoveZ(BoardT *board,
+			  uint8 kSrc, uint8 kDst,
+			  uint8 rSrc, uint8 rDst)
+{
+    // To accomodate variants like chess960, we must remove and re-add at least
+    // one piece (to prevent piece clobbering).  Here, we choose the king.
+
+    uint8 turn = board->turn; // shorthand
+    uint8 kPiece = KING | turn;
+    uint8 rPiece = ROOK | turn;
+
+    pieceRemoveZ(board, kSrc, kPiece);
+    if (rSrc != rDst)
+    {
+	pieceMoveZ(board, rSrc, rDst, rPiece);
+    }
+    pieceAddZ(board, kDst, kPiece);
+}
+
+// This is identical (by design) to doCastleMoveZ(), except we do not manipulate
+// the zobrist.
+static void doCastleMove(BoardT *board,
+			 uint8 kSrc, uint8 kDst,
+			 uint8 rSrc, uint8 rDst)
+{
+    uint8 turn = board->turn; // shorthand
+    uint8 kPiece = KING | turn;
+    uint8 rPiece = ROOK | turn;
+
+    pieceRemove(board, kSrc, kPiece);
+    if (rSrc != rDst)
+    {
+	pieceMove(board, rSrc, rDst, rPiece);
+    }
+    pieceAdd(board, kDst, kPiece);
+
+}
 
 void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
 {
@@ -233,10 +456,10 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
     uint8 src = move->src;
     uint8 dst = move->dst;
     uint8 *coord = board->coord;
-    uint8 mypiece = coord[src];
-    uint8 cappiece = coord[dst];
-    uint8 newebyte;
-    int savedPly;
+    bool isCastle = MoveIsCastle(*move);
+    uint8 cappiece =
+	isCastle ? 0 : coord[dst];
+    uint8 mypiece, newebyte, newcbyte;
 
     ListT *myList;
     PositionElementT *myElem;
@@ -250,6 +473,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
     if (unmake != NULL)
     {
 	// Save off board information.
+	unmake->move = *move; // struct copy
 	unmake->cappiece = cappiece;
 	unmake->cbyte = board->cbyte;
 	unmake->ebyte = board->ebyte;
@@ -260,72 +484,57 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
     }
 
     // King castling move?
-    if (ISKING(mypiece) && abs(dst - src) == 2)
+    if (isCastle)
     {
-	savedPly = board->repeatPly;
-	BoardMoveMake(board,
-		      (dst == 6  ? &gWKRookCastleMove : // move wkrook
-		       dst == 2  ? &gWQRookCastleMove : // move wqrook
-		       dst == 62 ? &gBKRookCastleMove : // move bkrook
-		       &gBQRookCastleMove), // move bqrook
-		      NULL);
+	uint8 kSrc, kDst, rSrc, rDst;
 
-	// unclobber appropriate variables.
-	board->ply--;	// 'cause we're not switching sides...
-	board->turn ^= 1;
-	board->ncpPlies--;
-	board->repeatPly = savedPly;
-	board->zobrist ^= gPreCalc.zobrist.turn;
-    }
+	mypiece = 0;
+	getCastleCoords(board,
+			MoveIsCastleOO(*move),
+			&kSrc, &kDst, &rSrc, &rDst);
 
-    // Capture? better dump the captured piece from the pieceList..
-    if (cappiece)
-    {
-	pieceDelete(board, dst, cappiece);
-    }
-    else if (enpass)
-    {
-	pieceDelete(board, board->ebyte, coord[board->ebyte]);
-	CoordUpdateZ(board, board->ebyte, 0);
-#if 1 // bldbg
-	board->pPiece[board->ebyte] = NULL;
-#endif
-    }
-
-    // Modify the pointer info in pPiece,
-    // and the coords in the pieceList.
-    *(board->pPiece[dst] = board->pPiece[src]) = dst;
-#if 1 // bldbg
-    board->pPiece[src] = NULL;
-#endif
-
-    // El biggo question: did a promotion take place? Need to update
-    // stuff further then.  Can be inefficient cause almost never occurs.
-    if (promote)
-    {
-	pieceDelete(board, dst, mypiece);
-	pieceAdd(board, dst, move->promote);
-	CoordUpdateZ(board, dst, move->promote);
+	doCastleMoveZ(board, kSrc, kDst, rSrc, rDst);
+	newcbyte = cbyteCalcFromCastle(board->cbyte, board->turn);
+	newebyte = FLAG;
     }
     else
     {
-	CoordUpdateZ(board, dst, mypiece);
+	mypiece = coord[src];
+	newcbyte = cbyteCalcFromSrcDst(board->cbyte, src, dst);
+
+	// Capture? better dump the captured piece from the pieceList..
+	if (cappiece)
+	{
+	    pieceCaptureZ(board, dst, cappiece);
+	}
+	else if (enpass)
+	{
+	    pieceRemoveZ(board, board->ebyte, move->promote);
+	}
+	pieceMoveZ(board, src, dst, mypiece);
+
+	// El biggo question: did a promotion take place? Need to update
+	// stuff further then.  Can be inefficient cause almost never occurs.
+	if (promote)
+	{
+	    pieceCaptureZ(board, dst, mypiece);
+	    pieceAddZ(board, dst, move->promote);
+	}
+
+	// Update en passant status.
+	newebyte = abs(dst - src) == 16 &&
+	    ISPAWN(mypiece) ? /* pawn moved 2 */
+	    dst : FLAG;
     }
-    CoordUpdateZ(board, src, 0);
 
-    BoardCbyteUpdate(board); // Update castle status.
-
-    // Update en passant status.
-    newebyte = abs(dst - src) == 16 &&
-	ISPAWN(mypiece) ? /* pawn moved 2 */
-	dst : FLAG;
-
+    cbyteUpdate(board, newcbyte); // Update castle status.
     ebyteUpdate(board, newebyte);
+
+    board->zobrist ^= gPreCalc.zobrist.turn;
+    TransTablePrefetch(board->zobrist);
 
     board->ply++;
     board->turn ^= 1;
-    board->zobrist ^= gPreCalc.zobrist.turn;
-    TransTablePrefetch(board->zobrist);
     board->ncheck[board->turn] = move->chk;
 
     // Adjust ncpPlies appropriately.
@@ -359,20 +568,21 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
 }
 
 
-// Undoes the move 'move'.
-void BoardMoveUnmake(BoardT *board, MoveT *move, UnMakeT *unmake)
+// Undoes a move on the board using the information stored in 'unmake'.
+void BoardMoveUnmake(BoardT *board, UnMakeT *unmake)
 {
     int turn;
-    int enpass = ISPAWN(move->promote);
-    int promote = move->promote && !enpass;
-    uint8 src = move->src;
-    uint8 dst = move->dst;
+    MoveT move = unmake->move; // struct copy
+    int enpass = ISPAWN(move.promote);
+    int promote = move.promote && !enpass;
+    uint8 src = move.src;
+    uint8 dst = move.dst;
     uint8 cappiece;
 
 #ifdef DEBUG_CONSISTENCY_CHECK
     if (BoardConsistencyCheck(board, "BoardMoveUnmake1", unmake != NULL))
     {
-	LogMove(eLogEmerg, board, move);
+	LogMove(eLogEmerg, board, &move);
 	assert(0);
     }
 #endif
@@ -381,76 +591,56 @@ void BoardMoveUnmake(BoardT *board, MoveT *move, UnMakeT *unmake)
     board->turn ^= 1;
     turn = board->turn;
 
-    if (unmake != NULL)
-    {
-	// Pop the old bytes.  It's counterintuitive to do this so soon.
-	// Sorry.  Possible optimization: arrange the board variables
-	// appropriately, and do a simple memcpy().
-	cappiece = unmake->cappiece;
-	board->cbyte = unmake->cbyte;
-	board->ebyte = unmake->ebyte; // We need to do this before rest of
-	                              // the function.
-	board->ncheck[turn] = unmake->ncheck;
-	board->ncpPlies = unmake->ncpPlies;
-	board->zobrist = unmake->zobrist;
-	board->repeatPly = unmake->repeatPly;
-    }
-    else
-    {
-	// Hopefully, this is the rook-move part of an un-castling move.
-	cappiece = 0;
-    }
+    // Pop the old bytes.  It's counterintuitive to do this so soon.
+    // Sorry.  Possible optimization: arrange the board variables
+    // appropriately, and do a simple memcpy().
+    cappiece = unmake->cappiece;
+    board->cbyte = unmake->cbyte;
+    board->ebyte = unmake->ebyte; // We need to do this before rest of
+                                  // the function.
+    board->ncheck[turn] = unmake->ncheck;
+    board->ncpPlies = unmake->ncpPlies;
+    board->zobrist = unmake->zobrist;
+    board->repeatPly = unmake->repeatPly;
 
     // King castling move?
-    if (ISKING(board->coord[dst]) &&
-	abs(dst - src) == 2)
+    if (MoveIsCastle(move))
     {
-	BoardMoveUnmake(board,
-			(dst == 6  ? &gWKRookCastleMove : // move wkrook
-			 dst == 2  ? &gWQRookCastleMove : // move wqrook
-			 dst == 62 ? &gBKRookCastleMove : // move bkrook
-			 &gBQRookCastleMove), // move bqrook
-			NULL);
-	board->ply++;		// since it wasn't really a move.
-	board->turn ^= 1;
-    }
+	uint8 kSrc, kDst, rSrc, rDst;
 
-    // El biggo question: did a promotion take place? Need to
-    // 'depromote' then.  Can be inefficient cause almost never occurs.
-    if (promote)
-    {
-	pieceDelete(board, dst, move->promote);
-	pieceAdd(board, dst, PAWN | turn);
-	CoordUpdate(board, src, PAWN | turn);
+	getCastleCoords(board,
+			MoveIsCastleOO(move),
+			&kSrc, &kDst, &rSrc, &rDst);
+
+	// (swapping the src and dst coordinates)
+	doCastleMove(board, kDst, kSrc, rDst, rSrc);
     }
     else
     {
-	CoordUpdate(board, src, board->coord[dst]); 
-    }
-    CoordUpdate(board, dst, cappiece);
+	// El biggo question: did a promotion take place? Need to
+	// 'depromote' then.  Can be inefficient cause almost never occurs.
+	if (promote)
+	{
+	    pieceCapture(board, dst, move.promote);
+	    pieceAdd(board, dst, PAWN | turn);
+	}
+	pieceMove(board, dst, src, board->coord[dst]);
 
-    // Modify the pointer array,
-    // and the coords in the pieceList.
-    *(board->pPiece[src] = board->pPiece[dst]) = src;
-#if 1 // bldbg
-    board->pPiece[dst] = NULL;
-#endif
-
-    // If capture, we need to add deleted record back to list.
-    if (cappiece)
-    {
-	pieceAdd(board, dst, cappiece);
-    }
-    else if (enpass)
-    {
-	CoordUpdate(board, board->ebyte, move->promote);
-	pieceAdd(board, board->ebyte, move->promote);
+	// Add any captured piece back to the board.
+	if (cappiece)
+	{
+	    pieceAdd(board, dst, cappiece);
+	}
+	else if (enpass)
+	{
+	    pieceAdd(board, board->ebyte, move.promote);
+	}
     }
 
 #ifdef DEBUG_CONSISTENCY_CHECK
     if (BoardConsistencyCheck(board, "BoardMoveUnmake2", unmake != NULL))
     {
-	LogMove(eLogEmerg, board, move);
+	LogMove(eLogEmerg, board, &move);
 	assert(0);
     }
 #endif
@@ -721,7 +911,7 @@ void BoardSet(BoardT *board, uint8 *pieces, int cbyte, int ebyte, int turn,
 // function, that is actually not desirable.
 int BoardIsNormalStartingPosition(BoardT *board)
 {
-    return board->cbyte == ALLCASTLE && board->ebyte == FLAG &&
+    return board->cbyte == CASTLEALL && board->ebyte == FLAG &&
 	board->ncpPlies == 0 &&
 	memcmp(board->coord, gPreCalc.normalStartingPieces, NUM_SQUARES) == 0;
 }
@@ -839,11 +1029,19 @@ bool BoardDrawThreefoldRepetitionFull(BoardT *board, void *sgame)
 // Calculates (roughly) how 'valuable' a move is.
 int BoardCapWorthCalc(BoardT *board, MoveT *move)
 {
-    int cappiece = board->coord[move->dst];
-    int capWorth = WORTH(cappiece);
+    int cappiece, capWorth;
     CvT *cv;
     int i;
-    char result[15];
+    char result[MOVE_STRING_MAX];
+    static const MoveStyleT msCwc = {mnDebug, csOO, false};
+
+    if (MoveIsCastle(*move))
+    {
+	return 0;
+    }
+
+    cappiece = board->coord[move->dst];
+    capWorth = WORTH(cappiece);
 
     if (cappiece && capWorth == EVAL_ROYAL) // Captured king, cannot happen
     {
@@ -853,7 +1051,8 @@ int BoardCapWorthCalc(BoardT *board, MoveT *move)
 	     i >= 0 && cv->moves[i].src != FLAG;
 	     i--)
 	{
-	    LOG_EMERG("%d:%s\n", i, moveToFullStr(result, &cv->moves[i]));
+	    LOG_EMERG("%d:%s\n", i,
+		      MoveToString(result, cv->moves[i], &msCwc, NULL));
 	}
 
 	// Possibly ran out of moves on a searcherThread.  Check if the
@@ -863,7 +1062,8 @@ int BoardCapWorthCalc(BoardT *board, MoveT *move)
 	     i >= 0 && cv->moves[i].src != FLAG;
 	     i--)
 	{
-	    LOG_EMERG("%d:%s\n", i, moveToFullStr(result, &cv->moves[i]));
+	    LOG_EMERG("%d:%s\n", i,
+		      MoveToString(result, cv->moves[i], &msCwc, NULL));
 	}
 	LogMoveShow(eLogEmerg, board, move, "diagnostic");
 	assert(0);
@@ -896,7 +1096,7 @@ void BoardPieceSet(BoardT *board, int coord, int piece)
     if (board->coord[i])
     {
 	// remove the original piece on the board.
-	pieceDelete(board, i, board->coord[i]);
+	pieceRemoveZ(board, i, board->coord[i]);
 
 	if (board->ebyte == i)
 	{
@@ -905,9 +1105,8 @@ void BoardPieceSet(BoardT *board, int coord, int piece)
     }
     if (piece)
     {
-	pieceAdd(board, i, piece);
+	pieceAddZ(board, i, piece);
     }
-    CoordUpdateZ(board, i, piece);
     BoardCbyteUpdate(board);
     calcNCheck(board, board->turn, "BoardPieceSet");
 }
@@ -916,7 +1115,7 @@ void BoardCbyteSet(BoardT *board, int cbyte)
 {
     cbyteUpdate(board, cbyte);
     // In case somebody turned on something they were not supposed to,
-    // mask it back out.
+    // mask it back out.  Assumes the board pieces are setup.
     BoardCbyteUpdate(board);
 }
 

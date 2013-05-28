@@ -240,7 +240,7 @@ static PositionEvalT tryMove(BoardT *board, MoveT *move,
     }
 
     // restore the current board position.
-    BoardMoveUnmake(board, move, &unmake);
+    BoardMoveUnmake(board, &unmake);
 
     // Enable calculation of plies to win/loss by tweaking the eval.
     // Slightly hacky.
@@ -673,7 +673,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 		move = &mvlist.moves[i];
 		ThinkerSearchersMoveMake(move, &unmake, mightDraw);
 		myEval = tryMove(board, move, alpha, beta, &newPv, th, NULL);
-		ThinkerSearchersMoveUnmake(move, &unmake);
+		ThinkerSearchersMoveUnmake(&unmake);
 	    }
 	    else if (i < mvlist.lgh &&  // have a move to search?
 		     // have someone to delegate it to?
@@ -808,11 +808,13 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     }
 
 
-    if (!QUIESCING && alpha > secondBestVal
+    if (!QUIESCING && alpha > secondBestVal &&
 	// Do not add moves that will automatically be preferred -- picked this
 	// up from a chess alg site.  It does seem to help our speed
 	// (slightly).
-	&& bestMove.promote == 0 && board->coord[bestMove.dst] == 0)
+	bestMove.promote == 0 &&
+	(MoveIsCastle(bestMove) || // castling is not currently preferred
+	 board->coord[bestMove.dst] == 0))
     {
 	assert(bestMove.src != FLAG); // aka gMoveNone.src
 	/* move is at least one point better than others. */
@@ -1008,7 +1010,7 @@ static void computermove(ThinkContextT *th, bool bPonder)
     /* If we can draw after this move, do so. */
     BoardMoveMake(board, move, &unmake);
     bWillDraw = canClaimDraw(board, &th->searchArgs.sgame);
-    BoardMoveUnmake(board, move, &unmake);    
+    BoardMoveUnmake(board, &unmake);
 
     if (bWillDraw)
     {

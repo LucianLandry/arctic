@@ -108,7 +108,7 @@ static void xboardEditPosition(BoardT *board, SwitcherContextT *sw)
 	{
 	    // Leave edit mode.
 	    // (edit mode is optimistic about castling.)
-	    BoardCbyteSet(board, ALLCASTLE);
+	    BoardCbyteSet(board, CASTLEALL);
 	    return;
 	}
 
@@ -573,7 +573,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 	ThinkerCmdThink(th, board, &game->sgame);
     }
 
-    else if (isMove(inputStr, &myMove))
+    else if (isMove(inputStr, &myMove, board))
     {
 	if (!isLegalMove(inputStr, &myMove, board))
 	{
@@ -608,11 +608,13 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 }
 
 
-static void xboardNotifyMove(MoveT *move)
+static void xboardNotifyMove(MoveT move)
 {
-    char tmpStr[6];
+    char tmpStr[MOVE_STRING_MAX];
+    // This should switch on the fly to csOO if we ever implement chess960.
+    static const MoveStyleT ms = { mnCAN, csK2, false };
 
-    printf("move %s\n", moveToStr(tmpStr, move));
+    printf("move %s\n", MoveToString(tmpStr, move, &ms, NULL));
 }
 
 
@@ -626,7 +628,7 @@ void xboardNotifyDraw(char *reason, MoveT *move)
     */
     if (move != NULL && move->src != FLAG)
     {
-	xboardNotifyMove(move);
+	xboardNotifyMove(*move);
     }
     printf("1/2-1/2 {%s}\n", reason);
 }
@@ -651,10 +653,11 @@ static void xboardNotifyPV(GameT *game, PvRspArgsT *pvArgs)
     char mySanString[65];
     PvT *pv = &pvArgs->pv; // shorthand
     BoardT *board = &game->savedBoard; // shorthand
+    MoveStyleT pvStyle = {mnSAN, csOO, true};
 
     if (!gXboardState.post ||
-	buildMoveString(mySanString, sizeof(mySanString), pv, board,
-			true, false) < 1)
+	PvBuildMoveString(pv, mySanString, sizeof(mySanString), &pvStyle,
+			  board) < 1)
     {
 	return;
     }

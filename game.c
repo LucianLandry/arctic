@@ -229,7 +229,7 @@ void GameNewEx(GameT *game, ThinkContextT *th, BoardT *board, int resetClocks,
 void GameNew(GameT *game, ThinkContextT *th)
 {
     BoardT myBoard;
-    BoardSet(&myBoard, gPreCalc.normalStartingPieces, ALLCASTLE, FLAG, 0, 0,
+    BoardSet(&myBoard, gPreCalc.normalStartingPieces, CASTLEALL, FLAG, 0, 0,
 	     0);
     GameNewEx(game, th, &myBoard, 1, 1);
 }

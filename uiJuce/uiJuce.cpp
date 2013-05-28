@@ -59,7 +59,7 @@ static void juceNotifyTick(GameT *game)
 {
 }
 
-static void juceNotifyMove(MoveT *move)
+static void juceNotifyMove(MoveT move)
 {
 }
 

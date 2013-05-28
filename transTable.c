@@ -55,6 +55,9 @@ static struct {
     int numLeadingZeros;
 } gHash;
 
+#ifdef ENABLE_DEBUG_LOGGING
+static const MoveStyleT gMoveStyleTT = { mnCAN, csOO, true };
+#endif
 
 int calcNumLeadingZeros(size_t numEntries)
 {
@@ -324,7 +327,7 @@ bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
     SpinlockT *lock;
 
 #ifdef ENABLE_DEBUG_LOGGING
-    char tmpStr[6];
+    char tmpStr[MOVE_STRING_MAX];
 #endif
 
     lock = &gHash.locks[entry & (NUM_HASH_LOCKS - 1)];
@@ -355,7 +358,7 @@ bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
     LOG_DEBUG("hashHit alhbdmz: %d %d %d %d %d %s 0x%"PRIx64"\n",
 	      alpha, hashEval->lowBound, hashEval->highBound, beta,
 	      hashDepth,
-	      moveToStr(tmpStr, hashMove),
+	      MoveToString(tmpStr, *hashMove, &gMoveStyleTT, NULL),
 	      zobrist);
 
     return true;
@@ -383,7 +386,7 @@ void TransTableConditionalUpdate(PositionEvalT eval, MoveT move, uint64 zobrist,
     size_t entry = calcEntry(zobrist);
     HashPositionT *vHp = &gHash.hash[entry];
 #ifdef ENABLE_DEBUG_LOGGING
-    char tmpStr[6];
+    char tmpStr[MOVE_STRING_MAX];
 #endif
 
     // Do we want to update the table?
@@ -428,7 +431,7 @@ void TransTableConditionalUpdate(PositionEvalT eval, MoveT move, uint64 zobrist,
 	LOG_DEBUG("hashupdate lhdpmz: %d %d %d %d %s 0x%"PRIx64"\n",
 		  eval.lowBound, eval.highBound,
 		  searchDepth, basePly,
-		  moveToStr(tmpStr, &move),
+		  MoveToString(tmpStr, move, &gMoveStyleTT, NULL),
 		  zobrist);
     }
 }

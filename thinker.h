@@ -129,7 +129,7 @@ PositionEvalT ThinkerSearchersWaitOne(MoveT **move, PvT *pv);
 void ThinkerSearchersBail(void);
 
 void ThinkerSearchersMoveMake(MoveT *move, UnMakeT *unmake, int mightDraw);
-void ThinkerSearchersMoveUnmake(MoveT *move, UnMakeT *unmake);
+void ThinkerSearchersMoveUnmake(UnMakeT *unmake);
 int ThinkerSearchersSearching(void);
 void ThinkerSearchersBoardSet(BoardT *board);
 void ThinkerSearchersSetDepthAndLevel(int depth, int level);

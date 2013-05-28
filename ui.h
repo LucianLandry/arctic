@@ -34,7 +34,7 @@ typedef struct {
     void (*exit)(void);
     void (*statusDraw)(GameT *game);
     void (*notifyTick)(GameT *game);
-    void (*notifyMove)(MoveT *move);
+    void (*notifyMove)(MoveT move);
     void (*notifyError)(char *reason);
     void (*notifyPV)(GameT *game, PvRspArgsT *pvArgs);
     void (*notifyThinking)(void);

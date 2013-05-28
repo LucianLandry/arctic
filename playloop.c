@@ -95,7 +95,7 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
 	    break;
 	}
 
-	gUI->notifyMove(&rspBuf.move);
+	gUI->notifyMove(rspBuf.move);
 	if (gUI->shouldCommitMoves())
 	{
 	    GameMoveCommit(game, &rspBuf.move, th, 0);

@@ -16,10 +16,12 @@ USING CMAKE:
 
 cd <builddir>
 # generates Makefiles.
+# Juce's actual classes/structures change depending on whether JUCE_DEBUG has
+#  been defined.  As a consequence:
 # If Juce has been built with "Debugging enabled" checked in the Introjucer,
-# you MUST define JUCE_DEBUG or else you will get weird runtime errors.
+#  you MUST define JUCE_DEBUG or else you will get weird runtime errors.
 # If Juce has been built w/out debugging, you MUST NOT define JUCE_DEBUG or else
-# you will ... wait for it ... get weird runtime errors.
+#  you will ... wait for it ... get weird runtime errors.
 cmake -D JUCE_PATH=/home/blandry/juce -D JUCE_DEBUG=1 ../src
 make
 

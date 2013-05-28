@@ -443,7 +443,7 @@ void ThinkerSearchersMoveMake(MoveT *move, UnMakeT *unmake, int mightDraw)
 }
 
 
-void ThinkerSearchersMoveUnmake(MoveT *move, UnMakeT *unmake)
+void ThinkerSearchersMoveUnmake(UnMakeT *unmake)
 {
     int i;
     BoardT *localBoard;
@@ -451,7 +451,7 @@ void ThinkerSearchersMoveUnmake(MoveT *move, UnMakeT *unmake)
     {
 	localBoard = &gSG.th[i].searchArgs.localBoard;
 	localBoard->depth--;
-	BoardMoveUnmake(localBoard, move, unmake);
+	BoardMoveUnmake(localBoard, unmake);
     }
 }
 

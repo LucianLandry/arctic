@@ -83,6 +83,9 @@
 #include "ui.h"
 #include "uiUtil.h"
 
+// This should change on-the-fly to csKxR if we ever implement chess960.
+static const MoveStyleT gMoveStyleUCI = {mnCAN, csK2, false};
+
 // The UCI "position" command can be very large (polyglot likes to send
 // the starting position + all the moves; fifty-move draws are claimed,
 // not automatic; and arbitrary amounts of whitespace are also allowed.
@@ -120,43 +123,15 @@ static struct {
 } gUciState;
 
 // Forward declarations.
-static void uciNotifyMove(MoveT *move);
+static void uciNotifyMove(MoveT move);
 
 static void uciNotifyError(char *reason)
 {
     printf("info string error: %s\n", reason);
 }
 
-
-static char *findNextNonWhiteSpace(char *pStr)
-{
-    if (pStr == NULL)
-    {
-	return NULL;
-    }
-    while (isspace(*pStr) && *pStr != '\0')
-    {
-	pStr++;
-    }
-    return *pStr != '\0' ? pStr : NULL;
-}
-
-
-static char *findNextWhiteSpace(char *pStr)
-{
-    if (pStr == NULL)
-    {
-	return NULL;
-    }
-    while (!isspace(*pStr) && *pStr != '\0')
-    {
-	pStr++;
-    }
-    return *pStr != '\0' ? pStr : NULL;
-}
-
 // Given that we are pointing at a token 'pStr',
-// return a pointer to the next token.
+//  return a pointer to the token after it (or NULL, if none).
 static char *findNextToken(char *pStr)
 {
     return
@@ -264,11 +239,11 @@ static void finishMoves(GameT *game, BoardT *fenBoard, MoveT *move, char *pToken
     int lastPly, lastCommonPly;
     MoveT myMove;
     BoardT *board = &game->savedBoard;
-    char tmpStr[6];
+    char tmpStr[MOVE_STRING_MAX];
 
     printf("info string %s: diverged move was: %s\n",
 	   __func__,
-	   move && move->src != FLAG ? moveToStr(tmpStr, move) : "0000");
+	   move && move->src != FLAG ? MoveToString(tmpStr, *move, &gMoveStyleUCI, NULL) : "0000");
     if (move != NULL)
     {
 	lastPly = GameLastPly(game);
@@ -857,7 +832,7 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
 	gUciState.bPonder = false;
 	gUciState.bInfinite = false;
 	// Print the result that we just cached away.
-	uciNotifyMove(&gUciState.result.bestMove);
+	uciNotifyMove(gUciState.result.bestMove);
     }
     else if (matches(inputStr, "quit"))
     {
@@ -870,25 +845,28 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
 }
 
 
-static void uciNotifyMove(MoveT *move)
+static void uciNotifyMove(MoveT move)
 {
-    char tmpStr[6], tmpStr2[6];
+    char tmpStr[MOVE_STRING_MAX], tmpStr2[MOVE_STRING_MAX];
     MoveT ponderMove =
 	gUciState.result.ponderMove.src == FLAG ? gMoveNone :
 	gUciState.result.ponderMove;
-    bool bShowPonderMove = move->src != FLAG && ponderMove.src != FLAG;
+    bool bShowPonderMove = move.src != FLAG && ponderMove.src != FLAG;
 
     if (gUciState.bPonder || gUciState.bInfinite)
     {
 	// Store away the result for later.
-	gUciState.result.bestMove = *move;
+	gUciState.result.bestMove = move;
 	return;
     }
 
     printf("bestmove %s%s%s\n",
-	   move->src != FLAG ? moveToStr(tmpStr, move) : "0000",
+	   (move.src != FLAG ?
+	    MoveToString(tmpStr, move, &gMoveStyleUCI, NULL) :
+	    "0000"),
 	   bShowPonderMove ? " ponder " : "",
-	   bShowPonderMove ? moveToStr(tmpStr2, &ponderMove) : "");
+	   (bShowPonderMove ?
+	    MoveToString(tmpStr2, ponderMove, &gMoveStyleUCI, NULL) : ""));
     gUciState.bSearching = false;
 }
 
@@ -903,8 +881,8 @@ static void uciNotifyDraw(char *reason, MoveT *move)
     // in order to justify complicating the engine code to say "I cannot claim
     // a draw but my opponent can, what is my best move".
     printf("info string engine claims a draw (reason: %s)\n", reason);
-    uciNotifyMove(move != NULL && move->src != FLAG ? move :
-		  &gMoveNone);
+    uciNotifyMove(move != NULL && move->src != FLAG ? *move :
+		  gMoveNone);
 }
 
 
@@ -914,7 +892,7 @@ static void uciNotifyResign(int turn)
     // Since our resignation threshold is so low, we normally do not "resign"
     // unless we are actually mated.
     printf("info string engine (turn %d) resigns\n", turn);
-    uciNotifyMove(&gMoveNone);
+    uciNotifyMove(gMoveNone);
 }
 
 
@@ -939,6 +917,18 @@ static char *buildStatsString(char *result, GameT *game, CompStatsT *stats)
     return result;
 }
 
+// Returns whether a move was chopped or not.
+static bool chopFirstMove(char *moveString)
+{
+    char *space = strchr(moveString, ' ');
+    if (space)
+    {
+	strcpy(moveString, space + 1);
+	return true;
+    }
+    return false;
+}
+
 static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
 {
     char lanString[65];
@@ -947,6 +937,7 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
     bool bDisplayPv = true;
     PvT *pv = &pvArgs->pv; // shorthand
     bool chopFirst = false;
+    int moveCount;
 
     // Save away a next move to ponder on, if possible.
     gUciState.result.ponderMove =
@@ -972,8 +963,13 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
 	chopFirst = true;
     }
 
-    if (buildMoveString(lanString, sizeof(lanString), pv, &game->savedBoard,
-			false, chopFirst) < 1)
+    moveCount = PvBuildMoveString(pv, lanString, sizeof(lanString), &gMoveStyleUCI,
+				  &game->savedBoard);
+    if (chopFirst && chopFirstMove(lanString))
+    {
+	moveCount--;
+    }
+    if (moveCount < 1)
     {
 	bDisplayPv = false;
     }

@@ -1,18 +1,18 @@
-/***************************************************************************
-                    ref.h - basic chess concepts for Arctic.
-                             -------------------
-    copyright            : (C) 2007 by Lucian Landry
-    email                : lucian_b_landry@yahoo.com
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//                  ref.h - basic chess concepts for Arctic.
+//                           -------------------
+//  copyright            : (C) 2007 by Lucian Landry
+//  email                : lucian_b_landry@yahoo.com
+//--------------------------------------------------------------------------
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU Library General Public License as       *
- *   published by the Free Software Foundation; either version 2 of the    *
- *   License, or (at your option) any later version.                       *
- *                                                                         *
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//
+//   This program is free software; you can redistribute it and/or modify
+//   it under the terms of the GNU Library General Public License as
+//   published by the Free Software Foundation; either version 2 of the
+//   License, or (at your option) any later version.
+//
+//--------------------------------------------------------------------------
 
 
 #ifndef REF_H
@@ -28,6 +28,10 @@ extern "C" {
 #define VERSION_STRING_MINOR "1"
 #define VERSION_STRING_PHASE "devel" // or beta, release
 
+// The identifier for a 'cell' (basically, a board square, but in the future
+// perhaps not every type of board will have to use square-shaped cells).
+typedef uint8 cell_t;
+
 #define FLAG            127
 #define FLAG64          0x7f7f7f7f7f7f7f7fLL; /* 8 FLAGs in a row */
 #define DIRFLAG         10  /* This is even, in order to optimize rook attack
@@ -37,8 +41,17 @@ extern "C" {
 
 // These are intended as markers in case I start trying to support some more
 // interesting variants.
-#define NUM_PLAYERS     2
+#define NUM_PLAYERS      2 // Is intended as a maximum.
+#define NUM_PLAYERS_BITS 1 // How many bits do we need to represent NUM_PLAYERS?
+#define NUM_PLAYERS_MASK ((1 << NUM_PLAYERS_BITS) - 1)
+
 #define NUM_SQUARES     64
+
+// Should use this instead of '& 1' everywhere.
+static inline int PiecePlayer(uint8 piece)
+{
+    return piece & NUM_PLAYERS_MASK;
+}
 
 // Boord coordinates start at the southwest corner of board (0), increments
 // by 1 as we move to the right, and increments by row-length (8) as we move
@@ -64,12 +77,12 @@ static inline int toCoord(int rank, int file)
 #define MIN3(a, b, c) (MIN((a), (MIN((b), (c)))))
 
 #define EMPTY  0x0 // empty position
-#define KING   0x2 //  010b
-#define PAWN   0x4 //  100b
-#define NIGHT  0x6 //  110b
-#define BISHOP 0x8 // 1000b
-#define ROOK   0xa // 1010b
-#define QUEEN  0xc // 1100b
+#define KING   (0x1 << NUM_PLAYERS_BITS) //  010b
+#define PAWN   (0x2 << NUM_PLAYERS_BITS) //  100b
+#define NIGHT  (0x3 << NUM_PLAYERS_BITS) //  110b
+#define BISHOP (0x4 << NUM_PLAYERS_BITS) // 1000b
+#define ROOK   (0x5 << NUM_PLAYERS_BITS) // 1010b
+#define QUEEN  (0x6 << NUM_PLAYERS_BITS) // 1100b
 
 // These are the corresponding black pieces.
 #define BKING   (KING | 1)
@@ -111,50 +124,6 @@ static inline int toCoord(int rank, int file)
 #define EVAL_WIN_THRESHOLD (EVAL_WIN - 100)
 #define EVAL_LOSS_THRESHOLD (-EVAL_WIN_THRESHOLD)
 
-// Our basic structure for representing a chess move.
-typedef struct {
-    uint8 src;     // For a null/invalid move, src = FLAG (and the contents
-                   // of the other fields are undefined.)
-    uint8 dst;
-    uint8 promote; // Piece to promote pawn to (usually nothing, '0')
-                   // Also (ab)used for en passant,
-                   // signified by 'p' of opposite color.
-
-    uint8 chk;     // Is this a checking move.  Set to:
-                   // FLAG if not a checking move.
-                   // Coordinate of checking piece if single check
-                   // DOUBLE_CHECK otherwise.
-} MoveT;
-
-extern MoveT gMoveNone;
-
-// max PV moves we care to display (may not fit in an 80-char line)
-// I want this to be at least 16 (because we can hit that depth in endgames).
-#define MAX_PV_DEPTH 16
-// Principal variation.
-typedef struct {
-    int eval;     // evaluation of the position.
-    int level;    // nominal search depth.
-    int depth;    // including quiescing.  May actually be < level if there are
-                  // no associated moves (for example if a mate was found).
-    MoveT moves[MAX_PV_DEPTH];
-} PvT;
-
-#define PV_COMPLETED_SEARCH (-1)
-
-// Current variation.  Useful for debugging.
-#define MAX_CV_DEPTH 128
-typedef struct {
-    MoveT moves[MAX_CV_DEPTH];
-} CvT;
-
-typedef struct {
-    int lgh;
-    uint8 coords[NUM_SQUARES]; // src coord.  Not usually larger than 16, but
-                               // with edit-position (or bughouse) we might get
-                               // extra pieces ...
-} CoordListT;
-
 // NOTE: these are not exact counts, since we do not want the speed hit that
 // comes from updating these atomically.  We could have the child threads
 // maintain their own stats while they are searching, but this still does not
@@ -169,14 +138,12 @@ typedef struct {
                       // hash entry.  Used for UCI hashfull stats.
 } CompStatsT;
 
-// bits which define ability to castle (other bits in 'cbyte' are reserved).
-#define WHITEKCASTLE 0x1
-#define BLACKKCASTLE 0x2
-#define WHITEQCASTLE 0x4
-#define BLACKQCASTLE 0x8
-#define WHITECASTLE (WHITEQCASTLE | WHITEKCASTLE)
-#define BLACKCASTLE (BLACKQCASTLE | BLACKKCASTLE)
-#define ALLCASTLE   (WHITECASTLE | BLACKCASTLE)
+// bits which define ability to castle.  There is one set of these per-player
+// in 'cbyte'.
+#define CASTLEOO 0x1
+#define CASTLEOOO (0x1 << NUM_PLAYERS)
+#define CASTLEBOTH (CASTLEOO | CASTLEOOO)
+#define CASTLEALL 0xf // full castling for all sides
 
 // This is beyond the depth we can quiesce.
 #define HASH_NOENTRY -128
@@ -185,4 +152,4 @@ typedef struct {
 }
 #endif
 
-#endif /* REF_H */
+#endif // REF_H

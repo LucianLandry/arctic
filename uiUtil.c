@@ -64,39 +64,6 @@ int asciiToCoord(char *inputStr)
 }
 
 
-char *moveToStr(char *result, MoveT *move)
-{
-    char promoString[2] =
-	{(move->promote && !ISPAWN(move->promote) ?
-	  tolower(nativeToAscii(move->promote)) :
-	  0), 0};
-    sprintf(result, "%c%c%c%c%s",
-	    AsciiFile(move->src),
-	    AsciiRank(move->src),
-	    AsciiFile(move->dst),
-	    AsciiRank(move->dst),
-	    promoString);
-    
-    return result;
-}
-
-char *moveToFullStr(char *result, MoveT *move)
-{
-    sprintf(result, "%c%c%c%c.%d.%c%c",
-	    AsciiFile(move->src),
-	    AsciiRank(move->src),
-	    AsciiFile(move->dst),
-	    AsciiRank(move->dst),
-	    move->promote,
-	    (move->chk == FLAG ? 'F' :
-	     move->chk == DOUBLE_CHECK ? 'D' :
-	     AsciiFile(move->chk)),
-	    (move->chk == FLAG ? 'F' :
-	     move->chk == DOUBLE_CHECK ? 'D' :
-	     AsciiRank(move->chk)));
-    return result;
-}
-
 static bool matchHelper(char *str, char *needle, bool caseSensitive)
 {
     int len = strlen(needle);
@@ -117,161 +84,6 @@ bool matchesNoCase(char *str, char *needle)
 {
     return matchHelper(str, needle, false);
 }
-
-static void getSanMove(BoardT *board, char *sanStr, MoveT *move)
-{
-    /* See the 'algebraic notation (chess)' article on Wikipedia for details
-       about SAN. */
-    uint8 *coord = board->coord;
-    uint8 src = move->src;
-    uint8 dst = move->dst;
-    uint8 mypiece = coord[src];
-    char *origSanStr = sanStr;
-    int i;
-    int isCapture = coord[dst] || ISPAWN(move->promote);
-    int isCastle = ISKING(mypiece) && abs(dst - src) == 2;
-    int isPromote = move->promote && !ISPAWN(move->promote);
-    int sameFile = 1, sameRank = 1;
-    MoveListT mvlist;
-    UnMakeT unmake;
-
-    if (isCastle)
-    {
-	sprintf(sanStr, dst == 6 || dst == 62 ?
-                /* (PGN wants this, but FIDE wants 0 instead of O.) */
-		"O-O" : "O-O-O");
-	return;
-    }
-
-
-    if (!ISPAWN(mypiece))
-	/* Print piece (type) to move. */
-	sanStr += sprintf(sanStr, "%c", nativeToBoardAscii(mypiece));
-    else if (isCapture)
-	/* Need to spew the file we are capturing from. */
-	sanStr += sprintf(sanStr, "%c", AsciiFile(src));
-
-    mlistGenerate(&mvlist, board, 0);
-
-    /* Is there ambiguity about which piece will be moved? */
-    for (i = 0; i < mvlist.lgh; i++)
-    {
-	if (!ISPAWN(mypiece) /* already taken care of, above */ &&
-	    mvlist.moves[i].src != src &&
-	    mvlist.moves[i].dst == dst &&
-	    coord[mvlist.moves[i].src] == mypiece)
-	{
-	    /* Yes.  Note: both conditions could easily be true. */
-	    if (sameFile)
-		sameFile = File(mvlist.moves[i].src) == File(src);
-	    if (sameRank)
-		sameRank = Rank(mvlist.moves[i].src) == Rank(src);
-	}
-    }
-
-    /* ... disambiguate the src piece, if necessary. */
-    if (!sameFile)
-	sanStr += sprintf(sanStr, "%c", AsciiFile(src));
-    if (!sameRank)
-	sanStr += sprintf(sanStr, "%c", AsciiRank(src));
-
-    if (isCapture)
-	sanStr += sprintf(sanStr, "x");
-
-    /* spew the destination coord. */
-    sanStr += sprintf(sanStr, "%c%c", AsciiFile(dst), AsciiRank(dst));
-
-    if (isPromote)
-	/* spew piece type to promote to. */
-	sanStr += sprintf(sanStr, "%c", nativeToBoardAscii(move->promote));
-
-    if (move->chk != FLAG)
-    {
-	/* piece in check. */
-	/* Is this checkmate? */
-	BoardMoveMake(board, move, &unmake);
-	mlistGenerate(&mvlist, board, 0);
-	BoardMoveUnmake(board, move, &unmake);
-
-	sanStr += sprintf(sanStr, "%c", mvlist.lgh ? '+' : '#');
-    }
-
-    assert(sanStr - origSanStr < 8);
-}
-
-
-// Writes out moves in SAN (Nf3) if 'useSan' == true,
-// otherwise long algebraic notation (g1f3) is used.
-// Returns the number of moves successfully converted.
-int buildMoveString(char *dstStr, int dstLen, PvT *pv, BoardT *board,
-		    bool useSan, bool chopFirst)
-{
-    char myStrSpace[MAX_PV_DEPTH * 8 + 1] = "";
-    char *myStr = myStrSpace;
-    char sanStr[8]; // longest move: Qb5xb6+
-    BoardT myBoard;
-    int i;
-    MoveT *moves;
-    int lastLen = 0, myStrLen;
-    MoveListT mvlist;
-    int movesWritten = 0;
-
-    BoardCopy(&myBoard, board);
-
-    for (i = 0, moves = pv->moves;
-	 i < pv->depth + 1;
-	 i++, moves++)
-    {
-	mlistGenerate(&mvlist, &myBoard, 0);
-	if (mlistSearch(&mvlist, moves, 4))
-	{
-	    if (useSan)
-	    {
-		getSanMove(&myBoard, sanStr, moves);
-	    }
-	    else // using algebraic notation
-	    {
-		moveToStr(sanStr, moves);
-	    }
-	    BoardMoveMake(&myBoard, moves, NULL);
-	}
-	else
-	{
-	    // Illegal move found, probably a blasted hash.  This can happen
-	    // but not very often.
-	    LogPrint(eLogNormal, "%s: game %d: illegal move %d.%d.%d.%d "
-		     "baseply %d depth %d maxDepth %d (probably overwritten "
-		     "hash), ignoring\n",
-		     __func__, gVars.gameCount,
-		     moves->src, moves->dst, moves->promote, moves->chk,
-		     board->ply, i, pv->depth);
-	    break;
-	}
-
-	if (!(i == 0 && chopFirst))
-	{
-	    // Build up the result string.
-	    myStr += sprintf(myStr, "%s%s",
-			     // Do not use leading space before first move.
-			     i == 0 ? "" : " ",
-			     sanStr);
-	    myStrLen = myStr - myStrSpace;
-	    assert(myStrLen < sizeof(myStrSpace));
-	    if (myStrLen > dstLen)
-	    {
-		// We wrote too much information.  Chop the last move off.
-		myStrSpace[lastLen] = '\0';
-		break;
-	    }
-	    lastLen = myStrLen;
-	    movesWritten++;
-	}
-    }
-
-    strcpy(dstStr, myStrSpace);
-    return movesWritten;
-}
-
 
 // Direct a report to the user or the error log, whichever is more
 // appropriate.  Always returns -1 (as a convenience).
@@ -408,16 +220,16 @@ int fenToBoard(char *fenString, BoardT *result)
 	    switch (chr)
 	    {
 	    case 'K':
-		cbyte |= WHITEKCASTLE;
+		cbyte |= CASTLEOO;
 		break;
 	    case 'Q':
-		cbyte |= WHITEQCASTLE;
+		cbyte |= CASTLEOOO;
 		break;
 	    case 'k':
-		cbyte |= BLACKKCASTLE;
+		cbyte |= CASTLEOO << 1;
 		break;
 	    case 'q':
-		cbyte |= BLACKQCASTLE;
+		cbyte |= CASTLEOOO << 1;
 		break;
 	    default:
 		return reportError
@@ -475,21 +287,93 @@ void setForceMode(ThinkContextT *th, GameT *game)
     }
 }
 
+char *findNextNonWhiteSpace(char *pStr)
+{
+    if (pStr == NULL)
+    {
+	return NULL;
+    }
+    while (isspace(*pStr) && *pStr != '\0')
+    {
+	pStr++;
+    }
+    return *pStr != '\0' ? pStr : NULL;
+}
+
+char *findNextWhiteSpace(char *pStr)
+{
+    if (pStr == NULL)
+    {
+	return NULL;
+    }
+    while (!isspace(*pStr) && *pStr != '\0')
+    {
+	pStr++;
+    }
+    return *pStr != '\0' ? pStr : NULL;
+}
+
+char *findNextWhiteSpaceOrNull(char *pStr)
+{
+    if (pStr == NULL)
+    {
+	return NULL;
+    }
+    while (!isspace(*pStr) && *pStr != '\0')
+    {
+	pStr++;
+    }
+    return pStr;
+}
+
+// Copies (possibly non-NULL-terminated) token 'src' to NULL-terminated 'dst'.
+// Returns 'dst' iff a full copy could be performed, otherwise NULL (and in that
+//  case, does not clobber 'dst', just to be nice)
+static char *copyToken(char *dst, int dstLen, char *src)
+{
+    int srcLen;
+
+    if (src == NULL ||
+	(srcLen = (findNextWhiteSpaceOrNull(src) - src)) >= dstLen)
+    {
+	return NULL;
+    }
+    memcpy(dst, src, srcLen);
+    dst[srcLen] = '\0';
+    return dst;
+}
+
 // Return whether or not 'inputStr' looks like a move.
 // NULL "inputStr"s are not moves.
 // Side effect: fills in 'resultMove'.
-// Currently we can only handle algebraic notation.
-bool isMove(char *inputStr, MoveT *resultMove)
+// Currently we can only handle algebraic notation (and also O-O-style
+//  castling).
+bool isMove(char *inputStr, MoveT *resultMove, BoardT *board)
 {
+    char moveStr[MOVE_STRING_MAX];
+
     memset(resultMove, 0, sizeof(MoveT));
-    if (inputStr == NULL)
+
+    if (copyToken(moveStr, sizeof(moveStr), inputStr) == NULL)
     {
 	return false;
     }
-    if (asciiToCoord(inputStr) != FLAG && asciiToCoord(&inputStr[2]) != FLAG)
+
+    if (!strcasecmp(moveStr, "O-O") || !strcasecmp(moveStr, "0-0"))
     {
-	resultMove->src = asciiToCoord(inputStr);
-	resultMove->dst = asciiToCoord(&inputStr[2]);
+	MoveCreateFromCastle(resultMove, true, board->turn);
+	return true;
+    }
+    if (!strcasecmp(moveStr, "O-O-O") || !strcasecmp(moveStr, "0-0-0"))
+    {
+	MoveCreateFromCastle(resultMove, false, board->turn);
+	return true;
+    }
+    else if (asciiToCoord(moveStr) != FLAG && asciiToCoord(&moveStr[2]) != FLAG)
+    {
+	resultMove->src = asciiToCoord(moveStr);
+	resultMove->dst = asciiToCoord(&moveStr[2]);
+	MoveUnmangleCastle(resultMove, board);
 	return true;
     }
     return false;
@@ -506,7 +390,7 @@ bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
     MoveT *foundMove;
     uint8 chr;
 
-    if (!isMove(inputStr, resultMove))
+    if (!isMove(inputStr, resultMove, board))
     {
 	return false;
     }
@@ -520,8 +404,7 @@ bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
     }
 
     // Do we need to promote?
-    if (ISPAWN(board->coord[resultMove->src]) &&
-	(resultMove->dst > 55 || resultMove->dst < 8))
+    if (MoveIsPromote(*resultMove, board))
     {
 	chr = inputStr[4];
 	if (chr != 'q' && chr != 'r' && chr != 'n' && chr != 'b')

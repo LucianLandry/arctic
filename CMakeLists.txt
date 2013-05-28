@@ -21,7 +21,8 @@ endif (JUCE_PATH)
 
 # Normal compile flags.
 # set(CMAKE_C_FLAGS "-Wall -Werror -O2 -fomit-frame-pointer")
-# Fast debug flags.
+# Fast debug flags.  In practice, this seems to be basically as fast as the
+# "normal" flags, so we normally use this.
 set(CMAKE_C_FLAGS "-Wall -Werror -g -O2")
 # Debug flags.
 # set(CMAKE_C_FLAGS "-Wall -Werror -g -DENABLE_DEBUG_LOGGING")
@@ -38,7 +39,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
 
 add_subdirectory(uiJuce)
 
-add_executable(arctic aThread.c aSystem.c board.c clock.c comp.c conio.c game.c gDynamic.c gPreCalc.c list.c log.c main.c moveList.c playloop.c saveGame.c switcher.c thinker.c transTable.c uiNcurses.c uiUci.c uiUtil.c uiXboard.c)
+add_executable(arctic aThread.c aSystem.c board.c clock.c comp.c conio.c game.c gDynamic.c gPreCalc.c list.c log.c main.c move.c moveList.c playloop.c pv.c saveGame.c switcher.c thinker.c transTable.c uiNcurses.c uiUci.c uiUtil.c uiXboard.c variant.c)
 
 # ncursesw is necessary for a UTF-8 console cursor.
 target_link_libraries(arctic ncursesw pthread uiJuce ${EXTRA_LIBS})

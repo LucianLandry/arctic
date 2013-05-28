@@ -83,6 +83,8 @@ typedef struct {
 	uint64 ebyte[NUM_SQUARES];
     } zobrist;
 
+    uint8 castleMask[NUM_SQUARES];
+
     int numProcs;
     bool userSpecifiedHashSize;
 

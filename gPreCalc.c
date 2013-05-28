@@ -16,12 +16,11 @@
 
 #include <stdlib.h>   // qsort()
 #include <assert.h>
+
 #include "aSystem.h"
 #include "gPreCalc.h"
 #include "gDynamic.h"
-
-// I do not have a better place to put this yet.
-MoveT gMoveNone = {FLAG, 0, 0, 0};
+#include "variant.h"
 
 GPreCalcT gPreCalc;
 
@@ -359,6 +358,23 @@ static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [NUM_S
 	}
 }
 
+static void castleMaskInit(void)
+{
+    int i;
+    CastleStartCoordsT *castleStart;
+
+    for (i = 0; i < NUM_SQUARES; i++)
+    {
+	gPreCalc.castleMask[i] = ~0x0;
+    }
+    for (i = 0; i < NUM_PLAYERS; i++)
+    {
+	castleStart = &gVariant->castling[i].start;
+	gPreCalc.castleMask[castleStart->king] &= ~(CASTLEBOTH << i);
+	gPreCalc.castleMask[castleStart->rookOO] &= ~(CASTLEOO << i);
+	gPreCalc.castleMask[castleStart->rookOOO] &= ~(CASTLEOOO << i);
+    }
+}
 
 uint64 random64(void)
 {
@@ -469,19 +485,24 @@ void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
     }
 #endif
 
-    /* initialize zobrist hashing. */
+    // initialize zobrist hashing.
     for (i = 0; i < NUM_SQUARES; i++)
     {
 	for (j = 0; j < NUM_PIECE_TYPES; j++)
 	{
-	    gPreCalc.zobrist.coord[j] [i] = random64();
+	    gPreCalc.zobrist.coord[j] [i] =
+		// Using 0 for empty squares simplifies zobrist calculation
+		// when making moves later (do not have to XOR in empty squares,
+		// but it is not an error to do so).
+		(j >> NUM_PLAYERS_BITS) ? random64() : 0;
 	}
 
 	gPreCalc.zobrist.ebyte[i] = random64();
 	
 	if (i < 16)
 	{
-	    gPreCalc.zobrist.cbyte[i] = random64();
+	    // We also use 0 for the cbyte where no one can castle.
+	    gPreCalc.zobrist.cbyte[i] = (i > 0) ? random64() : 0;
 	}
     }
     gPreCalc.zobrist.turn = random64();
@@ -493,4 +514,6 @@ void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
 	SystemTotalProcessors();
 
     gPreCalc.normalStartingPieces = gNormalStartingPieces;
+
+    castleMaskInit();
 }
