@@ -81,7 +81,7 @@ gnome-terminal has funky color handling and the background shows up as dark
 
 NIFTY XBOARD COMMANDS:
 # human play against arctic (black)
-xboard -size bulky -debug -debugFile ~/xboard.debug -thinking -depth 5 -fcp ./arctic
+xboard -size bulky -debug -nameOfDebugFile ~/xboard.debug -thinking -depth 5 -fcp ./arctic
 
 # play arctic (white) against default computer opponent (black)
 # (note: cannot use '-depth' argument, gnuchessx now gets confused and thinks
@@ -95,24 +95,24 @@ xboard -size bulky -debug -thinking -xponder -mode TwoMachines -fcp ./arctic -sc
 xboard -size bulky -ncp
 
 # play arctic against older version
-xboard -size bulky -defaultHashSize 508 -debug -debugFile ~/xboard.debug -thinking -xponder -mode TwoMachines -scp ./arctic -fcp ../../arcticExe/arctic10
+xboard -size bulky -defaultHashSize 508 -debug -nameOfDebugFile ~/xboard.debug -thinking -xponder -mode TwoMachines -scp ./arctic -fcp ../../arcticExe/arctic10
 
 # play arctic against older version (white)
-xboard -size bulky -defaultHashSize 508 -debug -debugFile ~/xboard.debug -thinking -xponder -mode TwoMachines -fcp ./arctic -scp ../../arcticExe/arctic10
+xboard -size bulky -defaultHashSize 508 -debug -nameOfDebugFile ~/xboard.debug -thinking -xponder -mode TwoMachines -fcp ./arctic -scp ../../arcticExe/arctic10
 
 # play human on FICS
 xboard -size bulky -ics -icshost freechess.org # no timeseal
 xboard -size bulky -ics -icshost 69.36.243.188 -icshelper timeseal.Linux
 
 # play computer on FICS
-xboard -size bulky -defaultHashSize 508 -debug -debugFile ~/xboard.debug -thinking -zp -ics -icshost 69.36.243.188 -icshelper timeseal.Linux -fcp ./arctic -zippyGameStart 'say Hi, I am a homebrew computer program.  My author is mandolin.  Please have fun!'
+xboard -size bulky -defaultHashSize 508 -debug -nameOfDebugFile ~/xboard.debug -thinking -zp -ics -icshost 69.36.243.188 -icshelper timeseal.Linux -fcp ./arctic -zippyGameStart 'say Hi, I am a homebrew computer program.  My author is mandolin.  Please have fun!'
 set highlight 0
 set examine 0
 set autoflag 1
 
 # Play a UCI engine - vs UCI engine match (pondering enabled to understand
 # UCI innards better)
-xboard -size bulky -debug -debugFile ~/xboard.debug -thinking -ponder -mode TwoMachines -fcp "polyglot -noini -log true -lf /home/blandry/polyglot.log -ec fruit" -scp "polyglot -noini -log true -lf /home/blandry/polyglot.log2 -ec stockfish"
+xboard -size bulky -debug -nameOfDebugFile ~/xboard.debug -thinking -ponder -mode TwoMachines -fcp "polyglot -noini -log true -lf /home/blandry/polyglot.log -ec fruit" -scp "polyglot -noini -log true -lf /home/blandry/polyglot.log2 -ec stockfish"
 
 # Play arctic (UCI) against older version
-xboard -size bulky -defaultHashSize 508 -debug -debugFile ~/xboard.debug -thinking -xponder -mode TwoMachines -fcp ../../arcticExe/arctic10 -scp "polyglot -noini -log true -lf /home/blandry/polyglot.log3 -ec ./arctic"
+xboard -size bulky -defaultHashSize 508 -debug -nameOfDebugFile ~/xboard.debug -thinking -xponder -mode TwoMachines -fcp ../../arcticExe/arctic10 -scp "polyglot -noini -log true -lf /home/blandry/polyglot.log3 -ec ./arctic"

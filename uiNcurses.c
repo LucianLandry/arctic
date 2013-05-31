@@ -1051,11 +1051,10 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     MoveT myMove;
     int myLevel;
     int myHiswin;
-    int player, turn;
+    int player;
     char myStr[3];
 
     BoardT *board = &game->savedBoard; // shorthand
-    turn = game->savedBoard.turn; // shorthand
 
     UIGetCommand(comstr, game);
     

@@ -127,6 +127,14 @@ static inline void outportd (unsigned short int port, unsigned int val)
 }
 #endif // blandry
 
+// blandry: This is a thin wrapper over the ncurses macro getyx(), here simply
+//  to avoid a spurious gcc 4.7 "error: variable 'y' set but not used 
+//  [-Werror=unused-but-set-variable]" (or the like) warning.
+static void dogetyx(WINDOW *scr, int *y, int *x)
+{
+    getyx(scr, *y, *x);
+}
+
 /* Call this before any call to linux conio - except the port functions ! */
 void initconio (void) /* This is needed, because ncurses needs to be initialized */
 {
@@ -454,7 +462,7 @@ int wherex (void)
    int y;
    int x;
    if (initialized==0) initconio();
-   getyx(conio_scr,y,x);
+   dogetyx(conio_scr,&y,&x);
    x++;
    return(x);
 }
@@ -464,7 +472,7 @@ int wherey (void)
    int y;
    int x;
    if (initialized==0) initconio();
-   getyx(conio_scr,y,x);
+   dogetyx(conio_scr,&y,&x);
    y++;
    return(y);
 }

@@ -38,14 +38,6 @@ static inline void coordUpdate(BoardT *board, uint8 i, uint8 piece)
     board->coord[i] = piece;
 }
 
-static inline void coordUpdateZ(BoardT *board, uint8 i, uint8 piece)
-{
-    board->zobrist ^=
-        gPreCalc.zobrist.coord[board->coord[i]] [i] ^
-	gPreCalc.zobrist.coord[piece] [i];
-    coordUpdate(board, i, piece);
-}
-
 static void pieceAdd(BoardT *board, int coord, uint8 piece)
 {
     board->pPiece[coord] =
@@ -116,14 +108,6 @@ static void pieceMove(BoardT *board, int src, int dst, uint8 piece)
     // move *and* it was a capture.
     board->pPiece[src] = NULL;
     coordUpdate(board, src, 0);
-}
-
-static inline void pieceMoveZ(BoardT *board, int src, int dst, uint8 piece)
-{
-    pieceMove(board, src, dst, piece);
-    board->zobrist ^=
-        gPreCalc.zobrist.coord[piece] [dst] ^
-	gPreCalc.zobrist.coord[piece] [src];
 }
 
 // This is useful for generating a hash for the initial board position, or
@@ -323,10 +307,9 @@ void BoardInit(BoardT *board)
     CvInit(&board->cv);
 }
 
-#if 0 // unused so far
 // Like BoardMoveMake(), but do not actually make the move, just calculate
 // a new zobrist.
-uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
+static uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
 {
     uint64 zobrist = board->zobrist;
     int enpass = ISPAWN(move->promote); // en passant capture?
@@ -343,7 +326,7 @@ uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
 
     if (ebyte != FLAG)
     {
-	board->zobrist ^= gPreCalc.zobrist.ebyte[ebyte];
+	zobrist ^= gPreCalc.zobrist.ebyte[ebyte];
     }
 
     if (MoveIsCastle(*move))
@@ -359,8 +342,6 @@ uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
 			&kSrc, &kDst, &rSrc, &rDst);
 
 	newcbyte = cbyteCalcFromCastle(cbyte, turn);
-
-	kSrc = castling->start.king;
 
 	zobrist ^=
 	    // Move the king to its destination.  This is "simple"
@@ -381,7 +362,6 @@ uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
     {
 	// Normal case.
 	zobrist ^=
-	    // replace piece (if any) at destination ...
 	    gPreCalc.zobrist.coord[cappiece] [dst] ^
 	    // ... with the new piece that is supposed to be there ...
 	    gPreCalc.zobrist.coord[promote ? move->promote : mypiece] [dst] ^
@@ -409,33 +389,14 @@ uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
     TransTablePrefetch(zobrist);
     return zobrist;
 }
-#endif
 
-static void doCastleMoveZ(BoardT *board,
-			  uint8 kSrc, uint8 kDst,
-			  uint8 rSrc, uint8 rDst)
-{
-    // To accomodate variants like chess960, we must remove and re-add at least
-    // one piece (to prevent piece clobbering).  Here, we choose the king.
-
-    uint8 turn = board->turn; // shorthand
-    uint8 kPiece = KING | turn;
-    uint8 rPiece = ROOK | turn;
-
-    pieceRemoveZ(board, kSrc, kPiece);
-    if (rSrc != rDst)
-    {
-	pieceMoveZ(board, rSrc, rDst, rPiece);
-    }
-    pieceAddZ(board, kDst, kPiece);
-}
-
-// This is identical (by design) to doCastleMoveZ(), except we do not manipulate
-// the zobrist.
 static void doCastleMove(BoardT *board,
 			 uint8 kSrc, uint8 kDst,
 			 uint8 rSrc, uint8 rDst)
 {
+    // To accomodate variants like chess960, we must remove and re-add at least
+    // one piece (to prevent piece clobbering).  Here, we choose the king.
+
     uint8 turn = board->turn; // shorthand
     uint8 kPiece = KING | turn;
     uint8 rPiece = ROOK | turn;
@@ -464,6 +425,14 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
     ListT *myList;
     PositionElementT *myElem;
 
+    uint64 origZobrist = board->zobrist;
+
+    // It is in fact faster (*barely*, 33.01 sec vs 33.05 sec for a
+    // depth-10 search) to do this calculation ahead of time just so we can
+    // prefetch it sooner, even when BoardZobristCalcFromMove() is not static.
+    board->zobrist = BoardZobristCalcFromMove(board, move);
+    TransTablePrefetch(board->zobrist);
+
     assert(src != FLAG); // This seems to happen too often.
 
 #ifdef DEBUG_CONSISTENCY_CHECK
@@ -479,7 +448,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
 	unmake->ebyte = board->ebyte;
 	unmake->ncheck = board->ncheck[board->turn];
 	unmake->ncpPlies = board->ncpPlies;
-	unmake->zobrist = board->zobrist;
+	unmake->zobrist = origZobrist;
 	unmake->repeatPly = board->repeatPly;
     }
 
@@ -493,7 +462,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
 			MoveIsCastleOO(*move),
 			&kSrc, &kDst, &rSrc, &rDst);
 
-	doCastleMoveZ(board, kSrc, kDst, rSrc, rDst);
+	doCastleMove(board, kSrc, kDst, rSrc, rDst);
 	newcbyte = cbyteCalcFromCastle(board->cbyte, board->turn);
 	newebyte = FLAG;
     }
@@ -505,20 +474,20 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
 	// Capture? better dump the captured piece from the pieceList..
 	if (cappiece)
 	{
-	    pieceCaptureZ(board, dst, cappiece);
+	    pieceCapture(board, dst, cappiece);
 	}
 	else if (enpass)
 	{
-	    pieceRemoveZ(board, board->ebyte, move->promote);
+	    pieceRemove(board, board->ebyte, move->promote);
 	}
-	pieceMoveZ(board, src, dst, mypiece);
+	pieceMove(board, src, dst, mypiece);
 
 	// El biggo question: did a promotion take place? Need to update
 	// stuff further then.  Can be inefficient cause almost never occurs.
 	if (promote)
 	{
-	    pieceCaptureZ(board, dst, mypiece);
-	    pieceAddZ(board, dst, move->promote);
+	    pieceCapture(board, dst, mypiece);
+	    pieceAdd(board, dst, move->promote);
 	}
 
 	// Update en passant status.
@@ -527,12 +496,8 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
 	    dst : FLAG;
     }
 
-    cbyteUpdate(board, newcbyte); // Update castle status.
-    ebyteUpdate(board, newebyte);
-
-    board->zobrist ^= gPreCalc.zobrist.turn;
-    TransTablePrefetch(board->zobrist);
-
+    board->cbyte = newcbyte;
+    board->ebyte = newebyte;
     board->ply++;
     board->turn ^= 1;
     board->ncheck[board->turn] = move->chk;

@@ -19,10 +19,10 @@ endif (JUCE_PATH)
 # Variables like 'CMAKE_C_FLAGS' should be set before adding subdirectories
 # (unless you do not want them to be passed down).
 
-# Normal compile flags.
+# Standard compile flags.
 # set(CMAKE_C_FLAGS "-Wall -Werror -O2 -fomit-frame-pointer")
 # Fast debug flags.  In practice, this seems to be basically as fast as the
-# "normal" flags, so we normally use this.
+# "normal" flags, so we actually normally use this.
 set(CMAKE_C_FLAGS "-Wall -Werror -g -O2")
 # Debug flags.
 # set(CMAKE_C_FLAGS "-Wall -Werror -g -DENABLE_DEBUG_LOGGING")
