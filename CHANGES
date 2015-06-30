@@ -45,6 +45,7 @@ Use a "smarter" resign strategy (try not to resign too early)
 Add command-line option to override default UI.
 uiNcurses: make cursor look nicer on Linux console; fix UIBarfString() backspace
 Bugfix: fix goalTime calc for ICS, and when increment larger than starting time
+Refactored castling and make-move code.
 
 Version 10:
 Implemented depth-1 futility pruning.

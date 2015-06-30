@@ -34,7 +34,7 @@ static bigtime_t calcTimeTaken(ClockT *myClock)
 
 void ClockInit(ClockT *myClock)
 {
-    memset(myClock, 0, sizeof(myClock));
+    memset(myClock, 0, sizeof(ClockT));
     myClock->startTime = CLOCK_TIME_INFINITE;
     myClock->time = CLOCK_TIME_INFINITE;
     myClock->perMoveLimit = CLOCK_TIME_INFINITE;

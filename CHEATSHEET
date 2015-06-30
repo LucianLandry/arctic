@@ -9,6 +9,9 @@ add all (unignored) untracked files to index + remove deleted files from index:
     git add --all --verbose
 commit everything, including tracked files not in the index yet, but not
     including untracked files: git commit --all
+revert uncommitted (including indexed) changes: git reset --hard
+git reset --mixed "unkeeps".
+
 
 -------------------------------------------------------------------------------
 
@@ -22,7 +25,7 @@ cd <builddir>
 #  you MUST define JUCE_DEBUG or else you will get weird runtime errors.
 # If Juce has been built w/out debugging, you MUST NOT define JUCE_DEBUG or else
 #  you will ... wait for it ... get weird runtime errors.
-cmake -D JUCE_PATH=/home/blandry/juce -D JUCE_DEBUG=1 ../src
+cmake -D JUCE_PATH=/home/blandry/libjuce -D JUCE_DEBUG=1 ../src
 make
 
 No true build log is normally generated, but if you need one, you can do:
@@ -53,10 +56,31 @@ make
 
 Current download instructions for Juce's latest git version (not currently used) are:
 git clone --depth 1 git://github.com/julianstorer/JUCE.git
-cd extras/Introjucer/Builds/Linux
+mv JUCE juce-git.072914
+ln -s juce-git.072914 juce
+cd juce/extras/Introjucer/Builds/Linux
 make # builds Introjucer
-cd ../../../static\ library
-../Introjucer/Builds/Linux/build/Introjucer juce.jucer
+mkdir ~/libJuce
+build/IntroJucer
+File -> "New Project"
+Project Name: libjuce
+Project Type: Static Library
+("Create")
+"Ok" (to use current juce directory as modules directory)
+uncheck "Include BinaryData.h in the AppConfig.h file"
+Clicked on "Linux Makefile->Debug" just to make sure it looked sane.
+File->Save
+cd ~/libjuce/Builds/Linux
+make
+# output is in ~/libjuce/Builds/Linux/build/libjuce.a
+
+Juce needs (at least) these Debian packages:
+g++             # g++
+libasound2-dev  # alsa/asoundlib.h
+libgl1-mesa-dev # libGL.so
+libxcursor-dev  # Xcursor.h
+libxinerama-dev # Xinerama.h
+mesa-common-dev # GL/gl.h
 
 -------------------------------------------------------------------------------
 JUCE GOTCHAS:
@@ -89,7 +113,7 @@ xboard -size bulky -debug -nameOfDebugFile ~/xboard.debug -thinking -depth 5 -fc
 xboard -size bulky -debug -thinking -mode TwoMachines -xponder -fcp ./arctic
 
 # play arctic against itself
-xboard -size bulky -debug -thinking -xponder -mode TwoMachines -fcp ./arctic -scp ./arctic
+xboard -size bulky -debug -nameOfDebugFile ~/xboard.debug -thinking -xponder -mode TwoMachines -fcp ./arctic -scp ./arctic
 
 # look at a game.
 xboard -size bulky -ncp
@@ -102,10 +126,10 @@ xboard -size bulky -defaultHashSize 508 -debug -nameOfDebugFile ~/xboard.debug -
 
 # play human on FICS
 xboard -size bulky -ics -icshost freechess.org # no timeseal
-xboard -size bulky -ics -icshost 69.36.243.188 -icshelper timeseal.Linux
+xboard -size bulky -ics -icshost 167.114.65.195 -icshelper timeseal.Linux
 
 # play computer on FICS
-xboard -size bulky -defaultHashSize 508 -debug -nameOfDebugFile ~/xboard.debug -thinking -zp -ics -icshost 69.36.243.188 -icshelper timeseal.Linux -fcp ./arctic -zippyGameStart 'say Hi, I am a homebrew computer program.  My author is mandolin.  Please have fun!'
+xboard -size bulky -defaultHashSize 508 -debug -nameOfDebugFile ~/xboard.debug -ponder -thinking -zp -ics -icshost 167.114.65.195 -icshelper timeseal.Linux -fcp ./arctic -zippyGameStart 'say Hi, I am a homebrew computer program.  My author is mandolin.  Please have fun!'
 set highlight 0
 set examine 0
 set autoflag 1

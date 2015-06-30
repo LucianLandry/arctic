@@ -1,5 +1,5 @@
 if (JUCE_PATH)
-    include_directories(${JUCE_PATH}/modules)
+    include_directories(${JUCE_PATH}/JuceLibraryCode/modules)
 endif (JUCE_PATH)
 
 # It is critical to get this correct.  Juce classes can change in allocated

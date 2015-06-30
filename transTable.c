@@ -328,6 +328,7 @@ bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
 
 #ifdef ENABLE_DEBUG_LOGGING
     char tmpStr[MOVE_STRING_MAX];
+    char peStr[POSITIONEVAL_STRING_MAX];
 #endif
 
     lock = &gHash.locks[entry & (NUM_HASH_LOCKS - 1)];
@@ -355,9 +356,10 @@ bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
     *hashMove = vHp->move;
 
     SpinlockUnlock(lock);
-    LOG_DEBUG("hashHit alhbdmz: %d %d %d %d %d %s 0x%"PRIx64"\n",
-	      alpha, hashEval->lowBound, hashEval->highBound, beta,
-	      hashDepth,
+    LOG_DEBUG("hashHit alhbdmz: %d %s %d %d %s 0x%"PRIx64"\n",
+	      alpha,
+	      PositionEvalToLogString(peStr, &hashEval),
+	      beta, hashDepth,
 	      MoveToString(tmpStr, *hashMove, &gMoveStyleTT, NULL),
 	      zobrist);
 
@@ -387,6 +389,7 @@ void TransTableConditionalUpdate(PositionEvalT eval, MoveT move, uint64 zobrist,
     HashPositionT *vHp = &gHash.hash[entry];
 #ifdef ENABLE_DEBUG_LOGGING
     char tmpStr[MOVE_STRING_MAX];
+    char peStr[POSITIONEVAL_STRING_MAX];
 #endif
 
     // Do we want to update the table?
@@ -428,8 +431,8 @@ void TransTableConditionalUpdate(PositionEvalT eval, MoveT move, uint64 zobrist,
 
 	SpinlockUnlock(lock);
 
-	LOG_DEBUG("hashupdate lhdpmz: %d %d %d %d %s 0x%"PRIx64"\n",
-		  eval.lowBound, eval.highBound,
+	LOG_DEBUG("hashupdate lhdpmz: %s %d %d %s 0x%"PRIx64"\n",
+		  PositionEvalToLogString(peStr, &eval),
 		  searchDepth, basePly,
 		  MoveToString(tmpStr, move, &gMoveStyleTT, NULL),
 		  zobrist);

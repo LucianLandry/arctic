@@ -457,7 +457,12 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
     {
 	uint8 kSrc, kDst, rSrc, rDst;
 
-	mypiece = 0;
+	// Hacky: deliberately mis-mark our detected piece as a pawn to trigger
+	// the irreversible-move logic (since castling is an unrepeatable move)
+	// This just saves an extra 'isCastle' check later that will usually
+	// be false.
+	mypiece = PAWN;
+
 	getCastleCoords(board,
 			MoveIsCastleOO(*move),
 			&kSrc, &kDst, &rSrc, &rDst);
@@ -503,6 +508,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
     board->ncheck[board->turn] = move->chk;
 
     // Adjust ncpPlies appropriately.
+    // Castling moves are also irreversible.
     if (ISPAWN(mypiece) || cappiece)
     {
 	board->ncpPlies = 0;

@@ -17,6 +17,7 @@
 #ifndef ARCTIC_APP_H
 #define ARCTIC_APP_H
 
+#include "../AppConfig.h"
 #include "juce_gui_basics/juce_gui_basics.h" // JUCEApplication
 #include "MainWindow.h"
 #include "MainMenuBarModel.h"

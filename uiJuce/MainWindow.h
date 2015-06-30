@@ -17,6 +17,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "../AppConfig.h"
 #include "juce_gui_basics/juce_gui_basics.h" // juce::DocumentWindow
 #include "MainComponent.h"
 #include "MainMenuBarModel.h"

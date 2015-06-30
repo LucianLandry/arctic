@@ -454,7 +454,7 @@ void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
     }
 
     /* initialize worth array. */
-    for (i = 0; i < sizeof(gPreCalc.worth); i++)
+    for (i = 0; i < NUM_PIECE_TYPES; i++)
     {
 	gPreCalc.worth[i] = worthf(i);
     }
