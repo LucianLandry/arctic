@@ -10,7 +10,8 @@ add all (unignored) untracked files to index + remove deleted files from index:
 commit everything, including tracked files not in the index yet, but not
     including untracked files: git commit --all
 revert uncommitted (including indexed) changes: git reset --hard
-git reset --mixed "unkeeps".
+"unkeep": git reset --mixed
+list all untracked files: git ls-files --others --exclude-standard
 
 
 -------------------------------------------------------------------------------
@@ -22,7 +23,9 @@ cd <builddir>
 # Juce's actual classes/structures change depending on whether JUCE_DEBUG has
 #  been defined.  As a consequence:
 # If Juce has been built with "Debugging enabled" checked in the Introjucer,
-#  you MUST define JUCE_DEBUG or else you will get weird runtime errors.
+#  you MUST define JUCE_DEBUG or else you will get either weird 'non-virtual
+#  thunk to ...' errors during link, or worse (on older compilers), weird
+#  runtime errors.
 # If Juce has been built w/out debugging, you MUST NOT define JUCE_DEBUG or else
 #  you will ... wait for it ... get weird runtime errors.
 cmake -D JUCE_PATH=/home/blandry/libjuce -D JUCE_DEBUG=1 ../src
@@ -56,23 +59,24 @@ make
 
 Current download instructions for Juce's latest git version (not currently used) are:
 git clone --depth 1 git://github.com/julianstorer/JUCE.git
-mv JUCE juce-git.072914
-ln -s juce-git.072914 juce
+mv JUCE juce-git.20150629
+ln -s juce-git.20150629 juce
 cd juce/extras/Introjucer/Builds/Linux
 make # builds Introjucer
 mkdir ~/libJuce
 build/IntroJucer
 File -> "New Project"
+Click "Static Library"
 Project Name: libjuce
-Project Type: Static Library
 ("Create")
 "Ok" (to use current juce directory as modules directory)
 uncheck "Include BinaryData.h in the AppConfig.h file"
 Clicked on "Linux Makefile->Debug" just to make sure it looked sane.
 File->Save
-cd ~/libjuce/Builds/Linux
+cd ~/libjuce/Builds/LinuxMakefile
+# this builds the Debug version.  For release, perhaps try "make CONFIG=Release"
 make
-# output is in ~/libjuce/Builds/Linux/build/libjuce.a
+# output is in ~/libjuce/Builds/LinuxMakefile/build/libjuce.a
 
 Juce needs (at least) these Debian packages:
 g++             # g++
@@ -80,6 +84,7 @@ libasound2-dev  # alsa/asoundlib.h
 libgl1-mesa-dev # libGL.so
 libxcursor-dev  # Xcursor.h
 libxinerama-dev # Xinerama.h
+libxrandr-dev   # Xrandr.h
 mesa-common-dev # GL/gl.h
 
 -------------------------------------------------------------------------------

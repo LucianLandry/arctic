@@ -9,7 +9,7 @@ set (JUCE_DEP_LIBS rt dl GL X11 Xext freetype)
 if (JUCE_PATH)
     # Point at a custom pre-built Juce build.  Most of the time you will want
     # this, because most systems do not come w/Juce by default.
-    set (EXTRA_LIBS ${EXTRA_LIBS} "${JUCE_PATH}/Builds/Linux/build/libjuce.a" ${JUCE_DEP_LIBS})
+    set (EXTRA_LIBS ${EXTRA_LIBS} "${JUCE_PATH}/Builds/LinuxMakefile/build/libjuce.a" ${JUCE_DEP_LIBS})
 else (JUCE_PATH)
     # Assume the Juce library has been installed on the system and is available
     # as a dynamic library called "juce".

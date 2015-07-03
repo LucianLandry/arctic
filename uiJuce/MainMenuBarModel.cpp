@@ -39,7 +39,7 @@ StringArray MainMenuBarModel::getMenuBarNames()
 }
 
 PopupMenu MainMenuBarModel::getMenuForIndex(int topLevelMenuIndex,
-						  const String &menuName)
+                                            const String &menuName)
 {
     return gameMenu;
 }
