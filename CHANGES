@@ -34,7 +34,7 @@ More search time if first move's eval goes down.  Finish the level. ... at
 
 Version 11:
 Done:
-Build improvements: use Git for version control, rudimentary cmake support
+Build improvements: use Git for version control, cmake for building
 Bugfix: uiXboard: handle 0 increment and 0 moves per timecontrol properly
 Bugfix: uiUci: fix 'searchMoves' parameter handling (untested)
 Cleanup: use C99 bool where I can.
