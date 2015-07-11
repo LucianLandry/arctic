@@ -13,6 +13,6 @@ endif (JUCE_DEBUG)
 
 include_directories(${PROJECT_SOURCE_DIR})
 
-set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} ${JUCE_DEBUG_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${JUCE_DEBUG_FLAGS}")
 
 add_library(uiJuce ArcticApp.cpp BoardComponent.cpp MainComponent.cpp MainMenuBarModel.cpp MainWindow.cpp PieceCache.cpp SquareComponent.cpp uiJuce.cpp)

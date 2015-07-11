@@ -31,6 +31,11 @@ cd <builddir>
 # If Juce has been built w/out debugging, you MUST NOT define JUCE_DEBUG or else
 #  you will ... wait for it ... get weird runtime errors.
 cmake -D JUCE_PATH=/home/blandry/libjuce -D JUCE_DEBUG=1 ../src
+# Under Debian Jessie, 'arctic' currently runs faster when built by clang.
+# Note that the `which ...` below seems to be required for cmake 3.0.2;
+# otherwise multiple invocations of cmake in the same build directory will
+# cause the make step to fail weirdly.
+cmake -D JUCE_PATH=/home/blandry/libjuce -D JUCE_DEBUG=1 -D CMAKE_C_COMPILER=`which clang` -D CMAKE_CXX_COMPILER=`which clang++` ../src
 make
 
 No true build log is normally generated, but if you need one, you can do:
