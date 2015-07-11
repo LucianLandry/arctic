@@ -64,7 +64,7 @@ extern int wherey(void);
 extern int putch(int c);
 extern int getche(void); 
 extern int kbhit(void);
-extern int cprintf(char *format, ...)
+extern int cprintf(const char *format, ...)
     __attribute__ ((format (printf, 1, 2)));
 extern int cscanf(const char *format, ...)
     __attribute__ ((format (scanf, 1, 2)));

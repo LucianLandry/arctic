@@ -144,7 +144,7 @@ void BoardInit(BoardT *board);
 void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake);
 void BoardMoveUnmake(BoardT *board, UnMakeT *unmake);
 int BoardSanityCheck(BoardT *board, int silent);
-int BoardConsistencyCheck(BoardT *board, char *failString, int checkz);
+int BoardConsistencyCheck(BoardT *board, const char *failString, int checkz);
 void BoardRandomize(BoardT *board);
 void BoardCopy(BoardT *dest, BoardT *src);
 void BoardSet(BoardT *board, uint8 pieces[], int cbyte, int ebyte, int turn,
@@ -164,8 +164,9 @@ bool BoardDrawInsufficientMaterial(BoardT *board);
 bool BoardDrawThreefoldRepetition(BoardT *board);
 
 // Slower but more accurate version of the above func.
-// Hack: 'sgame' is really SaveGameT, but we have header interdepencies.
-bool BoardDrawThreefoldRepetitionFull(BoardT *board, void *sgame);
+// Forward-declaring 'struct SaveGameS' since saveGame.h depends on board.h.
+struct SaveGameS;
+bool BoardDrawThreefoldRepetitionFull(BoardT *board, struct SaveGameS *sgame);
 
 static inline bool BoardDrawFiftyMove(BoardT *board)
 {

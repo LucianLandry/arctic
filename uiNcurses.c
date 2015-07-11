@@ -134,7 +134,7 @@ static void UINotifyTick(GameT *game)
     }
 
     // Prevent old longer clock-line strings from sticking around.
-    if (bytesWritten < sizeof(spaces))
+    if ((uint) bytesWritten < sizeof(spaces))
     {
 	cprintf("%s", &spaces[bytesWritten]);
     }
@@ -256,11 +256,11 @@ static void UICursorDraw(int coord, int mode)
 }
 
 
-static void prettyprint(int y, char *option, char *option2, ...)
+static void prettyprint(int y, const char *option, const char *option2, ...)
 /* spews user option to screen, highlighting the first char. */
 {
     int i, j, didHighlight = 0;
-    char *myopt;
+    const char *myopt;
 
     va_list ap;
     char myBuf[80];
@@ -279,7 +279,7 @@ static void prettyprint(int y, char *option, char *option2, ...)
 	textcolor(LIGHTGRAY);
 
 	for (j = 0, didHighlight = 0;
-	     j < strlen(myBuf);
+	     (uint) j < strlen(myBuf);
 	     j++)
 	{
 	    if (!didHighlight && isupper(myBuf[j]))
@@ -480,7 +480,7 @@ static void UIExit(void)
 }
 
 
-static int UIBarf(char *format, ...)
+static int UIBarf(const char *format, ...)
 {
     int chr, i;
     int len;
@@ -522,7 +522,7 @@ static int UIBarf(char *format, ...)
 // long.
 // Returns 'myStr'.
 static char *UIBarfString(char *myStr, int myStrLen,
-			  char *validChars, char *format, ...)
+			  const char *validChars, const char *format, ...)
 {
     int chr, i;
     int len;
@@ -641,7 +641,7 @@ static void UIEditPosition(BoardT *board)
 	    case 'c':
 		cbyte = board->cbyte;
 		// (possibly) set cbyte.
-		if (~gPreCalc.castleMask[*coord])
+		if (~gPreCalc.castleMask[*coord] & 0xff)
 		{
 		    cbyte |= ~gPreCalc.castleMask[*coord];
 		}
@@ -922,7 +922,7 @@ static void UIBoardFlip(BoardT *board)
 
 static void UIPlayerColorChange(void)
 {
-    char *colors[NUM_PLAYERS] = {"White", "Black"};
+    const char *colors[NUM_PLAYERS] = {"White", "Black"};
     int i;
 
     char myStr[3];
@@ -986,7 +986,7 @@ static void UINotifyComputerStats(GameT *game, CompStatsT *stats)
 }
 
 
-static void UINotifyDraw(char *reason, MoveT *move)
+static void UINotifyDraw(const char *reason, MoveT *move)
 {
     UIBarf("Game is drawn (%s).", reason);
 }

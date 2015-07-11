@@ -31,7 +31,7 @@
 
 void SaveGameMoveCommit(SaveGameT *sgame, MoveT *move, bigtime_t myTime)
 {
-    void *newSpace;
+    GamePlyT *newSpace;
     int newPlies;
     GamePlyT *ply;
     int plyOffset = sgame->currentPly - sgame->firstPly;
@@ -39,11 +39,11 @@ void SaveGameMoveCommit(SaveGameT *sgame, MoveT *move, bigtime_t myTime)
     if (plyOffset == sgame->numAllocatedPlies)
     {
 	// Get more space to store moves.
-	if ((newSpace =
+	if ((newSpace = (GamePlyT *)
 	     realloc(sgame->plies,
 		     (newPlies = sgame->numAllocatedPlies + 100) *
 		     sizeof(GamePlyT))) == NULL &&
-	    (newSpace =
+	    (newSpace = (GamePlyT *)
 	     realloc(sgame->plies,
 		     (newPlies = sgame->numAllocatedPlies + 1) *
 		     sizeof(GamePlyT))) == NULL)
@@ -290,13 +290,13 @@ int SaveGameRestore(SaveGameT *sgame)
 	    break;
 	}
 
-	/* Allocate space for GamePlyTs. */
+	// Allocate space for GamePlyTs.
 	mySGame.numAllocatedPlies =
 	    MIN(mySGame.numAllocatedPlies, mySGame.numPlies + 100);
 
-	if ((mySGame.plies =
+	if ((mySGame.plies = (GamePlyT *)
 	     malloc(mySGame.numAllocatedPlies * sizeof(GamePlyT))) == NULL &&
-	    (mySGame.plies =
+	    (mySGame.plies = (GamePlyT *)
 	     malloc((mySGame.numAllocatedPlies = mySGame.numPlies)
 		    * sizeof(GamePlyT))) == NULL)
 	{
@@ -363,7 +363,7 @@ void SaveGameCopy(SaveGameT *dst, SaveGameT *src)
 
     if (src->numPlies > dst->numAllocatedPlies)
     {
-	if ((savedPlies =
+	if ((savedPlies = (GamePlyT *)
 	     realloc(dst->plies, src->numPlies * sizeof(GamePlyT))) == NULL)
 	{
 	    LOG_EMERG("SaveGameCopy: could not allocate space for moves.\n");

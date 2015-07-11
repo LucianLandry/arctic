@@ -34,21 +34,20 @@ UIFuncTableT *gUI;
 /* (one extra space for \0.) */
 static char gPieceUITable[NUM_PIECE_TYPES + 1] = "  KkPpNnBbRrQq";
 
-int nativeToAscii(uint8 piece)
+char nativeToAscii(uint8 piece)
 {
     return piece >= NUM_PIECE_TYPES ? ' ' : gPieceUITable[piece];
 }
 
 
-int nativeToBoardAscii(uint8 piece)
+char nativeToBoardAscii(uint8 piece)
 {
-    int ascii = nativeToAscii(piece);
-    return ISPAWN(piece) ? tolower(ascii) :
-	(piece & 1) ? toupper(ascii) : ascii;
+    char ascii = nativeToAscii(piece);
+    return ISPAWN(piece) ? tolower(ascii) : toupper(ascii);
 }
 
 
-int asciiToNative(uint8 ascii)
+int asciiToNative(char ascii)
 {
     char *mychr = strchr(gPieceUITable, ascii);
     return mychr != NULL ? mychr - gPieceUITable : 0;
@@ -64,7 +63,7 @@ int asciiToCoord(char *inputStr)
 }
 
 
-static bool matchHelper(char *str, char *needle, bool caseSensitive)
+static bool matchHelper(const char *str, const char *needle, bool caseSensitive)
 {
     int len = strlen(needle);
     return
@@ -75,19 +74,19 @@ static bool matchHelper(char *str, char *needle, bool caseSensitive)
 }
 
 // Pattern matchers for tokens embedded at the start of a larger string.
-bool matches(char *str, char *needle)
+bool matches(const char *str, const char *needle)
 {
     return matchHelper(str, needle, true);
 }
 
-bool matchesNoCase(char *str, char *needle)
+bool matchesNoCase(const char *str, const char *needle)
 {
     return matchHelper(str, needle, false);
 }
 
 // Direct a report to the user or the error log, whichever is more
 // appropriate.  Always returns -1 (as a convenience).
-int reportError(int silent, char *errorFormatStr, ...)
+int reportError(int silent, const char *errorFormatStr, ...)
 {
     char tmpBuf[160];
     va_list ap;
@@ -118,7 +117,7 @@ static int fenFullmoveToPly(int fullmove, int turn)
 // 0 otherwise.
 //
 // We only accept standard FEN for an 8x8 board at this point.
-int fenToBoard(char *fenString, BoardT *result)
+int fenToBoard(const char *fenString, BoardT *result)
 {
     int i, rank = 7, file = 0; // counters.
     int chr, spaces, piece, res;
@@ -498,7 +497,7 @@ char *getStdinLine(int maxLen, SwitcherContextT *sw)
 	    exit(0);
 	}
 	if (bytesRead >= bufLen - 1 &&
-	    (buf = realloc(buf, (bufLen += 100))) == NULL)
+	    (buf = (char *) realloc(buf, (bufLen += 100))) == NULL)
 	{
 	    reportError(0, "%s: could not alloc %d bytes\n",
 			__func__, bufLen + 100);
@@ -541,7 +540,7 @@ static void uiThread(UiArgsT *args)
     gUI->init(myArgs.game);
 
     // Prevent main thread from continuing until UI has initialized.
-    ThreadNotifyCreated("uiThread", args);
+    ThreadNotifyCreated("uiThread", (ThreadArgsT *) args);
 
     SwitcherRegister(&myArgs.game->sw);
     while(1)
@@ -553,5 +552,5 @@ static void uiThread(UiArgsT *args)
 void uiThreadInit(ThinkContextT *th, GameT *game)
 {
     UiArgsT args = {gThreadDummyArgs, th, game};
-    ThreadCreate(uiThread, &args);
+    ThreadCreate((THREAD_FUNC) uiThread, (ThreadArgsT *) &args);
 }

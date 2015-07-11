@@ -96,7 +96,7 @@ static void sendBuf(int sock, void *buf, int len)
 	    ;
 	assert(sent > 0);
 	len -= sent;
-	buf += sent;
+	buf = (char *) buf + sent;
     }
 }
 static void recvBuf(int sock, void *buf, int len)
@@ -108,7 +108,7 @@ static void recvBuf(int sock, void *buf, int len)
 	    ;
 	assert(recvd > 0);
 	len -= recvd;
-	buf += recvd;
+	buf = (char *) buf + recvd;
     }
 }
 
@@ -531,7 +531,7 @@ void ThinkerSearchersSetDepthAndLevel(int depth, int level)
     }
 }
 
-void ThinkerSearchersCreate(int numThreads, void *threadFunc)
+void ThinkerSearchersCreate(int numThreads, THREAD_FUNC threadFunc)
 {
     int i;
     SearcherArgsT sargs;
@@ -543,7 +543,7 @@ void ThinkerSearchersCreate(int numThreads, void *threadFunc)
     {
 	sargs.th = &gSG.th[i];
 	ThinkerInit(sargs.th);
-	ThreadCreate(threadFunc, &sargs);
+	ThreadCreate(threadFunc, (ThreadArgsT *) &sargs);
 
 	// (also initialize the associated poll structures --
 	//  it is global so is already zero.)

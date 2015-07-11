@@ -32,7 +32,7 @@ typedef struct {
 } GamePlyT;
 
 // Contains minimal game save + restore + undo + redo information.
-typedef struct {
+typedef struct SaveGameS {
     ClockT clocks[NUM_PLAYERS]; // starting time.
     uint8 coord[NUM_SQUARES];   // all the squares on the board.
     uint8 cbyte;

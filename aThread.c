@@ -23,13 +23,13 @@ ThreadArgsT gThreadDummyArgs = { NULL };
 
 typedef void *(*PTHREAD_FUNC)(void *);
 
-void ThreadCreate(void *childFunc, void *args)
+void ThreadCreate(THREAD_FUNC childFunc, ThreadArgsT *args)
 {
     pthread_t myThread;
     sem_t mySem;
     int err;
 
-    ((ThreadArgsT *) args)->mySem = &mySem;
+    args->mySem = &mySem;
 
     err = sem_init(&mySem, 0, 0);
     assert (err == 0);
@@ -41,8 +41,8 @@ void ThreadCreate(void *childFunc, void *args)
     assert(err == 0);
 }
 
-void ThreadNotifyCreated(char *name, void *args)
+void ThreadNotifyCreated(const char *name, ThreadArgsT *args)
 {
-    sem_post(((ThreadArgsT *) args)->mySem);
+    sem_post(args->mySem);
     LOG_DEBUG("created thread \"%s\" %p\n", name, (void *) pthread_self());
 }

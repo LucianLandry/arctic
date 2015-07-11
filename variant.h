@@ -19,6 +19,10 @@
 
 #include "ref.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // queen-side and king-side rooks should be mapped to what (PGN-style) "O-O"
 // and "O-O-O" do, not whether the move is traditionally a "queen-side" or
 // "king-side" castle (or "left" or "right").  In standard chess it obviously
@@ -44,4 +48,8 @@ typedef struct {
 
 extern VariantT *gVariant;
 
+#ifdef __cplusplus
+}
+#endif
+    
 #endif // VARIANT_H

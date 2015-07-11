@@ -45,9 +45,9 @@ typedef struct list_element_t
     struct list_element_t *pPrev;
 } ListElementT;
 
-typedef void (*LIST_DEBUGFUNC)(ListElementT *);
-typedef int (*LIST_COMPAREFUNC)(ListElementT *el1, ListElementT *el2);
-typedef int (*LIST_FINDFUNC)(ListElementT *el1, void *userDefined);
+typedef void (*LIST_DEBUGFUNC)(void *);
+typedef int (*LIST_COMPAREFUNC)(void *el1, void *el2);
+typedef int (*LIST_FINDFUNC)(void *el1, void *userDefined);
 
 typedef struct list_t
 {
@@ -72,11 +72,18 @@ typedef struct list_t
                  (debugFunc))
 
 // Loop syntactic sugar.
-#define LIST_DOFOREACH(list, element) \
+#ifdef __cplusplus
+#define LIST_DOFOREACH(list, element)  \
+    for ((element) = (decltype(element)) ListHead((list)); \
+         (element) != NULL; \
+         (element) = (decltype(element)) ListNext((list), (element)))
+#else
+#define LIST_DOFOREACH(list, element)  \
     for ((element) = ListHead((list)); \
          (element) != NULL; \
          (element) = ListNext((list), (element)))
-                 
+#endif
+    
 // Initialize list element.
 // It is guaranteed that memset(0) will work just as well.
 void ListElementInit(ListElementT *listElement);

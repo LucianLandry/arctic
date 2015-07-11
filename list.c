@@ -21,7 +21,19 @@
 #include <sys/param.h> // MIN()
 #include "list.h"
 
-// Prototypes.
+// Bumps 'nativeElem' from beginning of structure to the location
+//  of its actual list element.
+static inline ListElementT *toListElement(ListT *list, void *nativeElem)
+{
+    return (ListElementT *) ((char *) nativeElem + list->elemOffset);
+}
+
+// Converts a ListElementT back to whatever native element type is being passed
+//  around.
+static inline void *toNativeElement(ListT *list, ListElementT *elem)
+{
+    return (char *) elem - list->elemOffset;
+}
 
 // Initialize list element.
 // It is guaranteed that memset(0) will work just as well.
@@ -83,18 +95,18 @@ void privListElementSanityCheck(ListT *list, ListElementT *elem)
 // If 'myPrevElem' == NULL, inserts into head of list.
 void ListInsert(ListT *list, void *myElem, void *myPrevElem)
 {
-    ListElementT *elem = myElem;
-    ListElementT *prevElem = myPrevElem;
+    ListElementT *elem = (ListElementT *) myElem;
+    ListElementT *prevElem = (ListElementT *) myPrevElem;
 
     assert(myElem != NULL);    
     if (list->elemOffset)
     {
         // Bump elem and prevElem from beginning of structure to the location
         // of their actual list elements.
-        elem = (((void *) elem) + list->elemOffset);
+        elem = toListElement(list, elem);
         if (prevElem != NULL)
         {
-            prevElem = (((void *) prevElem) + list->elemOffset);
+            prevElem = toListElement(list, prevElem);
         }
     }
 
@@ -153,18 +165,16 @@ void ListInsertBefore(ListT *list, void *myElem, void *myNextElem)
 // Returns the removed element.
 void *ListRemove(ListT *list, void *myElem)
 {
-    ListElementT *elem = myElem;
-    if (elem == NULL)
+    ListElementT *elem;
+
+    if (myElem == NULL)
     {
         return NULL;
     }
         
-    if (list->elemOffset)
-    {
-        // Bump elem from beginning of structure to the location
-        // of its actual list element.
-        elem = (((void *) elem) + list->elemOffset);
-    }
+    // Bump elem from beginning of structure to the location
+    // of its actual list element.
+    elem = toListElement(list, myElem);
     
     // Sanity checks.
     privListSanityCheck(list);
@@ -193,19 +203,19 @@ void *ListRemove(ListT *list, void *myElem)
     elem->pNext = NULL;  
     elem->pPrev = NULL;    
     
-    return ((void *) elem) - list->elemOffset;
+    return toNativeElement(list, elem);
 }
 
 void *ListPop(ListT *list)
 {
     return list->pHead ?
-        ListRemove(list, ((void *) list->pHead) - list->elemOffset) :
+        ListRemove(list, toNativeElement(list, list->pHead)) :
         NULL;
 }
 
 void *ListHead(ListT *list)
 {
-    return list->pHead ? ((void *) list->pHead) - list->elemOffset : NULL;
+    return list->pHead ? toNativeElement(list, list->pHead) : NULL;
 }
 
 void ListPush(ListT *list, void *elem)
@@ -216,8 +226,7 @@ void ListPush(ListT *list, void *elem)
 void ListEnq(ListT *list, void *elem)
 {
     return ListInsert(list, elem,
-                      list->pTail ? ((void *) list->pTail - list->elemOffset)
-                       : NULL);
+                      list->pTail ? toNativeElement(list, list->pTail) : NULL);
 }
 
 // debug.
@@ -242,7 +251,7 @@ void ListPrint(ListT *list)
         printf("\nel%d ", i);
         if (list->pDebugFunc)
         {
-            (*list->pDebugFunc)((void *) elem - list->elemOffset);
+            (*list->pDebugFunc)(toNativeElement(list, elem));
         }
         else
         {
@@ -252,34 +261,30 @@ void ListPrint(ListT *list)
     printf("}");
 }
 
-// 'list' is optional, if elemOffset == 0.
 void *ListNext(ListT *list, void *elem)
 {
-    int offset = list ? list->elemOffset : 0;
     ListElementT *nextElem;
     
     assert(elem != NULL);
-    nextElem = ((ListElementT *) (((void *) elem) + offset))->pNext;
-    if (list != NULL && nextElem != NULL)
+    nextElem = toListElement(list, elem)->pNext;
+    if (nextElem != NULL)
     {
         assert(nextElem->pOwner == list);
     }
-    return nextElem ? ((void *) nextElem) - offset : NULL;
+    return nextElem ? toNativeElement(list, nextElem) : NULL;
 }
 
-// 'list' is optional, if elemOffset == 0.
 void *ListPrevious(ListT *list, void *elem)
 {
-    int offset = list ? list->elemOffset : 0;
     ListElementT *prevElem;
      
     assert(elem != NULL);
-    prevElem = ((ListElementT *) (((void *) elem) + offset))->pPrev;
-    if (list != NULL && prevElem != NULL)
+    prevElem = toListElement(list, elem)->pPrev;
+    if (prevElem != NULL)
     {
         assert(prevElem->pOwner == list);
     }
-    return prevElem ? ((void *) prevElem) - offset : NULL;
+    return prevElem ? toNativeElement(list, prevElem) : NULL;
 }
 
 int ListLength(ListT *list)
@@ -289,8 +294,7 @@ int ListLength(ListT *list)
 
 void ListSortBy(ListT *list, LIST_COMPAREFUNC compareFunc)
 {
-    ListElementT *lastSortedElem = ListHead(list);
-    ListElementT *el1, *el2;
+    void *lastSortedElem = ListHead(list), *el1, *el2;
     int i, j; // loop counters
     int len = ListLength(list);
                     
@@ -325,7 +329,7 @@ void ListSortBy(ListT *list, LIST_COMPAREFUNC compareFunc)
 // findFunc(elem, userDefined), or NULL if no element found.  
 void *ListFindBy(ListT *list, LIST_FINDFUNC findFunc, void *userDefined)
 {
-    ListElementT *el1;
+    void *el1;
     LIST_DOFOREACH(list, el1)
     {
         if (findFunc(el1, userDefined) == 0)

@@ -230,7 +230,7 @@ void clrscr (void)
    wrefresh(conio_scr);
 }
 
-int cprintf (char *format, ... )
+int cprintf (const char *format, ... )
 {
    int i;
    int len; /* blandry: added; return string length on success */

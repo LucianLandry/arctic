@@ -87,7 +87,7 @@ static void juceNotifyComputerStats(GameT *game, CompStatsT *stats)
 {
 }
 
-static void juceNotifyDraw(char *reason, MoveT *move)
+static void juceNotifyDraw(const char *reason, MoveT *move)
 {
 }
 

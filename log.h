@@ -25,7 +25,7 @@
 extern "C" {
 #endif
 
-enum {
+typedef enum {
     eLogEmerg,
     eLogNormal,
     eLogDebug
@@ -39,7 +39,7 @@ void LogSetLevel(int level);
 void LogFlush(void);
 int LogPrint(int level, const char *format, ...)
     __attribute__ ((format (printf, 2, 3)));
-void LogMoveShow(int level, BoardT *board, MoveT *move, char *caption);
+void LogMoveShow(int level, BoardT *board, MoveT *move, const char *caption);
 void LogPieceList(BoardT *board);
 void LogMoveList(int level, MoveListT *mvlist);
 void LogMove(int level, BoardT *board, MoveT *move);

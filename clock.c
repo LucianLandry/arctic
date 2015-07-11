@@ -196,10 +196,10 @@ bool TimeStringIsValid(char *str)
 
 
 // Count number of occurances of 'needle' in 'haystack'.
-static int strCount(char *haystack, char *needle)
+static int strCount(const char *haystack, const char *needle)
 {
     int retVal = 0;
-    char *occur;
+    const char *occur;
 
     for (retVal = 0;
 	 (occur = strstr(haystack, needle)) != NULL;

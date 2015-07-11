@@ -532,7 +532,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 	game->icsClocks = strcmp(icsStr, "-");
     }
 
-    else if (sscanf(inputStr, "memory %"PRId64, &i64) == 1)
+    else if (sscanf(inputStr, "memory %" PRId64, &i64) == 1)
     {
 	// If user overrode, it cannot be set here.
 	if (gPreCalc.userSpecifiedHashSize)
@@ -618,7 +618,7 @@ static void xboardNotifyMove(MoveT move)
 }
 
 
-void xboardNotifyDraw(char *reason, MoveT *move)
+void xboardNotifyDraw(const char *reason, MoveT *move)
 {
     /* I do not know of a way to claim a draw w/move atomically with Xboard
        (for instance, we know this next move will get us draw by repetition

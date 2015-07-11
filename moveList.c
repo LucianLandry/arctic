@@ -1077,7 +1077,7 @@ MoveT *mlistSearch(MoveListT *mvlist, MoveT *move, int howmany)
 
 // force-update ncheck() for an assumed king-coord 'i'.
 // Slow; should only be used for setup.
-int calcNCheck(BoardT *board, int myturn, char *context)
+int calcNCheck(BoardT *board, int myturn, const char *context)
 {
     CoordListT attList;
     int kcoord, mypiece;

@@ -127,9 +127,17 @@ static size_t normalizeNumEntries(size_t numEntries)
     return numEntries;
 }
 
+static int64 constrainSize(int64 size)
+{
+    size = MAX(size, 0);
+    size = MIN(size, INT64_MAX);
+    size = MIN((uint64) size, SIZE_MAX);
+    return size;
+}
+
 static int64 normalizeSize(int64 size)
 {
-    int64 result = size / sizeof(HashPositionT); // calc numEntries
+    int64 result = constrainSize(size) / sizeof(HashPositionT); // calc numEntries
     result = normalizeNumEntries(result);
     return result * sizeof(HashPositionT);
 }
@@ -139,9 +147,6 @@ size_t TransTableMaxSize(void)
 {
     // Refuse to go over (total detected system memory - 32M)
     int64 result = SystemTotalMemory() - 32 * 1024 * 1024;
-    result = MAX(result, 0);
-    result = MIN(result, INT64_MAX);
-    result = MIN(result, SIZE_MAX);
     return normalizeSize(result);
 }
 
@@ -159,7 +164,7 @@ static size_t sanitizeSize(int64 size)
     return
 	size == TRANSTABLE_DEFAULT_SIZE ? TransTableDefaultSize() :
 	size < -1 ? 0 : // bad parameter
-	MIN(normalizeSize(size), TransTableMaxSize());
+	MIN((uint64) normalizeSize(size), TransTableMaxSize());
 }
 
 static void sanityCheck(void)
@@ -170,7 +175,7 @@ static void sanityCheck(void)
 static void resetEntries(void)
 {
     HashPositionT newHashEntry;
-    int i;
+    uint64 i;
 
     memset(&newHashEntry, 0, sizeof(newHashEntry));
     newHashEntry.depth = HASH_NOENTRY;
@@ -200,9 +205,9 @@ void TransTableInit(int64 size)
 	gHash.locksInitialized = true;
     }
 
-    if (size != gHash.size)
+    if ((uint64) size != gHash.size)
     {
-	newHash = realloc(gHash.hash, size);
+	newHash = (HashPositionT *) realloc(gHash.hash, size);
 	if (size == 0 || newHash != NULL)
 	{
 	    gHash.size = size;
@@ -216,7 +221,7 @@ void TransTableInit(int64 size)
 	}
 	else
 	{
-	    LOG_EMERG("Failed to init hash (size %"PRId64")\n", size);
+	    LOG_EMERG("Failed to init hash (size %" PRId64 ")\n", size);
 	    exit(0);
 	}
     }
@@ -356,7 +361,7 @@ bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
     *hashMove = vHp->move;
 
     SpinlockUnlock(lock);
-    LOG_DEBUG("hashHit alhbdmz: %d %s %d %d %s 0x%"PRIx64"\n",
+    LOG_DEBUG("hashHit alhbdmz: %d %s %d %d %s 0x%" PRIx64 "\n",
 	      alpha,
 	      PositionEvalToLogString(peStr, &hashEval),
 	      beta, hashDepth,
@@ -431,7 +436,7 @@ void TransTableConditionalUpdate(PositionEvalT eval, MoveT move, uint64 zobrist,
 
 	SpinlockUnlock(lock);
 
-	LOG_DEBUG("hashupdate lhdpmz: %s %d %d %s 0x%"PRIx64"\n",
+	LOG_DEBUG("hashupdate lhdpmz: %s %d %d %s 0x%" PRIx64 "\n",
 		  PositionEvalToLogString(peStr, &eval),
 		  searchDepth, basePly,
 		  MoveToString(tmpStr, move, &gMoveStyleTT, NULL),

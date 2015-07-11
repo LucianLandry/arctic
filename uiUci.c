@@ -203,11 +203,11 @@ void processUciCommand(void)
 
     uciInit(NULL);
     rv = snprintf(hashString, sizeof(hashString),
-		  "option name Hash type spin default %"PRId64
-		  " min 0 max %"PRId64"\n",
+		  "option name Hash type spin default %" PRId64
+		  " min 0 max %" PRId64 "\n",
 		  (int64) TransTableDefaultSize() / (1024 * 1024),
 		  (int64) TransTableMaxSize() / (1024 * 1024));
-    assert(rv < sizeof(hashString)); // bail on truncated string
+    assert(rv >= 0 && (uint) rv < sizeof(hashString)); // bail on truncated string
 
     // Respond appropriately to the "uci" command.
     printf("id name arctic %s.%s-%s\n"
@@ -406,7 +406,7 @@ static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
 // "atLeast" is a sanity check which is disabled if < 0.
 // Return -1 if we failed, 0 otherwise
 static int convertNextInteger(char **pToken, int *result, int atLeast,
-			      char *context)
+			      const char *context)
 {
     *pToken = findNextToken(*pToken);
     if (*pToken == NULL ||
@@ -422,11 +422,11 @@ static int convertNextInteger(char **pToken, int *result, int atLeast,
 
 // As above, but converts a 64-bit integer.
 static int convertNextInteger64(char **pToken, int64 *result, int64 atLeast,
-				char *context)
+				const char *context)
 {
     *pToken = findNextToken(*pToken);
     if (*pToken == NULL ||
-	sscanf(*pToken, "%"PRId64, result) < 1 ||
+	sscanf(*pToken, "%" PRId64, result) < 1 ||
 	(atLeast >= 0 && *result < atLeast))
     {
 	reportError(0, "%s: failed converting arg for %s",
@@ -871,7 +871,7 @@ static void uciNotifyMove(MoveT move)
 }
 
 
-static void uciNotifyDraw(char *reason, MoveT *move)
+static void uciNotifyDraw(const char *reason, MoveT *move)
 {
     // UCI seems to rely on a GUI arbiter to claim draws, simply because there
     // is no designated way for the engine to do it.  Nevertheless, when we

@@ -244,7 +244,7 @@ static void getCastleCoords(BoardT *board,
 }
 
 // returns 0 on success, 1 on failure.
-int BoardConsistencyCheck(BoardT *board, char *failString, int checkz)
+int BoardConsistencyCheck(BoardT *board, const char *failString, int checkz)
 {
     int i, j, coord;
     for (i = 0; i < NUM_SQUARES; i++)
@@ -290,7 +290,7 @@ int BoardConsistencyCheck(BoardT *board, char *failString, int checkz)
     if (checkz && board->zobrist != BoardZobristCalc(board))
     {
 	LOG_EMERG("BoardConsistencyCheck(%s): failure in zobrist calc "
-		  "(%"PRIx64", %"PRIx64").\n",
+		  "(%" PRIx64 ", %" PRIx64 ").\n",
 		  failString, board->zobrist, BoardZobristCalc(board));
 	LogPieceList(board);
 	exit(0);
@@ -835,7 +835,7 @@ static void copyHelper(BoardT *dest, BoardT *src, int len)
 void BoardCopy(BoardT *dest, BoardT *src)
 {
     // We attempt to copy every variable prior to 'board->depth'.
-    copyHelper(dest, src, (void *) &src->depth - (void *) src);
+    copyHelper(dest, src, offsetof(BoardT, depth));
 }
 
 void BoardSet(BoardT *board, uint8 *pieces, int cbyte, int ebyte, int turn,
@@ -972,16 +972,15 @@ bool BoardPositionsSame(BoardT *b1, BoardT *b2)
 // 50-move rule claimed draw) but in something like crazyhouse we would want
 // to search the entire move history.  For now we do that even though it's
 // slower.
-bool BoardDrawThreefoldRepetitionFull(BoardT *board, void *sgame)
+bool BoardDrawThreefoldRepetitionFull(BoardT *board, struct SaveGameS *sgame)
 {
     BoardT prevPositionsBoard;
     int numRepeats = 0;
-    SaveGameT *mySgame = sgame;
     // + 1 because the 1st compare might be the same ply
     int searchPlies = board->ncpPlies + 1;
 
     BoardInit(&prevPositionsBoard);
-    SaveGameGotoPly(mySgame, SaveGameLastPly(mySgame), &prevPositionsBoard,
+    SaveGameGotoPly(sgame, SaveGameLastPly(sgame), &prevPositionsBoard,
 		    NULL);
     do
     {
@@ -992,7 +991,7 @@ bool BoardDrawThreefoldRepetitionFull(BoardT *board, void *sgame)
 	    return true;
 	}
     } while (--searchPlies > 0 &&
-	     SaveGameGotoPly(mySgame, SaveGameCurrentPly(mySgame) - 1,
+	     SaveGameGotoPly(sgame, SaveGameCurrentPly(sgame) - 1,
 			     &prevPositionsBoard, NULL) == 0);
     return false;
 }

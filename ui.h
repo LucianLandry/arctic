@@ -41,7 +41,7 @@ typedef struct {
     void (*notifyPonder)(void);
     void (*notifyReady)(void);
     void (*notifyComputerStats)(GameT *game, CompStatsT *stats);
-    void (*notifyDraw)(char *reason, MoveT *move);
+    void (*notifyDraw)(const char *reason, MoveT *move);
     void (*notifyCheckmated)(int turn);
     void (*notifyResign)(int turn);
     bool (*shouldCommitMoves)(void);

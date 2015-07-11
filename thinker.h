@@ -139,7 +139,7 @@ typedef struct {
     ThreadArgsT args;
     ThinkContextT *th;
 } SearcherArgsT;
-void ThinkerSearchersCreate(int numThreads, void *threadFunc);
+void ThinkerSearchersCreate(int numThreads, THREAD_FUNC threadFunc);
 
 #ifdef __cplusplus
 }

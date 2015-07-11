@@ -150,7 +150,7 @@ void LogBoard(int level, BoardT *board)
 }
 
 
-void LogMoveShow(int level, BoardT *board, MoveT *move, char *caption)
+void LogMoveShow(int level, BoardT *board, MoveT *move, const char *caption)
 {
     int ascii, i, j;
     char tmpStr[MOVE_STRING_MAX];

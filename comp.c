@@ -23,6 +23,7 @@
 
 #include "aThread.h"
 #include "board.h"
+#include "comp.h"
 #include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
@@ -1029,7 +1030,7 @@ static void *searcherThread(SearcherArgsT *args)
     MoveT *move;
     ThinkContextT *th = args->th;
 
-    ThreadNotifyCreated("searcherThread", args);
+    ThreadNotifyCreated("searcherThread", (ThreadArgsT *) args);
 
     // Shorthand.
     board = &th->searchArgs.localBoard;
@@ -1071,7 +1072,7 @@ typedef struct {
 static void *compThread(CompArgsT *args)
 {
     CompArgsT myArgs = *args; // struct copy
-    ThreadNotifyCreated("compThread", args);
+    ThreadNotifyCreated("compThread", (ThreadArgsT *) args);
     eThinkMsgT cmd;
     gThinker = myArgs.th;
 
@@ -1103,8 +1104,8 @@ void CompThreadInit(ThinkContextT *th)
     CompArgsT args = {gThreadDummyArgs, th};
 
     // initialize main compThread.
-    ThreadCreate(compThread, &args);
+    ThreadCreate((THREAD_FUNC) compThread, (ThreadArgsT *) &args);
 
     // initialize searcher threads.
-    ThinkerSearchersCreate(gPreCalc.numProcs, searcherThread);
+    ThinkerSearchersCreate(gPreCalc.numProcs, (THREAD_FUNC) searcherThread);
 }

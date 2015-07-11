@@ -85,8 +85,8 @@ static int moveToStringMnCAN(char *result, MoveT move)
 {
     char promoString[2] =
 	{(move.promote && !ISPAWN(move.promote) ?
-	  tolower(nativeToAscii(move.promote)) :
-	  0), 0};
+	  (char) tolower(nativeToAscii(move.promote)) :
+	  '\0'), '\0'};
     return sprintf(result, "%c%c%c%c%s",
 		   AsciiFile(move.src),
 		   AsciiRank(move.src),

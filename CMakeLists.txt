@@ -35,7 +35,7 @@ set(CMAKE_C_FLAGS "-Wall -Werror -g -O2")
 # set(CMAKE_C_FLAGS "-Wall -Werror -O2 -pg -fno-inline -fno-omit-frame-pointer")
 
 # Propagate anything we need (like -pg) to the c++ linker.
-set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++11")
 
 add_subdirectory(uiJuce)
 

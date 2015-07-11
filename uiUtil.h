@@ -39,9 +39,9 @@ static inline char AsciiRank(cell_t coord)
 }
 
 // Piece conversion routines.
-int asciiToNative(uint8 ascii);
-int nativeToAscii(uint8 piece);
-int nativeToBoardAscii(uint8 piece);
+int asciiToNative(char ascii);
+char nativeToAscii(uint8 piece);
+char nativeToBoardAscii(uint8 piece);
 
 // Given input like 'a1', returns something like '0'
 // (or FLAG, if not a sensible coord)
@@ -55,11 +55,11 @@ int asciiToCoord(char *inputStr);
 // 0 otherwise.
 //
 // We only accept standard FEN for an 8x8 board at this point.
-int fenToBoard(char *fenString, BoardT *result);
+int fenToBoard(const char *fenString, BoardT *result);
 
 // Direct a report to the user or the error log, whichever is more
 // appropriate.  Always returns -1 (as a convenience).
-int reportError(int silent, char *errorFormatStr, ...)
+int reportError(int silent, const char *errorFormatStr, ...)
     __attribute__ ((format (printf, 2, 3)));
 
 // Stop everything (including clocks) and wait for further input, basically.
@@ -83,8 +83,8 @@ bool isMove(char *inputStr, MoveT *resultMove, BoardT *board);
 bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board);
 
 // Pattern matchers for tokens embedded at the start of a larger string.
-bool matches(char *str, char *needle);
-bool matchesNoCase(char *str, char *needle);
+bool matches(const char *str, const char *needle);
+bool matchesNoCase(const char *str, const char *needle);
 
 // Get a line of input from stdin, of max string length "maxLen"
 // (or unlimited if maxLen <= 0)

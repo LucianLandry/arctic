@@ -13,6 +13,8 @@ revert uncommitted (including indexed) changes: git reset --hard
 "unkeep": git reset --mixed
 list all untracked files: git ls-files --others --exclude-standard
 
+revert a single file:
+git checkout HEAD (file)
 
 -------------------------------------------------------------------------------
 

@@ -35,20 +35,16 @@ typedef void *(*THREAD_FUNC)(void *);
 
 // Spawn a child thread.
 // 'args' must inherit from ThreadArgsT.
-// (... so I considered making 'args' a (ThreadArgsT *), but this is closer to
-//  the transparent class inheritance I want)
 // Waits until child has called ThreadNotifyCreated() to continue execution.
 //
-// For now, the prototype of 'childFunc' should be any derivable variation of
-// void *childFunc(void *args);
 // The return value is ignored.
-void ThreadCreate(void *childFunc, void *args);
+void ThreadCreate(THREAD_FUNC childFunc, ThreadArgsT *args);
 
 // Executed by the child thread.
 // Notify the parent thread it is safe to continue execution (all arguments
 // of interest have been copied off etc.)
 // 'args' must be the same arguments passed to 'childFunc' above.
-void ThreadNotifyCreated(char *name, void *args);
+void ThreadNotifyCreated(const char *name, ThreadArgsT *args);
 
 #ifdef __cplusplus
 }

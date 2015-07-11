@@ -161,7 +161,7 @@ int PvBuildMoveString(PvT *pv, char *dstStr, int dstLen,
 			 i == 0 ? "" : " ",
 			 sanStr);
 	myStrLen = myStr - myStrSpace;
-	assert(myStrLen < sizeof(myStrSpace));
+	assert(myStrLen < (int) sizeof(myStrSpace));
 	if (myStrLen > dstLen)
 	{
 	    // We wrote too much information.  Chop the last move off.

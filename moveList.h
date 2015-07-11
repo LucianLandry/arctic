@@ -45,7 +45,7 @@ void mlistSortByCap(MoveListT *mvlist, BoardT *board);
 MoveT *mlistSearch(MoveListT *mvlist, MoveT *move, int howmany);
 void mlistMoveDelete(MoveListT *mvlist, int idx);
 void mlistMoveAdd(MoveListT *mvlist, BoardT *board, MoveT *move);
-int calcNCheck(BoardT *board, int myturn, char *context);
+int calcNCheck(BoardT *board, int myturn, const char *context);
 
 #ifdef __cplusplus
 }
