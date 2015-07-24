@@ -47,12 +47,6 @@ typedef uint8 cell_t;
 
 #define NUM_SQUARES     64
 
-// Should use this instead of '& 1' everywhere.
-static inline int PiecePlayer(uint8 piece)
-{
-    return piece & NUM_PLAYERS_MASK;
-}
-
 // Boord coordinates start at the southwest corner of board (0), increments
 // by 1 as we move to the right, and increments by row-length (8) as we move
 // up.
@@ -75,35 +69,6 @@ static inline int toCoord(int rank, int file)
 #define MAX3(a, b, c) (MAX((a), (MAX((b), (c)))))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MIN3(a, b, c) (MIN((a), (MIN((b), (c)))))
-
-#define EMPTY  0x0 // empty position
-#define KING   (0x1 << NUM_PLAYERS_BITS) //  010b
-#define PAWN   (0x2 << NUM_PLAYERS_BITS) //  100b
-#define NIGHT  (0x3 << NUM_PLAYERS_BITS) //  110b
-#define BISHOP (0x4 << NUM_PLAYERS_BITS) // 1000b
-#define ROOK   (0x5 << NUM_PLAYERS_BITS) // 1010b
-#define QUEEN  (0x6 << NUM_PLAYERS_BITS) // 1100b
-
-// These are the corresponding black pieces.
-#define BKING   (KING | 1)
-#define BPAWN   (PAWN | 1)
-#define BNIGHT  (NIGHT | 1)
-#define BBISHOP (BISHOP | 1)
-#define BROOK   (ROOK | 1)
-#define BQUEEN  (QUEEN | 1)
-
-#define NUM_PIECE_TYPES (BQUEEN + 1)
-
-/* Is the piece capable of attacking like a rook or bishop. */
-#define ATTACKROOK(piece)   ((piece) >= ROOK)
-#define ATTACKBISHOP(piece) (((piece) ^ 0x2 /* 0010b */) >= ROOK)
-
-#define ISKING(piece)   (((piece) | 1) == BKING)
-#define ISPAWN(piece)   (((piece) | 1) == BPAWN)
-#define ISNIGHT(piece)  (((piece) | 1) == BNIGHT)
-#define ISBISHOP(piece) (((piece) | 1) == BBISHOP)
-#define ISROOK(piece)   (((piece) | 1) == BROOK)
-#define ISQUEEN(piece)  (((piece) | 1) == BQUEEN)
 
 // A 'royal' piece in this sense is any piece that loses the game if captured.
 // They are in effect invaluable.  Making this '0' lets us implement multiple

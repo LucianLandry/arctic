@@ -24,16 +24,16 @@ class SquareComponent : public juce::Component
 public:
     SquareComponent();
     ~SquareComponent();
-    void paint(juce::Graphics &g); // override
-    void colourChanged(); // override
-    void resized(); // overridden from Component
+    void paint(juce::Graphics &g) override;
+    void colourChanged() override;
+    void resized() override;
 
-    void setPieceType(int pieceType);
+    void SetPiece(Piece p);
 private:
-    juce::Colour colour;
+    juce::Colour backgroundColour;
 
-    juce::ScopedPointer<juce::Drawable> piece;
-    int _pieceType;
+    juce::ScopedPointer<juce::Drawable> piecePicture;
+    Piece piece;
 
     void transformPiece();
 };

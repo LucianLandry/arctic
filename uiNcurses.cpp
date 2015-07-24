@@ -14,14 +14,14 @@
 //
 //--------------------------------------------------------------------------
 
-#include <stdio.h>
-#include <ctype.h>  // isupper()
-#include <locale.h> // setlocale()
-#include <string.h> // strlen()
-#include <stdlib.h> // exit()
 #include <assert.h>
-#include <curses.h>
+#include <ctype.h>  // isupper()
+#include <curses.h> // curs_set()
+#include <locale.h> // setlocale()
 #include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h> // exit()
+#include <string.h> // strlen()
 
 #include "clock.h"
 #include "clockUtil.h"
@@ -423,7 +423,7 @@ static void UIBoardRefresh(const BoardT *board)
 {
     int x, y;
     int i = 0;
-    const uint8 *bcoord = board->coord;
+    const Piece *bcoord = board->coord;
 
     for (y = 0; y < 8; y++)
     {
@@ -438,13 +438,13 @@ static void UIBoardRefresh(const BoardT *board)
 		   2 + (gBoardIf.flipped ? y : 7 - y) * 3);
 	    /* note if we flip board, we switch the '7-' stuff... */
 
-	    if (bcoord[i])
+	    if (!bcoord[i].IsEmpty())
 	    {
-		/* Use the appropriate color to draw white/black pieces. */
-		textcolor(gBoardIf.col[bcoord[i] & 1]);
+		// Use the appropriate color to draw white/black pieces.
+		textcolor(gBoardIf.col[bcoord[i].Player()]);
 	    }
 
-	    /* Draw a piece (or lack thereof). */
+	    // Draw a piece (or lack thereof).
 	    putch(nativeToBoardAscii(bcoord[i]));
 	}
     }
@@ -592,12 +592,13 @@ static void UINotifyError(char *reason)
 /* Edits a board. */
 static void UIEditPosition(BoardT *board)
 {   
-    int c, chr, i;
+    int c, i;
     int *coord = &gBoardIf.cursCoord; // shorthand.
     char validChars[] = "WwEeCcDdSs PpRrNnBbQqKk";
 
     int cbyte; // tmpvars
-
+    Piece piece;
+    
     UIEditOptionsDraw();
     UICursorDraw(*coord, CURSOR_BLINK);
 
@@ -610,8 +611,8 @@ static void UIEditPosition(BoardT *board)
 	gotoxy(OPTIONS_X, 21);
 	textcolor(SYSTEMCOL);
 	cprintf("%s\'s turn", board->turn ? "black" : "white");
-	/* I do this here just so the cursor ends up in an aesthetically
-	   pleasing spot. */
+	// I do this here just so the cursor ends up in an aesthetically
+        //  pleasing spot.
 	gotoxy(OPTIONS_X, 24);
 	textcolor(LIGHTCYAN);
 	cprintf("Edit             ");
@@ -626,14 +627,14 @@ static void UIEditPosition(BoardT *board)
 		// Wipe board.
 		for (i = 0; i < NUM_SQUARES; i++)
 		{
-		    BoardPieceSet(board, i, 0);
+		    BoardPieceSet(board, i, Piece());
 		}
 		UIBoardRefresh(board);
 		break;
 
 	    case 'E':
 	    case 'e':
-		/* (possibly) set an enpassant square. */
+		// (possibly) set an enpassant square.
 		BoardEbyteSet(board, *coord);
 		break;
 
@@ -654,37 +655,39 @@ static void UIEditPosition(BoardT *board)
 
 	    case 'S':
 	    case 's':
-		/* Switch turn. */
+		// Switch turn.
 		BoardTurnSet(board, board->turn ^ 1);
 		break;
 
 	    case 'D':
 	    case 'd':
-		/* bail from editing mode. */
+		// bail from editing mode.
 		return;
 
 	    default:
-		/* At this point, it must be a piece, or nothing. */
-		chr = asciiToNative(c);
-		/* disallow pawns on first or eighth ranks. */
-		if (ISPAWN(chr) && (*coord < 8 || *coord >= 56))
+		// At this point, it must be a piece, or nothing.
+		piece = asciiToNative(c);
+		// disallow pawns on first or eighth ranks.
+		if (piece.IsPawn() && (*coord < 8 || *coord >= 56))
 		{
 		    break;
 		}
 
-		BoardPieceSet(board, *coord, chr);
+		BoardPieceSet(board, *coord, piece);
 		UIBoardRefresh(board);
 		break;
 	    }
 	}
 	if (c != KEY_UP && c != KEY_DOWN && c != KEY_LEFT && c != KEY_RIGHT)
+        {
 	    continue;
-
-	/* At this point we have a valid direction. */
+        }
+            
+	// At this point we have a valid direction.
 	UICursorDraw(*coord, CURSOR_HIDE);  /* Unmark current loc */
 	UICursorMove(c, coord);
 	UICursorDraw(*coord, CURSOR_BLINK); /* Blink new loc */
-    }	/* end while */
+    } // end while (1)
 }
 
 #define APPLY_BOTH (NUM_PLAYERS)
@@ -848,7 +851,7 @@ static void UIGetCommand(uint8 command[], GameT *game)
 	if (c == ENTER && gettingsrc)
 	{
             // (ignore attempts to set a blank src)
-	    if (board->coord[*coord])
+	    if (!board->coord[*coord].IsEmpty())
 	    {
 		command[0] = *coord;
 		UICursorDraw(*coord, CURSOR_NOBLINK);
@@ -1215,9 +1218,11 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     {
 	while ((chr = UIBarf("Promote piece to (q, r, b, n)? >")) != 'q' &&
 	       chr != 'r' && chr != 'b' && chr != 'n')
-	    ; /* do nothing */
-	chr = asciiToNative(chr);
-	myMove.promote = (chr & ~1) | (board->turn);
+        {
+	    ; // no-op
+        }
+        Piece piece = asciiToNative(chr);
+	myMove.promote = piece.Type();
 
 	foundMove = mlistSearch(&movelist, &myMove, 3);
 	assert(foundMove != NULL);

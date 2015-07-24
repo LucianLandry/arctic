@@ -19,6 +19,7 @@
 
 #include "../AppConfig.h"
 #include "juce_gui_basics/juce_gui_basics.h" // juce::Drawable
+#include "Piece.h"
 #include "ref.h"
 
 class PieceCache
@@ -26,10 +27,10 @@ class PieceCache
 public:
     PieceCache();
     ~PieceCache();
-    bool initSucceeded();
-    juce::Drawable *getNew(int pieceType);
-    juce::ScopedPointer<juce::Drawable> cache[NUM_PIECE_TYPES];
+    bool InitSucceeded();
+    juce::Drawable *GetNew(Piece piece);
 private:
+    juce::ScopedPointer<juce::Drawable> cache[kMaxPieces];
     bool loaded;
 };
 

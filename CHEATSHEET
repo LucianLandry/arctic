@@ -35,6 +35,7 @@ cmake -D JUCE_PATH=/home/blandry/libjuce -D JUCE_DEBUG=1 ../src
 # Note that the `which ...` below seems to be required for cmake 3.0.2;
 # otherwise multiple invocations of cmake in the same build directory will
 # cause the make step to fail weirdly.
+cmake -D JUCE_PATH=/home/blandry/libjuce -D JUCE_DEBUG=1 -D CMAKE_C_COMPILER=`which gcc` -D CMAKE_CXX_COMPILER=`which g++` ../src
 cmake -D JUCE_PATH=/home/blandry/libjuce -D JUCE_DEBUG=1 -D CMAKE_C_COMPILER=`which clang` -D CMAKE_CXX_COMPILER=`which clang++` ../src
 make
 

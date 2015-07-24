@@ -1,31 +1,32 @@
-/***************************************************************************
-                    saveGame.c - saveable game structures.
-                             -------------------
-    copyright            : (C) 2007 by Lucian Landry
-    email                : lucian_b_landry@yahoo.com
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//                  saveGame.c - saveable game structures.
+//                           -------------------
+//  copyright            : (C) 2007 by Lucian Landry
+//  email                : lucian_b_landry@yahoo.com
+//--------------------------------------------------------------------------
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU Library General Public License as       *
- *   published by the Free Software Foundation; either version 2 of the    *
- *   License, or (at your option) any later version.                       *
- *                                                                         *
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//
+//   This program is free software; you can redistribute it and/or modify
+//   it under the terms of the GNU Library General Public License as
+//   published by the Free Software Foundation; either version 2 of the
+//   License, or (at your option) any later version.
+//
+//--------------------------------------------------------------------------
 
-#include <sys/types.h> /* stat(2) */
-#include <sys/stat.h>
-#include <unistd.h>
-#include <stdlib.h>    /* malloc(3) */
 #include <assert.h>
-#include <string.h>
-#include <stdio.h>
 #include <errno.h>
-#include "saveGame.h"
-#include "moveList.h"
-#include "log.h"
+#include <sys/types.h> // stat(2)
+#include <sys/stat.h>
+#include <stdio.h>
+#include <stdlib.h>    // malloc(3)
+#include <string.h>
+#include <unistd.h>
+
 #include "board.h"
+#include "log.h"
+#include "moveList.h"
+#include "saveGame.h"
 
 #define SAVEFILE "arctic.sav"
 

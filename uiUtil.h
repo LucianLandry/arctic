@@ -18,11 +18,17 @@
 #define UIUTIL_H
 
 #include "aTypes.h"
-#include "thinker.h"
 #include "board.h"
 #include "game.h"
+#include "Piece.h"
 #include "ref.h"       // Rank(), File()
 #include "switcher.h"
+#include "thinker.h"
+
+// Piece conversion routines.
+Piece asciiToNative(char ascii);
+char nativeToAscii(Piece piece);
+char nativeToBoardAscii(Piece piece);
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,11 +43,6 @@ static inline char AsciiRank(cell_t coord)
 {
     return Rank(coord) + '1';
 }
-
-// Piece conversion routines.
-int asciiToNative(char ascii);
-char nativeToAscii(uint8 piece);
-char nativeToBoardAscii(uint8 piece);
 
 // Given input like 'a1', returns something like '0'
 // (or FLAG, if not a sensible coord)

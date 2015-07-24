@@ -22,6 +22,7 @@
 #include "aTypes.h"
 #include "list.h"
 #include "move.h"
+#include "Piece.h"
 #include "position.h"
 #include "pv.h"
 #include "ref.h"
@@ -42,7 +43,7 @@ typedef struct {
 #define NUM_SAVED_POSITIONS 128
 
 typedef struct BoardS {
-    cell_t coord[NUM_SQUARES]; // all the squares on the board.
+    Piece coord[NUM_SQUARES]; // all the squares on the board.
 
     uint64 zobrist;  // zobrist hash.  Incrementally updated w/each move.
 
@@ -52,8 +53,8 @@ typedef struct BoardS {
                      // expanded, then the offset to the OOO castling bits
                      // increases.
 
-    uint8 ebyte;         // en passant byte.  Set to the destination coord
-                         // of an a2a4-style move (or FLAG otherwise).
+    cell_t ebyte;    // en passant byte.  Set to the destination coord
+                     //  of an a2a4-style move (or FLAG otherwise).
 
     uint8 turn;      // Whose turn is it.  0 == white, 1 == black.
 
@@ -65,7 +66,7 @@ typedef struct BoardS {
 
     // This is a way to quickly look up the number and location of any
     // type of piece on the board.
-    CoordListT pieceList[NUM_PIECE_TYPES];
+    CoordListT pieceList[kMaxPieces];
 
     uint8 *pPiece[NUM_SQUARES]; // Given a coordinate, this points back to the
                                 // exact spot in the pieceList that refers to
@@ -126,7 +127,7 @@ typedef struct BoardS {
 
 typedef struct {
     MoveT  move;      // saved move
-    uint8  cappiece;  // any captured piece.. does not include en passant.
+    Piece  capPiece;  // any captured piece.. does not include en passant.
     uint8  cbyte;     // castling, en passant bytes
     cell_t ebyte;
     cell_t ncheck;
@@ -147,10 +148,10 @@ int BoardSanityCheck(BoardT *board, int silent);
 int BoardConsistencyCheck(BoardT *board, const char *failString, int checkz);
 void BoardRandomize(BoardT *board);
 void BoardCopy(BoardT *dest, BoardT *src);
-void BoardSet(BoardT *board, uint8 pieces[], int cbyte, int ebyte, int turn,
+void BoardSet(BoardT *board, Piece pieces[], int cbyte, int ebyte, int turn,
 	      int firstPly, int ncpPlies);
 // These routines are like BoardSet(), but only for one part.
-void BoardPieceSet(BoardT *board, int coord, int piece);
+void BoardPieceSet(BoardT *board, int coord, Piece piece);
 void BoardCbyteSet(BoardT *board, int cbyte);
 void BoardEbyteSet(BoardT *board, int ebyte);
 void BoardTurnSet(BoardT *board, int turn);

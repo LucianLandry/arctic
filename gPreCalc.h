@@ -18,6 +18,7 @@
 #define GPRECALC_H
 
 #include "aTypes.h"
+#include "Piece.h"
 #include "ref.h"
 
 #ifdef __cplusplus
@@ -48,24 +49,6 @@ typedef struct {
     // pre-calculated direction from one square to another.
     uint8 dir[NUM_SQUARES] [NUM_SQUARES]; 
 
-#if 0
-#define ATTACKS_OFFSET BISHOP
-    /* Out, because this is not a win.
-       (pre-calculated) bool table that tells us if a piece can attack in a
-       certain direction.  Currently only defined for bishop, rook, and
-       queen, but I could extend it.
-       'attacks' could be [DIRFLAG + 1] [NUM_PIECE_TYPES], but optimized for
-       alignment.
-    */
-    uint8 attacks[DIRFLAG + 1] [8];
-#endif
-
-    /* pre-calculated identification of friend, enemy, or unoccupied. */
-    uint8 check[NUM_PIECE_TYPES] [NUM_PLAYERS];
-
-    int worth[NUM_PIECE_TYPES]; /* pre-calculated worth of pieces.  Needs to be
-			      signed (Kk is -1). */
-
     // pre-calculated distance from one square to another.  Does not take
     // diagonal moves into account (by design).
     uint8 distance[NUM_SQUARES] [NUM_SQUARES];
@@ -77,7 +60,7 @@ typedef struct {
     // (pre-calculated) hashing support.
     struct
     {
-	uint64 coord[NUM_PIECE_TYPES] [NUM_SQUARES];
+	uint64 coord[kMaxPieces] [NUM_SQUARES];
 	uint64 turn;
 	uint64 cbyte[16];
 	uint64 ebyte[NUM_SQUARES];
@@ -89,24 +72,15 @@ typedef struct {
     bool userSpecifiedHashSize;
 
     // For convenience.
-    uint8 *normalStartingPieces;
+    Piece *normalStartingPieces;
 } GPreCalcT;
 extern GPreCalcT gPreCalc;
 
 void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads);
 uint64 random64(void); // generate a 64-bit random number.
 
-#define FRIEND 0
-#define UNOCCD 1
-#define ENEMY 2
-
-// returns FRIEND, ENEMY, or UNOCCD
-#define CHECK(piece, turn)  (gPreCalc.check[(piece)] [(turn)])
-
-#define WORTH(piece) (gPreCalc.worth[piece])
-
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* GPRECALC_H */
+#endif // GPRECALC_H

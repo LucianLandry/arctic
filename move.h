@@ -20,6 +20,7 @@
 
 #include "aTypes.h"
 #include "ref.h"
+#include "Piece.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,14 +39,15 @@ extern "C" {
 //  because it becomes easier to convert back to other notations.
 
 typedef struct {
-    cell_t src;     // For a null/invalid move, src = FLAG (and the contents
+    cell_t src;    // For a null/invalid move, src = FLAG (and the contents
                    //  of the other fields are undefined.)
     cell_t dst;
-    uint8 promote; // Piece to promote pawn to (usually nothing, -> 0)
-                   // Also (ab)used for en passant, signified by (B)PAWN of
-                   //  opposite color (ie the color of the pawn we are going to
-                   //  capture).
-
+    PieceType promote; // Usually, this is PieceType::Empty.
+                       // In case of pawn promotion, it is the PieceType to
+                       //  promote the pawn to.
+                       // Also (ab)used for en passant, signified by
+                       //  PieceType::Pawn.
+    
     cell_t chk;    // Is this a checking move.  Set to:
                    // FLAG if not a checking move.
                    // Coordinate of checking piece, if single check

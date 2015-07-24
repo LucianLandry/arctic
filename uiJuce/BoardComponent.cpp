@@ -73,6 +73,6 @@ void BoardComponent::refresh(BoardT *board)
 {
     for (int i = 0; i < NUM_SQUARES; i++)
     {
-	squares[i].setPieceType(board->coord[i]);
+	squares[i].SetPiece(board->coord[i]);
     }
 }

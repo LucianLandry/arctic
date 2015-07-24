@@ -24,6 +24,9 @@
 #include "log.h"
 #include "thinker.h"
 
+// bldbg
+#undef LOG_DEBUG
+#define LOG_DEBUG(format, ...)
 
 
 /* Okay, here's the lowdown.

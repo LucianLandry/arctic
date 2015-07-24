@@ -24,7 +24,7 @@
 #include "uiUtil.h"
 #include "variant.h"
 
-const MoveT gMoveNone = {FLAG, 0, 0, 0};
+const MoveT gMoveNone = {FLAG, 0, PieceType::Empty, 0};
 
 // Pull information about whose turn it is from this move.
 // It only works for castling moves!
@@ -39,10 +39,12 @@ static bool moveIsSane(MoveT move)
 {
     return
 	move.src < NUM_SQUARES &&
-	move.dst < NUM_SQUARES &&
+        move.dst < NUM_SQUARES &&
 
-	move.promote != 0x1  && // (black 'empty', reserved)
-	move.promote < NUM_PIECE_TYPES &&
+        int(move.promote) >= 0 &&
+        // This is a pretty twisted way to get around the lack of
+        // kMaxPieceTypes; maybe I should just add that.
+        Piece(NUM_PLAYERS - 1, move.promote).ToIndex() <= kMaxPieces &&
 
 	(move.chk == FLAG || move.chk == DOUBLE_CHECK ||
 	 move.chk < NUM_SQUARES) &&
@@ -51,14 +53,14 @@ static bool moveIsSane(MoveT move)
 	(move.src != move.dst ||
 	 (moveCastleToTurn(move) < NUM_PLAYERS &&
 	  (move.src >> NUM_PLAYERS_BITS) <= 1 &&
-	  move.promote == 0));
+	  move.promote == PieceType::Empty));
 }
 
 // Safely print a move that seems to make no sense.
 static char *moveToStringInsane(char *result, MoveT move)
 {
     sprintf(result, "(INS! %x.%x.%x.%x)",
-	    move.src, move.dst, move.promote, move.chk);
+	    move.src, move.dst, int(move.promote), move.chk);
     return result;
 }
 
@@ -69,7 +71,7 @@ static char *moveToStringMnDebug(char *result, MoveT move)
 	    AsciiRank(move.src),
 	    AsciiFile(move.dst),
 	    AsciiRank(move.dst),
-	    move.promote,
+	    int(move.promote),
 	    (move.chk == FLAG ? 'F' :
 	     move.chk == DOUBLE_CHECK ? 'D' :
 	     AsciiFile(move.chk)),
@@ -84,8 +86,8 @@ static char *moveToStringMnDebug(char *result, MoveT move)
 static int moveToStringMnCAN(char *result, MoveT move)
 {
     char promoString[2] =
-	{(move.promote && !ISPAWN(move.promote) ?
-	  (char) tolower(nativeToAscii(move.promote)) :
+	{(move.promote != PieceType::Empty && move.promote != PieceType::Pawn ?
+	  (char) tolower(nativeToAscii(Piece(0, move.promote))) :
 	  '\0'), '\0'};
     return sprintf(result, "%c%c%c%c%s",
 		   AsciiFile(move.src),
@@ -166,21 +168,23 @@ static int moveToStringMnSAN(char *result, MoveT move, BoardT *board)
 {
     // See the 'algebraic notation (chess)' article on Wikipedia for details
     //  about SAN.
-    uint8 *coord = board->coord;
+    Piece *coord = board->coord;
     uint8 src = move.src;
     uint8 dst = move.dst;
-    uint8 mypiece = coord[src];
+    Piece myPiece = coord[src];
     char *sanStr = result;
     int i;
     bool isCastle = src == dst;
-    bool isCapture = !isCastle && (coord[dst] || ISPAWN(move.promote));
-    bool isPromote = move.promote && !ISPAWN(move.promote);
+    bool isCapture = !isCastle &&
+        (!coord[dst].IsEmpty() || move.promote == PieceType::Pawn);
+    bool isPromote =
+        move.promote != PieceType::Empty && move.promote != PieceType::Pawn;
     bool sameFile = true, sameRank = true;
     MoveListT mvlist;
 
-    if (!ISPAWN(mypiece))
+    if (!myPiece.IsPawn())
 	// Print piece (type) to move.
-	sanStr += sprintf(sanStr, "%c", nativeToBoardAscii(mypiece));
+	sanStr += sprintf(sanStr, "%c", nativeToBoardAscii(myPiece));
     else if (isCapture)
 	// Need to spew the file we are capturing from.
 	sanStr += sprintf(sanStr, "%c", AsciiFile(src));
@@ -190,10 +194,10 @@ static int moveToStringMnSAN(char *result, MoveT move, BoardT *board)
     // Is there ambiguity about which piece will be moved?
     for (i = 0; i < mvlist.lgh; i++)
     {
-	if (!ISPAWN(mypiece) && // already taken care of, above
+	if (!myPiece.IsPawn() && // already taken care of, above
 	    mvlist.moves[i].src != src &&
 	    mvlist.moves[i].dst == dst &&
-	    coord[mvlist.moves[i].src] == mypiece)
+	    coord[mvlist.moves[i].src] == myPiece)
 	{
 	    // Yes.  Note: both conditions could easily be true.
 	    if (sameFile)
@@ -216,9 +220,12 @@ static int moveToStringMnSAN(char *result, MoveT move, BoardT *board)
     sanStr += sprintf(sanStr, "%c%c", AsciiFile(dst), AsciiRank(dst));
 
     if (isPromote)
+    {
 	// spew piece type to promote to.
-	sanStr += sprintf(sanStr, "%c", nativeToBoardAscii(move.promote));
-
+	sanStr += sprintf(sanStr, "%c",
+                          nativeToBoardAscii(Piece(0, move.promote)));
+    }
+        
     return sanStr - result; // return number of non-NULL bytes written
 }
 
@@ -334,7 +341,7 @@ bool MoveIsPromote(MoveT move, struct BoardS *board)
 {
     return
 	!MoveIsCastle(move) &&
-	ISPAWN(board->coord[move.src]) &&
+	board->coord[move.src].IsPawn() &&
 	(move.dst > 55 || move.dst < 8);
 }
 
@@ -344,7 +351,7 @@ void MoveCreateFromCastle(MoveT *move, bool castleOO, int turn)
 {
     move->src = castleOO ? turn : (1 << NUM_PLAYERS_BITS) | turn;
     move->dst = move->src;
-    move->promote = 0;
+    move->promote = PieceType::Empty;
     move->chk = 0;
 }
 

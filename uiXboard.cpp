@@ -77,9 +77,9 @@ static void xboardEditPosition(BoardT *board, SwitcherContextT *sw)
     char *inputStr;
 
     int i = 0;
-    int myColor = 0;
+    int turn = 0;
     int coord;
-    int piece;
+    Piece piece;
 
     BoardEbyteSet(board, FLAG); // assumed, for 'edit' command.
     board->ply = 0;
@@ -94,14 +94,14 @@ static void xboardEditPosition(BoardT *board, SwitcherContextT *sw)
 	    // Wipe board.
 	    for (i = 0; i < NUM_SQUARES; i++)
 	    {
-		BoardPieceSet(board, i, 0);
+		BoardPieceSet(board, i, Piece());
 	    }
 	}
 
 	else if (matches(inputStr, "c"))
 	{
-	    /* Change current color. */
-	    myColor ^= 1;
+	    // Change current color.
+	    turn ^= 1;
 	}
 
 	else if (matches(inputStr, "."))
@@ -130,9 +130,11 @@ static void xboardEditPosition(BoardT *board, SwitcherContextT *sw)
 
 	    // Set the new piece.
 	    piece = asciiToNative(inputStr[0]);
-	    if (piece)
-		piece |= myColor;
-	    BoardPieceSet(board, coord, piece);
+	    if (!piece.IsEmpty())
+            {
+                piece = Piece(turn, piece.Type());
+            }
+            BoardPieceSet(board, coord, piece);
 	    break;
 	default:
 	    printf("Error (edit: unknown command): %s", inputStr);

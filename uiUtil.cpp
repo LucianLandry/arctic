@@ -31,28 +31,61 @@
 
 UIFuncTableT *gUI;
 
-/* (one extra space for \0.) */
-static char gPieceUITable[NUM_PIECE_TYPES + 1] = "  KkPpNnBbRrQq";
-
-char nativeToAscii(uint8 piece)
+struct PieceAsciiMap
 {
-    return piece >= NUM_PIECE_TYPES ? ' ' : gPieceUITable[piece];
+    Piece piece;
+    char ascii;
+};
+
+static PieceAsciiMap gPieceUITable[] =
+{
+    {Piece(0, PieceType::Empty),  ' '},
+    {Piece(0, PieceType::King),   'K'},
+    {Piece(1, PieceType::King),   'k'},
+    {Piece(0, PieceType::Pawn),   'P'},
+    {Piece(1, PieceType::Pawn),   'p'},
+    {Piece(0, PieceType::Knight), 'N'},
+    {Piece(1, PieceType::Knight), 'n'},
+    {Piece(0, PieceType::Bishop), 'B'},
+    {Piece(1, PieceType::Bishop), 'b'},
+    {Piece(0, PieceType::Rook),   'R'},
+    {Piece(1, PieceType::Rook),   'r'},
+    {Piece(0, PieceType::Queen),  'Q'},
+    {Piece(1, PieceType::Queen),  'q'}
+};
+static const int gPieceUITableNumElements =
+    sizeof(gPieceUITable) / sizeof(PieceAsciiMap);
+
+char nativeToAscii(Piece piece)
+{
+    for (int i = 0; i < gPieceUITableNumElements; i++)
+    {
+        if (piece == gPieceUITable[i].piece)
+        {
+            return gPieceUITable[i].ascii;
+        }
+    }
+    assert(0); // all pieces should be represented in the table.
+    return ' '; // empty square
 }
 
-
-char nativeToBoardAscii(uint8 piece)
+char nativeToBoardAscii(Piece piece)
 {
     char ascii = nativeToAscii(piece);
-    return ISPAWN(piece) ? tolower(ascii) : toupper(ascii);
+    return piece.IsPawn() ? tolower(ascii) : toupper(ascii);
 }
 
-
-int asciiToNative(char ascii)
+Piece asciiToNative(char ascii)
 {
-    char *mychr = strchr(gPieceUITable, ascii);
-    return mychr != NULL ? mychr - gPieceUITable : 0;
+    for (int i = 0; i < gPieceUITableNumElements; i++)
+    {
+        if (ascii == gPieceUITable[i].ascii)
+        {
+            return gPieceUITable[i].piece;
+        }
+    }
+    return Piece(); // empty square
 }
-
 
 int asciiToCoord(char *inputStr)
 {
@@ -120,10 +153,12 @@ static int fenFullmoveToPly(int fullmove, int turn)
 int fenToBoard(const char *fenString, BoardT *result)
 {
     int i, rank = 7, file = 0; // counters.
-    int chr, spaces, piece, res;
+    int chr, spaces, res;
+    Piece piece;
     BoardT tmpBoard;
 
-    uint8 coord[NUM_SQUARES] = {0}; // initialize to empty board.
+    Piece coord[NUM_SQUARES]; // initialize to empty board.
+
     // Setting some defaults:
     // -- no one can castle
     // -- no en passant
@@ -174,7 +209,7 @@ int fenToBoard(const char *fenString, BoardT *result)
 	    rank--;
 	    file = 0;
 	}
-	else if ((piece = asciiToNative(chr)) != 0)
+	else if (!(piece = asciiToNative(chr)).IsEmpty())
 	{
 	    if (file >= 8)
 	    {
@@ -411,8 +446,8 @@ bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
 	    return false;
 	}
 
-	chr = asciiToNative(chr);
-	resultMove->promote = (chr & ~1) | (board->turn);
+	Piece piece = asciiToNative(chr);
+	resultMove->promote = piece.Type();
 	    
 	foundMove = mlistSearch(&moveList, resultMove, 3);
 	assert(foundMove != NULL);

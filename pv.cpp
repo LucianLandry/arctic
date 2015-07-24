@@ -150,7 +150,7 @@ int PvBuildMoveString(PvT *pv, char *dstStr, int dstLen,
 		     "baseply %d depth %d maxDepth %d (probably overwritten "
 		     "hash), ignoring\n",
 		     __func__, gVars.gameCount,
-		     moves->src, moves->dst, moves->promote, moves->chk,
+		     moves->src, moves->dst, int(moves->promote), moves->chk,
 		     board->ply, i, pv->depth);
 	    break;
 	}

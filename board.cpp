@@ -33,39 +33,40 @@
 // Incremental update.  To be used everytime when board->coord[i] is updated.
 // (This used to update a compressed equivalent of coord called 'hashCoord',
 //  but now is just syntactic sugar.)
-static inline void coordUpdate(BoardT *board, uint8 i, uint8 piece)
+static inline void coordUpdate(BoardT *board, uint8 i, Piece piece)
 {
     board->coord[i] = piece;
 }
 
-static void pieceAdd(BoardT *board, int coord, uint8 piece)
+static void pieceAdd(BoardT *board, int coord, Piece piece)
 {
     board->pPiece[coord] =
-	&board->pieceList[piece].coords[board->pieceList[piece].lgh++];
+	&(board->pieceList[piece.ToIndex()]
+          .coords[board->pieceList[piece.ToIndex()].lgh++]);
     *board->pPiece[coord] = coord;
-    board->totalStrength += WORTH(piece);
-    board->playerStrength[piece & 1] += WORTH(piece);
+    board->totalStrength += piece.Worth();
+    board->playerStrength[piece.Player()] += piece.Worth();
     coordUpdate(board, coord, piece);
 }
 
 // Do everything necessary to add a piece to the board (except
 // manipulating ebyte/cbyte).
-static inline void pieceAddZ(BoardT *board, int coord, uint8 piece)
+static inline void pieceAddZ(BoardT *board, int coord, Piece piece)
 {
     pieceAdd(board, coord, piece);
-    board->zobrist ^= gPreCalc.zobrist.coord[piece] [coord];
+    board->zobrist ^= gPreCalc.zobrist.coord[piece.ToIndex()] [coord];
 }
 
-static void pieceCapture(BoardT *board, int coord, uint8 piece)
+static void pieceCapture(BoardT *board, int coord, Piece piece)
 {
     uint8 *pieceListCoord = board->pPiece[coord];
 
-    board->playerStrength[piece & 1] -= WORTH(piece);
-    board->totalStrength -= WORTH(piece);
+    board->playerStrength[piece.Player()] -= piece.Worth();
+    board->totalStrength -= piece.Worth();
 
     // change coord in pieceList and dec pieceList lgh.
-    *pieceListCoord = board->pieceList[piece].coords
-	[--board->pieceList[piece].lgh];
+    *pieceListCoord = board->pieceList[piece.ToIndex()].coords
+	[--board->pieceList[piece.ToIndex()].lgh];
     // reset the end pPiece ptr to its new location.
     board->pPiece[*pieceListCoord] = pieceListCoord;
 }
@@ -73,31 +74,31 @@ static void pieceCapture(BoardT *board, int coord, uint8 piece)
 // like pieceRemoveZ(), except assumes another piece will shortly fill this
 // spot.  This might take on another meaning if we ever add variants like
 // Crazyhouse.
-static inline void pieceCaptureZ(BoardT *board, int coord, uint8 piece)
+static inline void pieceCaptureZ(BoardT *board, int coord, Piece piece)
 {
     pieceCapture(board, coord, piece);
-    board->zobrist ^= gPreCalc.zobrist.coord[piece] [coord];
+    board->zobrist ^= gPreCalc.zobrist.coord[piece.ToIndex()] [coord];
 }
 
 // Do everything necessary to remove a piece from the board (except
 // manipulating ebyte/cbyte and the zobrist).
-static inline void pieceRemove(BoardT *board, int coord, uint8 piece)
+static inline void pieceRemove(BoardT *board, int coord, Piece piece)
 {
     pieceCapture(board, coord, piece);
     board->pPiece[coord] = NULL;
-    coordUpdate(board, coord, 0);
+    coordUpdate(board, coord, Piece());
 }
 
 // Do everything necessary to remove a piece from the board (except
 // manipulating ebyte/cbyte).
-static inline void pieceRemoveZ(BoardT *board, int coord, uint8 piece)
+static inline void pieceRemoveZ(BoardT *board, int coord, Piece piece)
 {
     pieceCaptureZ(board, coord, piece);
     board->pPiece[coord] = NULL;
-    coordUpdate(board, coord, 0);
+    coordUpdate(board, coord, Piece());
 }
 
-static void pieceMove(BoardT *board, int src, int dst, uint8 piece)
+static void pieceMove(BoardT *board, int src, int dst, Piece piece)
 {
     // Modify the pointer info in pPiece,
     // and the coords in the pieceList.
@@ -107,7 +108,7 @@ static void pieceMove(BoardT *board, int src, int dst, uint8 piece)
     // These last two bits are technically unnecessary when we are unmaking a
     // move *and* it was a capture.
     board->pPiece[src] = NULL;
-    coordUpdate(board, src, 0);
+    coordUpdate(board, src, Piece());
 }
 
 // This is useful for generating a hash for the initial board position, or
@@ -118,7 +119,7 @@ static uint64 BoardZobristCalc(BoardT *board)
     int i;
     for (i = 0; i < NUM_SQUARES; i++)
     {
-	retVal ^= gPreCalc.zobrist.coord[board->coord[i]] [i];
+	retVal ^= gPreCalc.zobrist.coord[board->coord[i].ToIndex()] [i];
     }
     retVal ^= gPreCalc.zobrist.cbyte[board->cbyte];
     if (board->turn)
@@ -170,7 +171,7 @@ static void BoardCbyteUpdate(BoardT *board)
 {
     int cbyte = board->cbyte; // shorthand
     int i;
-    uint8 *coord;
+    Piece *coord;
     CastleStartCoordsT *castleStart;
 
     if (cbyte == 0)
@@ -184,19 +185,19 @@ static void BoardCbyteUpdate(BoardT *board)
     {
 	castleStart = &gVariant->castling[i].start;
 
-	if (coord[castleStart->king] != (KING | i))
+        if (coord[castleStart->king] != Piece(i, PieceType::King))
 	{
 	    // No O-O or O-O-O castling.
 	    cbyte &= ~(CASTLEBOTH << i);
 	}
 	else
 	{
-	    if (coord[castleStart->rookOO] != (ROOK | i))
+	    if (coord[castleStart->rookOO] != Piece(i, PieceType::Rook))
 	    {
 		// No O-O castling.
 		cbyte &= ~(CASTLEOO << i);
 	    }
-	    if (coord[castleStart->rookOOO] != (ROOK | i))
+	    if (coord[castleStart->rookOOO] != Piece(i, PieceType::Rook))
 	    {
 		// No O-O-O castling.
 		cbyte &= ~(CASTLEOOO << i);
@@ -249,7 +250,7 @@ int BoardConsistencyCheck(BoardT *board, const char *failString, int checkz)
     int i, j, coord;
     for (i = 0; i < NUM_SQUARES; i++)
     {
-	if (board->coord[i] > 0 && *board->pPiece[i] != i)
+	if (!board->coord[i].IsEmpty() && *board->pPiece[i] != i)
 	{
 	    LOG_EMERG("BoardConsistencyCheck(%s): failure at %c%c.\n",
 		      failString,
@@ -260,7 +261,7 @@ int BoardConsistencyCheck(BoardT *board, const char *failString, int checkz)
 	}
 	// This requires a slight bit of extra work in BoardMove(Un)Make().
 	// But it is the principle of least surprise.
-	else if (board->coord[i] == 0 && board->pPiece[i] != NULL)
+	else if (board->coord[i].IsEmpty() && board->pPiece[i] != NULL)
 	{
 	    LOG_EMERG("BoardConsistencyCheck(%s): dangling pPiece at %c%c.\n",
 		      failString,
@@ -270,12 +271,12 @@ int BoardConsistencyCheck(BoardT *board, const char *failString, int checkz)
 	    return 1;
 	}
     }
-    for (i = 0; i < NUM_PIECE_TYPES; i++)
+    for (i = 0; i < kMaxPieces; i++)
     {
 	for (j = 0; j < board->pieceList[i].lgh; j++)
 	{
 	    coord = board->pieceList[i].coords[j];
-	    if (board->coord[coord] != i ||
+	    if (board->coord[coord].ToIndex() != i ||
 		board->pPiece[coord] != &board->pieceList[i].coords[j])
 	    {
 		LOG_EMERG("BoardConsistencyCheck(%s): failure in list at "
@@ -312,13 +313,13 @@ void BoardInit(BoardT *board)
 static uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
 {
     uint64 zobrist = board->zobrist;
-    int enpass = ISPAWN(move->promote); // en passant capture?
-    int promote = move->promote && !enpass;
+    bool enpass = move->promote == PieceType::Pawn; // en passant capture?
+    bool promote = !(move->promote == PieceType::Empty || enpass);
     uint8 src = move->src;
     uint8 dst = move->dst;
-    uint8 *coord = board->coord;
-    uint8 mypiece = coord[src];
-    uint8 cappiece = coord[dst];
+    Piece *coord = board->coord; // shorthand
+    Piece myPiece(coord[src]);
+    Piece capPiece(coord[dst]);
     uint8 ebyte = board->ebyte;
     uint8 cbyte = board->cbyte, newcbyte;
 
@@ -334,8 +335,8 @@ static uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
         // Castling case, handle this specially (it can be relatively inefficient).
 	uint8 turn = board->turn; // shorthand
 	uint8 kSrc, kDst, rSrc, rDst;
-	uint8 kPiece = KING | turn;
-	uint8 rPiece = ROOK | turn;
+	Piece kPiece(turn, PieceType::King);
+	Piece rPiece(turn, PieceType::Rook);
 
 	getCastleCoords(board,
 			MoveIsCastleOO(*move),
@@ -347,12 +348,12 @@ static uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
 	    // Move the king to its destination.  This is "simple"
 	    // since we can assume no capture, en passant, or promotion takes
 	    // place.
-	    gPreCalc.zobrist.coord[kPiece] [kDst] ^
-	    gPreCalc.zobrist.coord[kPiece] [kSrc] ^
+	    gPreCalc.zobrist.coord[kPiece.ToIndex()] [kDst] ^
+	    gPreCalc.zobrist.coord[kPiece.ToIndex()] [kSrc] ^
 
 	    // Do the same for the rook.
-	    gPreCalc.zobrist.coord[rPiece] [rDst] ^
-	    gPreCalc.zobrist.coord[rPiece] [rSrc] ^
+	    gPreCalc.zobrist.coord[rPiece.ToIndex()] [rDst] ^
+	    gPreCalc.zobrist.coord[rPiece.ToIndex()] [rSrc] ^
 
 	    // And update the castling status.
 	    gPreCalc.zobrist.cbyte[cbyte] ^
@@ -362,13 +363,14 @@ static uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
     {
 	// Normal case.
 	zobrist ^=
-	    gPreCalc.zobrist.coord[cappiece] [dst] ^
+	    gPreCalc.zobrist.coord[capPiece.ToIndex()] [dst] ^
 	    // ... with the new piece that is supposed to be there ...
-	    gPreCalc.zobrist.coord[promote ? move->promote : mypiece] [dst] ^
+	    gPreCalc.zobrist.coord[
+                promote ? Piece(myPiece.Player(), move->promote).ToIndex() : myPiece.ToIndex()] [dst] ^
 	    // ... and remove the src piece from the source.
-	    gPreCalc.zobrist.coord[mypiece] [src];
+	    gPreCalc.zobrist.coord[myPiece.ToIndex()] [src];
 
-	if (abs(dst - src) == 16 && ISPAWN(mypiece)) // pawn moved 2
+	if (abs(dst - src) == 16 && myPiece.IsPawn()) // pawn moved 2
 	{
 	    zobrist ^= gPreCalc.zobrist.ebyte[dst];
 	}
@@ -376,7 +378,7 @@ static uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
 	{
 	    // Remove the pawn at the en passant square.
 	    zobrist ^=
-		gPreCalc.zobrist.coord[coord[ebyte]] [ebyte];
+		gPreCalc.zobrist.coord[coord[ebyte].ToIndex()] [ebyte];
 	}
 	else if ((newcbyte = cbyteCalcFromSrcDst(cbyte, src, dst)) != board->cbyte)
 	{
@@ -398,8 +400,8 @@ static void doCastleMove(BoardT *board,
     // one piece (to prevent piece clobbering).  Here, we choose the king.
 
     uint8 turn = board->turn; // shorthand
-    uint8 kPiece = KING | turn;
-    uint8 rPiece = ROOK | turn;
+    Piece kPiece(turn, PieceType::King);
+    Piece rPiece(turn, PieceType::Rook);
 
     pieceRemove(board, kSrc, kPiece);
     if (rSrc != rDst)
@@ -412,21 +414,26 @@ static void doCastleMove(BoardT *board,
 
 void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
 {
-    int enpass = ISPAWN(move->promote);
-    int promote = move->promote && !enpass;
+    bool enpass = move->promote == PieceType::Pawn;
+    bool promote = !(move->promote == PieceType::Empty || enpass);
     uint8 src = move->src;
     uint8 dst = move->dst;
-    uint8 *coord = board->coord;
+    Piece *coord = board->coord;
     bool isCastle = MoveIsCastle(*move);
-    uint8 cappiece =
-	isCastle ? 0 : coord[dst];
-    uint8 mypiece, newebyte, newcbyte;
+    Piece capPiece;
+    uint8 newebyte, newcbyte;
 
     ListT *myList;
     PositionElementT *myElem;
 
     uint64 origZobrist = board->zobrist;
-
+    bool repeatableMove = true;
+    
+    if (!isCastle)
+    {
+        capPiece = coord[dst];
+    }
+    
     // It is in fact faster (*barely*, 33.01 sec vs 33.05 sec for a
     // depth-10 search) to do this calculation ahead of time just so we can
     // prefetch it sooner, even when BoardZobristCalcFromMove() is not static.
@@ -443,7 +450,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
     {
 	// Save off board information.
 	unmake->move = *move; // struct copy
-	unmake->cappiece = cappiece;
+	unmake->capPiece = capPiece;
 	unmake->cbyte = board->cbyte;
 	unmake->ebyte = board->ebyte;
 	unmake->ncheck = board->ncheck[board->turn];
@@ -457,12 +464,8 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
     {
 	uint8 kSrc, kDst, rSrc, rDst;
 
-	// Hacky: deliberately mis-mark our detected piece as a pawn to trigger
-	// the irreversible-move logic (since castling is an unrepeatable move)
-	// This just saves an extra 'isCastle' check later that will usually
-	// be false.
-	mypiece = PAWN;
-
+        repeatableMove = false;
+        
 	getCastleCoords(board,
 			MoveIsCastleOO(*move),
 			&kSrc, &kDst, &rSrc, &rDst);
@@ -473,32 +476,39 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
     }
     else
     {
-	mypiece = coord[src];
+	Piece myPiece(coord[src]);
 	newcbyte = cbyteCalcFromSrcDst(board->cbyte, src, dst);
 
 	// Capture? better dump the captured piece from the pieceList..
-	if (cappiece)
+	if (!capPiece.IsEmpty())
 	{
-	    pieceCapture(board, dst, cappiece);
+            repeatableMove = false;
+	    pieceCapture(board, dst, capPiece);
 	}
 	else if (enpass)
 	{
-	    pieceRemove(board, board->ebyte, move->promote);
+	    pieceRemove(board, board->ebyte, Piece(myPiece.Player() ^ 1, move->promote));
 	}
-	pieceMove(board, src, dst, mypiece);
+	pieceMove(board, src, dst, myPiece);
 
 	// El biggo question: did a promotion take place? Need to update
 	// stuff further then.  Can be inefficient cause almost never occurs.
 	if (promote)
 	{
-	    pieceCapture(board, dst, mypiece);
-	    pieceAdd(board, dst, move->promote);
+	    pieceCapture(board, dst, myPiece);
+	    pieceAdd(board, dst, Piece(myPiece.Player(), move->promote));
 	}
 
-	// Update en passant status.
-	newebyte = abs(dst - src) == 16 &&
-	    ISPAWN(mypiece) ? /* pawn moved 2 */
-	    dst : FLAG;
+        if (myPiece.IsPawn())
+        {
+            repeatableMove = false;
+            newebyte = abs(dst - src) == 16 ? // pawn moved 2
+                dst : FLAG;
+        }
+        else
+        {
+            newebyte = FLAG;
+        }
     }
 
     board->cbyte = newcbyte;
@@ -508,8 +518,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
     board->ncheck[board->turn] = move->chk;
 
     // Adjust ncpPlies appropriately.
-    // Castling moves are also irreversible.
-    if (ISPAWN(mypiece) || cappiece)
+    if (!repeatableMove)
     {
 	board->ncpPlies = 0;
 	board->repeatPly = -1;
@@ -544,11 +553,11 @@ void BoardMoveUnmake(BoardT *board, UnMakeT *unmake)
 {
     int turn;
     MoveT move = unmake->move; // struct copy
-    int enpass = ISPAWN(move.promote);
-    int promote = move.promote && !enpass;
+    bool enpass = move.promote == PieceType::Pawn;
+    bool promote = !(move.promote == PieceType::Empty || enpass);
     uint8 src = move.src;
     uint8 dst = move.dst;
-    uint8 cappiece;
+    Piece capPiece;
 
 #ifdef DEBUG_CONSISTENCY_CHECK
     if (BoardConsistencyCheck(board, "BoardMoveUnmake1", unmake != NULL))
@@ -565,7 +574,7 @@ void BoardMoveUnmake(BoardT *board, UnMakeT *unmake)
     // Pop the old bytes.  It's counterintuitive to do this so soon.
     // Sorry.  Possible optimization: arrange the board variables
     // appropriately, and do a simple memcpy().
-    cappiece = unmake->cappiece;
+    capPiece = unmake->capPiece;
     board->cbyte = unmake->cbyte;
     board->ebyte = unmake->ebyte; // We need to do this before rest of
                                   // the function.
@@ -592,19 +601,21 @@ void BoardMoveUnmake(BoardT *board, UnMakeT *unmake)
 	// 'depromote' then.  Can be inefficient cause almost never occurs.
 	if (promote)
 	{
-	    pieceCapture(board, dst, move.promote);
-	    pieceAdd(board, dst, PAWN | turn);
+	    pieceCapture(board, dst, Piece(turn, move.promote));
+	    pieceAdd(board, dst, Piece(turn, PieceType::Pawn));
 	}
 	pieceMove(board, dst, src, board->coord[dst]);
 
 	// Add any captured piece back to the board.
-	if (cappiece)
+	if (!capPiece.IsEmpty())
 	{
-	    pieceAdd(board, dst, cappiece);
+	    pieceAdd(board, dst, capPiece);
 	}
 	else if (enpass)
 	{
-	    pieceAdd(board, board->ebyte, move.promote);
+            // For multi-player support, it would be better to save this
+            //  off as a captured piece.
+	    pieceAdd(board, board->ebyte, Piece(turn ^ 1, move.promote));
 	}
     }
 
@@ -626,8 +637,8 @@ static int BoardBadEbyte(BoardT *board)
 
     return
 	(ebyte != FLAG &&
-	 (!ISPAWN(board->coord[ebyte]) ||
-	  CHECK(board->coord[ebyte], turn) != ENEMY ||
+	 (!board->coord[ebyte].IsPawn() ||
+          !board->coord[ebyte].IsEnemy(turn) ||
 	  // for black, ebyte must be a4-h4.
 	  (turn && (ebyte < 24 || ebyte > 31)) ||
 	  // for white, ebyte must be a5-h5.
@@ -654,13 +665,13 @@ int BoardSanityCheck(BoardT *board, int silent)
 {
     int kcoord;
     int kcoord2;
-    int i;
+    int i, j;
 
     // Check: pawns must not be on 1st or 8th rank.
     for (i = 0; i < NUM_SQUARES; i++)
     {
 	if (i == 8) i = 56; // skip to the 8th rank.
-	if (ISPAWN(board->coord[i]))
+	if (board->coord[i].IsPawn())
 	{
 	    return reportError(silent,
 			       "Error: Pawn detected on 1st or 8th rank.");
@@ -668,13 +679,15 @@ int BoardSanityCheck(BoardT *board, int silent)
     }
 
     // Check: only one king (of each color) on board.
-    if (board->pieceList[KING].lgh != 1 ||
-	board->pieceList[BKING].lgh != 1)
+    for (i = 0; i < NUM_PLAYERS; i++)
     {
-	return reportError(silent,
-			   "Error: Need one king of each color (%d, %d).",
-			   board->pieceList[KING].lgh,
-			   board->pieceList[BKING].lgh);
+        int numKings = board->pieceList[Piece(i, PieceType::King).ToIndex()].lgh;
+        if (numKings != 1)
+        {
+            return reportError(silent,
+                               "Error: Need one king of each color (player %d, found %d).",
+                               i, numKings);
+        }
     }
 
     // Check: the side *not* on move must not be in check.
@@ -687,14 +700,24 @@ int BoardSanityCheck(BoardT *board, int silent)
 
     // Check: Kings must not be adjacent to each other (calcNCheck() does not
     // test for this).
-    kcoord  = board->pieceList[KING].coords[0];
-    kcoord2 = board->pieceList[BKING].coords[0];
-    if (abs(Rank(kcoord) - Rank(kcoord2)) < 2 &&
-	abs(File(kcoord) - File(kcoord2)) < 2)
+    for (i = 0; i < NUM_PLAYERS; i++)
     {
-	return reportError(silent,
-			   "Error: Side not on move (%d) is in check by king.",
-			   board->turn ^ 1);
+        kcoord = board->pieceList[Piece(i, PieceType::King).ToIndex()].coords[0];
+
+        for (j = i + 1; j < NUM_PLAYERS; j++)
+        {
+            kcoord2 =
+                board->pieceList[Piece(j, PieceType::King).ToIndex()].coords[0];
+
+            if (abs(Rank(kcoord) - Rank(kcoord2)) < 2 &&
+                abs(File(kcoord) - File(kcoord2)) < 2)
+            {
+                return reportError(
+                    silent,
+                    "Error: Kings (%d, %d) are adjacent to each other.",
+                    i, j);
+            }
+        }
     }
 
     // Check: for bad ebyte (en passant byte).
@@ -730,18 +753,21 @@ int BoardSanityCheck(BoardT *board, int silent)
 
 static void BoardUpdatePPieces(BoardT *board)
 {
-    int i, j, piece;
-
+    int i, j;
+    Piece piece;
+    
     for (i = 0; i < NUM_SQUARES; i++)
     {
 	board->pPiece[i] = NULL;
-	if ((piece = board->coord[i]))
+        piece = board->coord[i];
+	if (!piece.IsEmpty())
 	{
-	    for (j = 0; j < board->pieceList[piece].lgh; j++)
+	    for (j = 0; j < board->pieceList[piece.ToIndex()].lgh; j++)
 	    {
-		if (board->pieceList[piece].coords[j] == i)
+		if (board->pieceList[piece.ToIndex()].coords[j] == i)
 		{
-		    board->pPiece[i] = &board->pieceList[piece].coords[j];
+		    board->pPiece[i] =
+                        &board->pieceList[piece.ToIndex()].coords[j];
 		}
 	    }
 	}
@@ -768,7 +794,7 @@ void BoardRandomize(BoardT *board)
     CoordListT *pieceList;
 
     memset(randPos, 0, sizeof(randPos));
-    for (i = 0; i < NUM_PIECE_TYPES; i++)
+    for (i = 0; i < kMaxPieces; i++)
     {
 	pieceList = &board->pieceList[i];
 
@@ -838,26 +864,36 @@ void BoardCopy(BoardT *dest, BoardT *src)
     copyHelper(dest, src, offsetof(BoardT, depth));
 }
 
-void BoardSet(BoardT *board, uint8 *pieces, int cbyte, int ebyte, int turn,
+void BoardSet(BoardT *board, Piece pieces[], int cbyte, int ebyte, int turn,
 	      // These are usually 0.
 	      int firstPly, int ncpPlies)
 {
     int i;
-    uint8 myPieces[NUM_SQUARES];
+    Piece myPieces[NUM_SQUARES];
 
     // 'feature': prevent 'pieces' overwrite even if it == board->coord.
-    memcpy(myPieces, pieces, NUM_SQUARES);
-
+    for (i = 0; i < NUM_SQUARES; i++)
+    {
+        myPieces[i] = pieces[i];
+    }
+    
     BoardInit(board);
 
     // copy all of the pieces over.
-    memcpy(board->coord, myPieces, NUM_SQUARES);
+    for (i = 0; i < NUM_SQUARES; i++)
+    {
+        board->coord[i] = myPieces[i];
+    }
 
     // init pieceList/pPiece.
     for (i = 0; i < NUM_SQUARES; i++)
-	if (board->coord[i])
+    {
+	if (!board->coord[i].IsEmpty())
+        {
 	    pieceAdd(board, i, board->coord[i]);
-
+        }
+    }
+    
     board->turn = turn;
     board->repeatPly = -1;
 
@@ -898,7 +934,8 @@ bool BoardDrawInsufficientMaterial(BoardT *board)
 
 	// (KN or KB) vs k
 	(board->totalStrength == EVAL_KNIGHT &&
-	 board->pieceList[PAWN].lgh + board->pieceList[BPAWN].lgh == 0))
+	 (board->pieceList[Piece(0, PieceType::Pawn).ToIndex()].lgh +
+          board->pieceList[Piece(1, PieceType::Pawn).ToIndex()].lgh == 0)))
     {
 	return true;
     }
@@ -906,11 +943,11 @@ bool BoardDrawInsufficientMaterial(BoardT *board)
     if (
 	// KB vs kb, bishops on same color
 	board->totalStrength == (EVAL_BISHOP << 1) &&
-	board->pieceList[BISHOP].lgh == 1 &&
-	board->pieceList[BBISHOP].lgh == 1)
+	board->pieceList[Piece(0, PieceType::Bishop).ToIndex()].lgh == 1 &&
+	board->pieceList[Piece(1, PieceType::Bishop).ToIndex()].lgh == 1)
     {
-	b1 = board->pieceList[BISHOP].coords[0];
-	b2 = board->pieceList[BBISHOP].coords[0];
+	b1 = board->pieceList[Piece(0, PieceType::Bishop).ToIndex()].coords[0];
+	b2 = board->pieceList[Piece(1, PieceType::Bishop).ToIndex()].coords[0];
 	return
 	    !((Rank(b1) + File(b1) +
 	       Rank(b2) + File(b2)) & 1);
@@ -999,7 +1036,8 @@ bool BoardDrawThreefoldRepetitionFull(BoardT *board, struct SaveGameS *sgame)
 // Calculates (roughly) how 'valuable' a move is.
 int BoardCapWorthCalc(BoardT *board, MoveT *move)
 {
-    int cappiece, capWorth;
+    Piece capPiece;
+    int capWorth;
     CvT *cv;
     int i;
     char result[MOVE_STRING_MAX];
@@ -1010,11 +1048,12 @@ int BoardCapWorthCalc(BoardT *board, MoveT *move)
 	return 0;
     }
 
-    cappiece = board->coord[move->dst];
-    capWorth = WORTH(cappiece);
+    capPiece = board->coord[move->dst];
+    capWorth = capPiece.Worth();
 
-    if (cappiece && capWorth == EVAL_ROYAL) // Captured king, cannot happen
+    if (!capPiece.IsEmpty() && capWorth == EVAL_ROYAL)
     {
+        // Captured king, cannot happen.
 	cv = &board->cv;
 	// prints out moves in reverse order.
 	for (i = MIN(MAX_CV_DEPTH, board->depth) - 1;
@@ -1039,13 +1078,15 @@ int BoardCapWorthCalc(BoardT *board, MoveT *move)
 	assert(0);
     }
 
-    if (move->promote)
+    if (move->promote != PieceType::Empty)
     {
 	// Add in extra value for promotion or en passant
-	// (for en passant, there is no 'cappiece')
-	capWorth += WORTH(move->promote);
-	if (!ISPAWN(move->promote))
+	// (for en passant, there is no 'capPiece')
+	capWorth += Piece(0, move->promote).Worth();
+	if (move->promote != PieceType::Pawn)
+        {
 	    capWorth -= EVAL_PAWN;
+        }
     }
 
     return capWorth;
@@ -1055,7 +1096,7 @@ int BoardCapWorthCalc(BoardT *board, MoveT *move)
 // The following routines are meant to be used by edit-position style routines.
 // The (new) philosophy is to keep the BoardT consistent where possible.
 // Here, 'piece' can be 0 (empty square).
-void BoardPieceSet(BoardT *board, int coord, int piece)
+void BoardPieceSet(BoardT *board, int coord, Piece piece)
 {
     int i = coord;
 
@@ -1063,7 +1104,7 @@ void BoardPieceSet(BoardT *board, int coord, int piece)
     {
 	return; // nothing to do
     }
-    if (board->coord[i])
+    if (!board->coord[i].IsEmpty())
     {
 	// remove the original piece on the board.
 	pieceRemoveZ(board, i, board->coord[i]);
@@ -1073,7 +1114,7 @@ void BoardPieceSet(BoardT *board, int coord, int piece)
 	    BoardEbyteSet(board, FLAG);
 	}
     }
-    if (piece)
+    if (!piece.IsEmpty())
     {
 	pieceAddZ(board, i, piece);
     }
@@ -1093,9 +1134,9 @@ void BoardEbyteSet(BoardT *board, int ebyte)
 {
     // Override the ebyte variable if necessary.
     if (ebyte != FLAG &&
-	!((board->turn && board->coord[ebyte] == PAWN &&
+	!((board->turn && board->coord[ebyte] == Piece(0, PieceType::Pawn) &&
 	   ebyte >= 24 && ebyte < 32) ||
-	  (!board->turn && board->coord[ebyte] == BPAWN &&
+	  (!board->turn && board->coord[ebyte] == Piece(1, PieceType::Pawn) &&
 	   ebyte >= 32 && ebyte < 40)))
     {
 	ebyte = FLAG;

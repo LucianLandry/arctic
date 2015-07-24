@@ -34,7 +34,7 @@ typedef struct {
 // Contains minimal game save + restore + undo + redo information.
 typedef struct SaveGameS {
     ClockT clocks[NUM_PLAYERS]; // starting time.
-    uint8 coord[NUM_SQUARES];   // all the squares on the board.
+    Piece coord[NUM_SQUARES];   // all the squares on the board.
     uint8 cbyte;
     uint8 ebyte;
     uint8 turn;

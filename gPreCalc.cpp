@@ -24,15 +24,36 @@
 
 GPreCalcT gPreCalc;
 
-static uint8 gNormalStartingPieces[NUM_SQUARES] = 
-{ROOK, NIGHT, BISHOP, QUEEN, KING, BISHOP, NIGHT, ROOK,
- PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN, PAWN,
- 0, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 0,
- BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN, BPAWN,
- BROOK, BNIGHT, BBISHOP, BQUEEN, BKING, BBISHOP, BNIGHT, BROOK
+static Piece gNormalStartingPieces[NUM_SQUARES] = 
+{
+    // 1st row
+    Piece(0, PieceType::Rook),   Piece(0, PieceType::Knight),
+    Piece(0, PieceType::Bishop), Piece(0, PieceType::Queen),
+    Piece(0, PieceType::King),   Piece(0, PieceType::Bishop),
+    Piece(0, PieceType::Knight), Piece(0, PieceType::Rook),
+    // 2nd row
+    Piece(0, PieceType::Pawn), Piece(0, PieceType::Pawn),
+    Piece(0, PieceType::Pawn), Piece(0, PieceType::Pawn),
+    Piece(0, PieceType::Pawn), Piece(0, PieceType::Pawn),
+    Piece(0, PieceType::Pawn), Piece(0, PieceType::Pawn),
+    // 3rd row
+    Piece(), Piece(), Piece(), Piece(), Piece(), Piece(), Piece(), Piece(),
+    // 4th row    
+    Piece(), Piece(), Piece(), Piece(), Piece(), Piece(), Piece(), Piece(),
+    // 5th row
+    Piece(), Piece(), Piece(), Piece(), Piece(), Piece(), Piece(), Piece(),
+    // 6th row
+    Piece(), Piece(), Piece(), Piece(), Piece(), Piece(), Piece(), Piece(),
+    // 7th row
+    Piece(1, PieceType::Pawn), Piece(1, PieceType::Pawn),
+    Piece(1, PieceType::Pawn), Piece(1, PieceType::Pawn),
+    Piece(1, PieceType::Pawn), Piece(1, PieceType::Pawn),
+    Piece(1, PieceType::Pawn), Piece(1, PieceType::Pawn),
+    // 8th row
+    Piece(1, PieceType::Rook),   Piece(1, PieceType::Knight),
+    Piece(1, PieceType::Bishop), Piece(1, PieceType::Queen),
+    Piece(1, PieceType::King),   Piece(1, PieceType::Bishop),
+    Piece(1, PieceType::Knight), Piece(1, PieceType::Rook)
 };
 
 
@@ -279,30 +300,6 @@ static int dirf(int from, int to)
 }
 
 
-/* returns FRIEND, ENEMY, or UNOCCD */
-/* White's turn = 0. Black's is 1. */
-static int checkf(char piece, int turn)
-{
-    return piece < KING ? UNOCCD : ((piece & 1) ^ turn) << 1;
-}
-
-
-static int worthf(char piece)
-{
-    switch(piece | 1)
-    {
-    case BPAWN:   return EVAL_PAWN;
-    case BBISHOP: return EVAL_BISHOP;
-    case BNIGHT:  return EVAL_KNIGHT;
-    case BROOK:   return EVAL_ROOK;
-    case BQUEEN:  return EVAL_QUEEN;
-    case BKING:   return EVAL_KING;
-    default:      break;
-    }
-    return 0;
-}
-
-
 static int distancef(uint8 coord1, uint8 coord2)
 {
     return abs(Rank(coord1) - Rank(coord2)) +
@@ -443,52 +440,20 @@ void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
 	gPreCalc.centerDistance[i] = centerDistancef(i);
     }
 
-
-    /* initialize check array. */
-    for (i = 0; i < NUM_PIECE_TYPES; i++)
-    {
-	for (j = 0; j < NUM_PLAYERS; j++)
-	{
-	    gPreCalc.check[i] [j] = checkf(i, j);
-	}
-    }
-
-    /* initialize worth array. */
-    for (i = 0; i < NUM_PIECE_TYPES; i++)
-    {
-	gPreCalc.worth[i] = worthf(i);
-    }
-
-#if 0
-    /* initialize attacks array. */
-    for (i = 0; i < DIRFLAG + 1; i++)
-    {
-	/* (the other elements are static and therefore already '0') */
-	for (j = BISHOP; j < NUM_PIECE_TYPES; j++)
-	{
-	    switch(j | 1)
-	    {
-	    case BBISHOP:
-		gPreCalc.attacks[i] [j - ATTACKS_OFFSET] = !(i & 0x9);
-		break;
-	    case BROOK:
-		gPreCalc.attacks[i] [j - ATTACKS_OFFSET] = i & 1;
-		break;
-	    case BQUEEN:
-		gPreCalc.attacks[i] [j - ATTACKS_OFFSET] = i < 8;
-		break;
-	    default:
-		assert(0);
-		break;
-	    }
-	}
-    }
-#endif
+    Piece::Init();
+    
+    // Initialize 'worth' values.
+    Piece::SetWorth(PieceType::King, EVAL_KING);
+    Piece::SetWorth(PieceType::Pawn, EVAL_PAWN);
+    Piece::SetWorth(PieceType::Knight, EVAL_KNIGHT);
+    Piece::SetWorth(PieceType::Bishop, EVAL_BISHOP);
+    Piece::SetWorth(PieceType::Rook, EVAL_ROOK);
+    Piece::SetWorth(PieceType::Queen, EVAL_QUEEN);
 
     // initialize zobrist hashing.
     for (i = 0; i < NUM_SQUARES; i++)
     {
-	for (j = 0; j < NUM_PIECE_TYPES; j++)
+	for (j = 0; j < kMaxPieces; j++)
 	{
 	    gPreCalc.zobrist.coord[j] [i] =
 		// Using 0 for empty squares simplifies zobrist calculation

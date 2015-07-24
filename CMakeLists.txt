@@ -39,7 +39,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++11")
 
 add_subdirectory(uiJuce)
 
-add_executable(arctic aThread.cpp aSystem.cpp board.cpp clock.cpp comp.cpp conio.c game.cpp gDynamic.cpp gPreCalc.cpp list.cpp log.cpp main.cpp move.cpp moveList.cpp playloop.cpp position.cpp pv.cpp saveGame.cpp switcher.cpp thinker.cpp transTable.cpp uiNcurses.cpp uiUci.cpp uiUtil.cpp uiXboard.cpp variant.cpp)
+add_executable(arctic aThread.cpp aSystem.cpp board.cpp clock.cpp comp.cpp conio.c game.cpp gDynamic.cpp gPreCalc.cpp list.cpp log.cpp main.cpp move.cpp moveList.cpp Piece.cpp playloop.cpp position.cpp pv.cpp saveGame.cpp switcher.cpp thinker.cpp transTable.cpp uiNcurses.cpp uiUci.cpp uiUtil.cpp uiXboard.cpp variant.cpp)
 
 # ncursesw is necessary for a UTF-8 console cursor.
 target_link_libraries(arctic ncursesw pthread uiJuce ${EXTRA_LIBS})

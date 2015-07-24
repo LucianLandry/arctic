@@ -99,8 +99,10 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 // Assumes neither side has any pawns.
 static int endGameEval(BoardT *board, int turn)
 {
-    int ekcoord = board->pieceList[BKING ^ turn].coords[0];
-    int kcoord = board->pieceList[KING | turn].coords[0];
+    int ekcoord =
+        board->pieceList[Piece(turn ^ 1, PieceType::King).ToIndex()].coords[0];
+    int kcoord =
+        board->pieceList[Piece(turn, PieceType::King).ToIndex()].coords[0];
 
     return
 	// enemy king needs to be as close to a corner as possible.
@@ -277,7 +279,8 @@ static int potentialImprovement(BoardT *board)
     int lowcoord, highcoord;
     int i, x, len;
     // traipse through the enemy pieceList.
-    CoordListT *pl = &board->pieceList[QUEEN ^ turn];
+    CoordListT *pl =
+        &board->pieceList[Piece(turn ^ 1, PieceType::Queen).ToIndex()];
 
     do
     {
@@ -286,25 +289,29 @@ static int potentialImprovement(BoardT *board)
 	    improvement = EVAL_QUEEN;
 	    break;
 	}
-	pl += ROOK - QUEEN;
+	pl += Piece(0, PieceType::Rook).ToIndex() -
+            Piece(0, PieceType::Queen).ToIndex();
 	if (pl->lgh)
 	{
 	    improvement = EVAL_ROOK;
 	    break;
 	}
-	pl += BISHOP - ROOK;
+	pl += Piece(0, PieceType::Bishop).ToIndex() -
+            Piece(0, PieceType::Rook).ToIndex();
 	if (pl->lgh)
 	{
 	    improvement = EVAL_BISHOP;
 	    break;
 	}
-	pl += NIGHT - BISHOP;
+	pl += Piece(0, PieceType::Knight).ToIndex() -
+            Piece(0, PieceType::Bishop).ToIndex();
 	if (pl->lgh)
 	{
 	    improvement = EVAL_KNIGHT;
 	    break;
 	}
-	pl += PAWN - NIGHT;
+	pl += Piece(0, PieceType::Pawn).ToIndex() -
+            Piece(0, PieceType::Knight).ToIndex();
 	if (pl->lgh)
 	{
 	    improvement = EVAL_PAWN;
@@ -316,7 +323,7 @@ static int potentialImprovement(BoardT *board)
     // by promotion.  (We include 6th rank because this potentialImprovement()
     // routine is really lazy, and calculated before any depth-1 move, as
     // opposed to after each one).
-    pl = &board->pieceList[PAWN | turn];
+    pl = &board->pieceList[Piece(turn, PieceType::Pawn).ToIndex()];
     len = pl->lgh;
     if (len)
     {
@@ -486,7 +493,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 	// is not needed.  Also, (currently) don't bother with hashing since
 	// usually ncpPlies will be too high.
 	if (board->playerStrength[turn ^ 1] == 0 &&
-	    board->pieceList[PAWN | turn].lgh == 0)
+	    board->pieceList[Piece(turn, PieceType::Pawn).ToIndex()].lgh == 0)
 	{
 	    strgh += endGameEval(board, turn); // (oh good.)
 	    RETURN_BOUND(strgh, strgh);
@@ -549,8 +556,8 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     bestMove = gMoveNone; // struct assign
 
     if (QUIESCING &&
-	board->pieceList[PAWN].lgh == 0 &&
-	board->pieceList[BPAWN].lgh == 0)
+	board->pieceList[Piece(0, PieceType::Pawn).ToIndex()].lgh == 0 &&
+	board->pieceList[Piece(1, PieceType::Pawn).ToIndex()].lgh == 0)
     {
 	// Endgame.  Add some intelligence to the eval.  This allows us to
 	// win scenarios like KQ vs KN.
@@ -813,9 +820,9 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 	// Do not add moves that will automatically be preferred -- picked this
 	// up from a chess alg site.  It does seem to help our speed
 	// (slightly).
-	bestMove.promote == 0 &&
+	bestMove.promote == PieceType::Empty &&
 	(MoveIsCastle(bestMove) || // castling is not currently preferred
-	 board->coord[bestMove.dst] == 0))
+	 board->coord[bestMove.dst].IsEmpty()))
     {
 	assert(bestMove.src != FLAG); // aka gMoveNone.src
 	/* move is at least one point better than others. */
@@ -852,7 +859,7 @@ static bool canClaimDraw(BoardT *board, SaveGameT *sgame)
 // giving up a clearly lost game.
 // There is currently no integration between this function and our move choice
 // (ie avoiding resignation vs avoiding mate), so we might sacrifice a queen
-// or something to avoid mate as long as possible, just to turn around and
+// or something to avoid mate as long as possible, only to turn around and
 // resign on the next move.
 // Assumes the 'board' passed in is set to our turn.
 static bool shouldResign(BoardT *board, PositionEvalT myEval, bool bPonder)
@@ -868,7 +875,7 @@ static bool shouldResign(BoardT *board, PositionEvalT myEval, bool bPonder)
 	 board->playerStrength[board->turn] >= EVAL_ROOK) &&
 	// We do not have a queen (the theory being that things could quickly
 	// turn around if the opponent makes a mistake)
-	board->pieceList[QUEEN | board->turn].lgh == 0;
+	board->pieceList[Piece(board->turn, PieceType::Queen).ToIndex()].lgh == 0;
 }
 
 

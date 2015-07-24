@@ -363,7 +363,7 @@ bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
     SpinlockUnlock(lock);
     LOG_DEBUG("hashHit alhbdmz: %d %s %d %d %s 0x%" PRIx64 "\n",
 	      alpha,
-	      PositionEvalToLogString(peStr, &hashEval),
+	      PositionEvalToLogString(peStr, hashEval),
 	      beta, hashDepth,
 	      MoveToString(tmpStr, *hashMove, &gMoveStyleTT, NULL),
 	      zobrist);

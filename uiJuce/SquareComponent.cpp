@@ -21,10 +21,8 @@
 
 using namespace juce;
 
-SquareComponent::SquareComponent()
+SquareComponent::SquareComponent() : backgroundColour(Colours::black)
 {
-    colour = Colours::black;
-    _pieceType = 0;
 }
 
 SquareComponent::~SquareComponent()
@@ -43,12 +41,12 @@ void SquareComponent::colourChanged()
 
 void SquareComponent::transformPiece()
 {
-    if (piece != nullptr)
+    if (piecePicture != nullptr)
     {
 #if 0
-	piece->setTransformToFit(getLocalBounds().toFloat(), 0);
+	piecePicture->setTransformToFit(getLocalBounds().toFloat(), 0);
 #else
-	DrawableComposite *dc = dynamic_cast<DrawableComposite *>(piece.get());
+	DrawableComposite *dc = dynamic_cast<DrawableComposite *>(piecePicture.get());
 	if (dc != nullptr)
 	{
 	    RectanglePlacement placement(0);
@@ -60,20 +58,21 @@ void SquareComponent::transformPiece()
     }
 }
 
-void SquareComponent::setPieceType(int pieceType)
+void SquareComponent::SetPiece(Piece p)
 {
-    if (_pieceType == pieceType)
+    if (piece == p)
     {
 	return; // no-op
     }
 
-    _pieceType = pieceType;
+    piece = p;
+    
     // May remove an old piece.
-    if ((piece = gPieceCache->getNew(pieceType)) != nullptr)
+    if ((piecePicture = gPieceCache->GetNew(piece)) != nullptr)
     {
 	transformPiece();
 	// Need to draw the new piece we just created.
-	addAndMakeVisible(piece);
+	addAndMakeVisible(piecePicture);
     }
 }
 

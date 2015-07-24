@@ -47,6 +47,9 @@ uiNcurses: make cursor look nicer on Linux console; fix UIBarfString() backspace
 Bugfix: fix goalTime calc for ICS, and when increment larger than starting time
 Refactored castling and make-move code.
 Converted most files to .cpp and made buildable under clang++.  (~5% speedup)
+Refactored Pieces into their own class. (~1.2% slowdown)
+Bugfix: fixed futility check (potentialImprovement() looked at wrong player's
+        pieces)
 
 Version 10:
 Implemented depth-1 futility pruning.

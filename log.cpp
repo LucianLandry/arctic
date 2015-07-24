@@ -78,11 +78,10 @@ void LogMoveList(int level, MoveListT *mvlist)
     LogPrint(level, "}\n");
 }
 
-
 void LogMove(int level, BoardT *board, MoveT *move)
 {
     int moveDepth;
-    int cappiece;
+    Piece capPiece;
     char capstr[6];
     char promostr[6];
     char chkstr[10];
@@ -92,12 +91,12 @@ void LogMove(int level, BoardT *board, MoveT *move)
 
     if (level > gLogLevel)
     {
-	return; /* no-op */
+	return; // no-op
     }
 
-    /* optimization: do all initialization after gLogLevel check. */
+    // optimization: do all initialization after gLogLevel check.
     myLevelstr = levelstr;
-    cappiece = board->coord[move->dst];
+    capPiece = board->coord[move->dst];
     capstr[0] = '\0';
     promostr[0] = '\0';
     chkstr[0] = '\0';
@@ -107,13 +106,13 @@ void LogMove(int level, BoardT *board, MoveT *move)
     {
 	myLevelstr += sprintf(myLevelstr, "    ");
     }
-    if (cappiece)
+    if (!capPiece.IsEmpty())
     {
-	sprintf(capstr, "(x%c)", nativeToAscii(cappiece));
+	sprintf(capstr, "(x%c)", nativeToAscii(capPiece));
     }
-    if (move->promote && !ISPAWN(move->promote))
+    if (move->promote != PieceType::Empty && move->promote != PieceType::Pawn)
     {
-	sprintf(promostr, "(->%c)", nativeToAscii(move->promote));
+	sprintf(promostr, "(->%c)", nativeToAscii(Piece(0, move->promote)));
     }
     if (move->chk != FLAG)
     {
@@ -169,12 +168,12 @@ void LogMoveShow(int level, BoardT *board, MoveT *move, const char *caption)
 }
 
 
-/* Only meant to be called in an emergency situation (program is fixing to
-   bail). */
+// Only meant to be called in an emergency situation (program is fixing to
+//  bail).
 void LogPieceList(BoardT *board)
 {
     int i, j;
-    for (i = 0; i < NUM_PIECE_TYPES; i++)
+    for (i = 0; i < kMaxPieces; i++)
     {
 	if (board->pieceList[i].lgh)
 	{
