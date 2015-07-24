@@ -40,22 +40,22 @@ static void compRefresh(GameT *game, ThinkContextT *th)
     
     if (!game->bDone && game->control[turn])
     {
-	// Computer needs to make next move; let it do so.
-	GoaltimeCalc(game);
-	gUI->notifyThinking();
-	ThinkerCmdThink(th, &game->savedBoard, &game->sgame);
+        // Computer needs to make next move; let it do so.
+        GoaltimeCalc(game);
+        gUI->notifyThinking();
+        ThinkerCmdThink(th, &game->savedBoard, &game->sgame);
     }
     else if (!game->bDone && game->control[turn ^ 1] && gVars.ponder)
     {
-	// Computer is playing other side (only) and is allowed to ponder.
-	// Do so.
-	gUI->notifyPonder();
-	ThinkerCmdPonder(th, &game->savedBoard, &game->sgame);
+        // Computer is playing other side (only) and is allowed to ponder.
+        // Do so.
+        gUI->notifyPonder();
+        ThinkerCmdPonder(th, &game->savedBoard, &game->sgame);
     }
     else
     {
-	// We should not be thinking at all.
-	gUI->notifyReady();
+        // We should not be thinking at all.
+        gUI->notifyReady();
     }
 }
 
@@ -72,9 +72,9 @@ void GameInit(GameT *game)
 
     for (i = 0; i < NUM_PLAYERS; i++)
     {
-	game->goalTime[i] = CLOCK_TIME_INFINITE;
-	game->clocks[i] = &game->actualClocks[i];
-	ClockInit(&game->origClocks[i]);
+        game->goalTime[i] = CLOCK_TIME_INFINITE;
+        game->clocks[i] = &game->actualClocks[i];
+        ClockInit(&game->origClocks[i]);
     }
     ClocksReset(game);
     BoardInit(&game->savedBoard);
@@ -87,11 +87,11 @@ void GameCompRefresh(GameT *game, ThinkContextT *th)
     int turn = game->savedBoard.turn; // shorthand
 
     if ((!game->bDone && ThinkerCompIsThinking(th) && game->control[turn]) ||
-	(!game->bDone && ThinkerCompIsPondering(th) && gVars.ponder &&
-	 !game->control[turn] && game->control[turn ^ 1]))
+        (!game->bDone && ThinkerCompIsPondering(th) && gVars.ponder &&
+         !game->control[turn] && game->control[turn ^ 1]))
     {
-	// No change in thinking necessary.  Do not restart think cycle.
-	return;
+        // No change in thinking necessary.  Do not restart think cycle.
+        return;
     }
 
     compRefresh(game, th);
@@ -113,33 +113,33 @@ void GameMoveMake(GameT *game, MoveT *move)
 
     if (move != NULL)
     {
-	BoardPositionSave(board);
-	LOG_DEBUG("making move (%d %d): ",
-		  board->ply >> 1, turn);
-	LogMove(eLogDebug, board, move);
+        BoardPositionSave(board);
+        LOG_DEBUG("making move (%d %d): ",
+                  board->ply >> 1, turn);
+        LogMove(eLogDebug, board, move);
 
-	if (ClocksICS(game)) // have to check this before we make the move
-	{
-	    BoardMoveMake(board, move, NULL);
-	    // normally would expect this to trigger on plies 1 and 2.
-	    ClockReset(myClock); // pretend like nothing happened to the clock
-	}
-	else
-	{
-	    BoardMoveMake(board, move, NULL);
-	    ClockApplyIncrement(myClock, board->ply);
-	}
-	SaveGameMoveCommit(&game->sgame, move, ClockGetTime(myClock));
-	
+        if (ClocksICS(game)) // have to check this before we make the move
+        {
+            BoardMoveMake(board, move, NULL);
+            // normally would expect this to trigger on plies 1 and 2.
+            ClockReset(myClock); // pretend like nothing happened to the clock
+        }
+        else
+        {
+            BoardMoveMake(board, move, NULL);
+            ClockApplyIncrement(myClock, board->ply);
+        }
+        SaveGameMoveCommit(&game->sgame, move, ClockGetTime(myClock));
+        
         // switched sides to another player.
-	gPvDecrement(move);
+        gPvDecrement(move);
     }
     BoardConsistencyCheck(board, "GameMoveMake", 1);
 }
 
 
 void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
-		    int declaredDraw)
+                    int declaredDraw)
 {
     MoveListT mvlist;
     BoardT *board = &game->savedBoard; // shorthand.
@@ -149,9 +149,9 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
 
 #if 0 // bldbg: here is a way to turn on logging for one ply only.
     if (board->ply == 29)
-	LogSetLevel(eLogDebug);
+        LogSetLevel(eLogDebug);
     if (board->ply == 30)
-	LogSetLevel(eLogNormal);
+        LogSetLevel(eLogNormal);
 #endif
 
     turn = board->turn; // needs reset.
@@ -170,27 +170,27 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
 
     if (BoardDrawInsufficientMaterial(board))
     {
-	ClocksStop(game);
-	gUI->notifyDraw("insufficient material", NULL);
-	game->bDone = true;
+        ClocksStop(game);
+        gUI->notifyDraw("insufficient material", NULL);
+        game->bDone = true;
     }
     else if (!mvlist.lgh)
     {
-	ClocksStop(game);
-	if (board->ncheck[turn] == FLAG)
-	{
-	    gUI->notifyDraw("stalemate", NULL);
-	}
-	else
-	{
-	    gUI->notifyCheckmated(turn);
-	}
-	game->bDone = true;
+        ClocksStop(game);
+        if (board->ncheck[turn] == FLAG)
+        {
+            gUI->notifyDraw("stalemate", NULL);
+        }
+        else
+        {
+            gUI->notifyCheckmated(turn);
+        }
+        game->bDone = true;
     }
     else if (declaredDraw)
     {
-	// Some draws are not automatic, and need to be notified separately.
-	game->bDone = true;
+        // Some draws are not automatic, and need to be notified separately.
+        game->bDone = true;
     }
 
     // Cannot use GameCompRefresh() here, since perhaps we changed the
@@ -201,14 +201,14 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
 
 
 void GameNewEx(GameT *game, ThinkContextT *th, BoardT *board, int resetClocks,
-	       int resetHash)
+               int resetHash)
 {
     assert(BoardSanityCheck(board, 1) == 0);
     BoardCopy(&game->savedBoard, board);
     SaveGamePositionSet(&game->sgame, board);
     if (resetClocks)
     {
-	ClocksReset(game);
+        ClocksReset(game);
     }
     // It might be possible to put logic in here to make the hash-resetting
     // option useless.  For instance, if board != game->savedBoard, gotoply()
@@ -218,8 +218,8 @@ void GameNewEx(GameT *game, ThinkContextT *th, BoardT *board, int resetClocks,
     // hash hits re-ordering our moves, but that should not be a huge issue.
     if (resetHash)
     {
-	TransTableReset();
-	gHistInit();
+        TransTableReset();
+        gHistInit();
     }
     gPvInit();
     GameMoveCommit(game, NULL, th, 0);
@@ -230,7 +230,7 @@ void GameNew(GameT *game, ThinkContextT *th)
 {
     BoardT myBoard;
     BoardSet(&myBoard, gPreCalc.normalStartingPieces, CASTLEALL, FLAG, 0, 0,
-	     0);
+             0);
     GameNewEx(game, th, &myBoard, 1, 1);
 }
 
@@ -241,7 +241,7 @@ int GameGotoPly(GameT *game, int ply, ThinkContextT *th)
 
     if (ply < GameFirstPly(game) || ply > GameLastPly(game))
     {
-	return -1;
+        return -1;
     }
 
     ThinkerCmdBail(th);

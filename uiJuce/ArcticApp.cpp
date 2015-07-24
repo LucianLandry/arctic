@@ -56,9 +56,9 @@ const String ArcticApp::getApplicationName()
 const String ArcticApp::getApplicationVersion()
 {
     return
-	VERSION_STRING_MAJOR "."
-	VERSION_STRING_MINOR "-"
-	VERSION_STRING_PHASE;
+        VERSION_STRING_MAJOR "."
+        VERSION_STRING_MINOR "-"
+        VERSION_STRING_PHASE;
 }
 
 void ArcticApp::getCommandInfo(CommandID commandID, ApplicationCommandInfo &result)
@@ -78,7 +78,7 @@ bool ArcticApp::perform(const ApplicationCommandTarget::InvocationInfo &info)
 {
     if (JUCEApplication::perform(info)) // this handles quit
     {
-	return true; // parent handled
+        return true; // parent handled
     }
     printf("bldbg: ArcticApp::perform invoked, command %d\n", info.commandID);
     return true;

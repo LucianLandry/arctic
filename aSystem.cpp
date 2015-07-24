@@ -38,10 +38,10 @@ void SystemEnableCoreFile(void)
 
     if (rlimit.rlim_cur < rlimit.rlim_max)
     {
-	rlimit.rlim_cur = rlimit.rlim_max;
+        rlimit.rlim_cur = rlimit.rlim_max;
 
-	rv = setrlimit(RLIMIT_CORE, &rlimit);
-	assert(rv == 0);
+        rv = setrlimit(RLIMIT_CORE, &rlimit);
+        assert(rv == 0);
     }
 }
 
@@ -55,14 +55,14 @@ int64 SystemTotalMemory(void)
 
     if (physPages <= 0 || pageSize <= 0)
     {
-	LOG_EMERG("should not happen: physPages %ld pageSize %ld\n",
-		  physPages, pageSize);
-	exit(0);
+        LOG_EMERG("should not happen: physPages %ld pageSize %ld\n",
+                  physPages, pageSize);
+        exit(0);
     }
     result = (int64) physPages * (int64) pageSize;
     if (result < physPages || result < pageSize)
     {
-	result = INT64_MAX; // assume we overflowed.
+        result = INT64_MAX; // assume we overflowed.
     }
     return result;
 }

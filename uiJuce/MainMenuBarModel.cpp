@@ -47,5 +47,5 @@ PopupMenu MainMenuBarModel::getMenuForIndex(int topLevelMenuIndex,
 void MainMenuBarModel::menuItemSelected(int menuItemID, int topLevelMenuIndex)
 {
     printf("bldbg: MainMenuBarModel::menuItemSelected(%d, %d) invoked\n",
-	   menuItemID, topLevelMenuIndex);
+           menuItemID, topLevelMenuIndex);
 }

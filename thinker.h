@@ -83,10 +83,10 @@ void ThinkerCmdSearch(ThinkContextT *th, int alpha, int beta, MoveT move);
 
 // 'board' is (optional) position to set before thinking.
 void ThinkerCmdThinkEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
-		       MoveListT *mvlist);
+                       MoveListT *mvlist);
 void ThinkerCmdThink(ThinkContextT *th, BoardT *board, SaveGameT *sgame);
 void ThinkerCmdPonderEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
-			MoveListT *mvlist);
+                        MoveListT *mvlist);
 void ThinkerCmdPonder(ThinkContextT *th, BoardT *board, SaveGameT *sgame);
 void ThinkerCmdMoveNow(ThinkContextT *th);
 void ThinkerCmdBail(ThinkContextT *th);
@@ -110,9 +110,9 @@ static inline int ThinkerCompIsSearching(ThinkContextT *th)
 static inline int ThinkerCompIsBusy(ThinkContextT *th)
 {
     return
-	ThinkerCompIsSearching(th) ||
-	ThinkerCompIsThinking(th) ||
-	ThinkerCompIsPondering(th);
+        ThinkerCompIsSearching(th) ||
+        ThinkerCompIsThinking(th) ||
+        ThinkerCompIsPondering(th);
 }
 void ThinkerRspDraw(ThinkContextT *th, MoveT *move);
 void ThinkerRspMove(ThinkContextT *th, MoveT *move);

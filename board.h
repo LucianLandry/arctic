@@ -58,7 +58,7 @@ typedef struct BoardS {
 
     uint8 turn;      // Whose turn is it.  0 == white, 1 == black.
 
-    int ply;	     // (aka 1/2-move.) Usually, white's 1st move is '0'.
+    int ply;         // (aka 1/2-move.) Usually, white's 1st move is '0'.
                      // (NOTE: this is not always the case; some edited
                      //  positions might have black to move first.)
 
@@ -149,7 +149,7 @@ int BoardConsistencyCheck(BoardT *board, const char *failString, int checkz);
 void BoardRandomize(BoardT *board);
 void BoardCopy(BoardT *dest, BoardT *src);
 void BoardSet(BoardT *board, Piece pieces[], int cbyte, int ebyte, int turn,
-	      int firstPly, int ncpPlies);
+              int firstPly, int ncpPlies);
 // These routines are like BoardSet(), but only for one part.
 void BoardPieceSet(BoardT *board, int coord, Piece piece);
 void BoardCbyteSet(BoardT *board, int cbyte);
@@ -177,10 +177,10 @@ static inline bool BoardDrawFiftyMove(BoardT *board)
 static inline void BoardPositionSave(BoardT *board)
 {
     PositionElementT *myElem =
-	&board->positions[board->ply & (NUM_SAVED_POSITIONS - 1)];
+        &board->positions[board->ply & (NUM_SAVED_POSITIONS - 1)];
     myElem->zobrist = board->zobrist;
     ListPush(&board->posList[board->zobrist & (NUM_SAVED_POSITIONS - 1)],
-	     myElem);
+             myElem);
 }
 
 static inline bool BoardPositionHit(BoardT *board, uint64 zobrist)

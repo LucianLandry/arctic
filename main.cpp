@@ -39,14 +39,14 @@
 static void usage(char *programName)
 {
     printf("usage: %s [-h=<hashtablesize>] [-p=<numcputhreads>] [--ui=<console,juce,uci,xboard>]\n"
-	   "\t'hashtablesize' examples: 200000, 100k, 0M, 1G\n"
-	   // as picked by TransTableDefaultSize()
-	   "\t'hashtablesize' default == MIN(1/3 total memory, 512M)\n"
-	   "\t(specifying 'hashtablesize' overrides any xboard/uci option)\n\n"
-	   "\t'numcputhreads' in range 1-%d\n"
-	   "\t'numcputhreads' default == number of online processors\n\n"
-	   "\t'ui' default == console (if stdin is terminal), or xboard (otherwise)\n",
-	   programName, MAX_NUM_PROCS);
+           "\t'hashtablesize' examples: 200000, 100k, 0M, 1G\n"
+           // as picked by TransTableDefaultSize()
+           "\t'hashtablesize' default == MIN(1/3 total memory, 512M)\n"
+           "\t(specifying 'hashtablesize' overrides any xboard/uci option)\n\n"
+           "\t'numcputhreads' in range 1-%d\n"
+           "\t'numcputhreads' default == number of online processors\n\n"
+           "\t'ui' default == console (if stdin is terminal), or xboard (otherwise)\n",
+           programName, MAX_NUM_PROCS);
     exit(0);
 }
 
@@ -66,36 +66,36 @@ static int64 IECStringToInt64(char *str)
     // we want to be relatively strict in our sanity checking.
     for (; *str != '\0'; str++)
     {
-	lastVal = val;
-	if (isdigit(*str))
-	{
-	    // (We allow leading zeros although they're useless)
-	    digitStr[0] = *str;
-	    val *= 10;
-	    val += atoi(digitStr);
-	    parsedNum = true;
-	}
-	// Exactly one suffix is allowed, and it must follow a number.
-	else if ((*str == 'k' || *str == 'K' ||
-		  *str == 'm' || *str == 'M' ||
-		  *str == 'g' || *str == 'G' ||
-		  *str == 't' || *str == 'T') && parsedNum && str[1] == '\0')
-	{
-	    multiplier =
-		*str == 'k' || *str == 'K' ? 1024 :
-		*str == 'm' || *str == 'M' ? 1024 * 1024 :
-		*str == 'g' || *str == 'G' ? 1024 * 1024 * 1024 :
-		1024LL * 1024LL * 1024LL * 1024LL; // assume 't'/'T'
-	    val *= multiplier;
-	}
-	else
-	{
-	    return -1; // error parsing string.
-	}
-	if (lastVal > val)
-	{
-	    return -1; // detected overflow
-	}
+        lastVal = val;
+        if (isdigit(*str))
+        {
+            // (We allow leading zeros although they're useless)
+            digitStr[0] = *str;
+            val *= 10;
+            val += atoi(digitStr);
+            parsedNum = true;
+        }
+        // Exactly one suffix is allowed, and it must follow a number.
+        else if ((*str == 'k' || *str == 'K' ||
+                  *str == 'm' || *str == 'M' ||
+                  *str == 'g' || *str == 'G' ||
+                  *str == 't' || *str == 'T') && parsedNum && str[1] == '\0')
+        {
+            multiplier =
+                *str == 'k' || *str == 'K' ? 1024 :
+                *str == 'm' || *str == 'M' ? 1024 * 1024 :
+                *str == 'g' || *str == 'G' ? 1024 * 1024 * 1024 :
+                1024LL * 1024LL * 1024LL * 1024LL; // assume 't'/'T'
+            val *= multiplier;
+        }
+        else
+        {
+            return -1; // error parsing string.
+        }
+        if (lastVal > val)
+        {
+            return -1; // detected overflow
+        }
     }
     return val;
 }
@@ -108,8 +108,8 @@ static bool isPow2(int c)
 static bool isValidUI(char *str)
 {
     return
-	!strcmp(str, "console") || !strcmp(str, "juce") ||
-	!strcmp(str, "uci") || !strcmp(str, "xboard");
+        !strcmp(str, "console") || !strcmp(str, "juce") ||
+        !strcmp(str, "uci") || !strcmp(str, "xboard");
 }
 
 // Do some init-time sanity checking to confirm various assumptions.
@@ -137,38 +137,38 @@ int main(int argc, char *argv[])
     // parse any cmd-line args.
     for (i = 1; i < argc; i++)
     {
-	if (!strncmp(argv[i], "-h=", 3))
-	{
-	    // Manually set hash table size.
-	    if (sscanf(argv[i], "-h=%40s", hashTableSizeString) != 1 ||
-		(hashTableSize = IECStringToInt64(hashTableSizeString)) == -1)
-	    {
-		usage(argv[0]);
-	    }
-	}
-	else if (!strncmp(argv[i], "-p=", 3))
-	{
-	    // Manually set number of CPU threads.
-	    if (sscanf(argv[i], "-p=%d", &numCpuThreads) != 1 ||
-		numCpuThreads < 1 ||
-		numCpuThreads > MAX_NUM_PROCS)
-	    {
-		usage(argv[0]);
-	    }	    
-	}
-	else if (!strncmp(argv[i], "--ui=", 5))
-	{
-	    if (sscanf(argv[i], "--ui=%79s", uiString) != 1 ||
-		!isValidUI(uiString))
-	    {
-		usage(argv[0]);
-	    }
-	}
-	else
-	{
-	    // Unrecognized argument.
-	    usage(argv[0]);
-	}
+        if (!strncmp(argv[i], "-h=", 3))
+        {
+            // Manually set hash table size.
+            if (sscanf(argv[i], "-h=%40s", hashTableSizeString) != 1 ||
+                (hashTableSize = IECStringToInt64(hashTableSizeString)) == -1)
+            {
+                usage(argv[0]);
+            }
+        }
+        else if (!strncmp(argv[i], "-p=", 3))
+        {
+            // Manually set number of CPU threads.
+            if (sscanf(argv[i], "-p=%d", &numCpuThreads) != 1 ||
+                numCpuThreads < 1 ||
+                numCpuThreads > MAX_NUM_PROCS)
+            {
+                usage(argv[0]);
+            }       
+        }
+        else if (!strncmp(argv[i], "--ui=", 5))
+        {
+            if (sscanf(argv[i], "--ui=%79s", uiString) != 1 ||
+                !isValidUI(uiString))
+            {
+                usage(argv[0]);
+            }
+        }
+        else
+        {
+            // Unrecognized argument.
+            usage(argv[0]);
+        }
     }
 
     // must be done before seeding, if we want reproducable results.
@@ -184,18 +184,18 @@ int main(int argc, char *argv[])
     gVars.ponder = 0;
 
     gVars.maxNodes = NO_LIMIT;
-    gVars.hiswin = 2;	// set for killer move heuristic
+    gVars.hiswin = 2;   // set for killer move heuristic
     gVars.canResign = true;
 
     GameInit(&game);
     
     gUI =
-	!strcmp(uiString, "juce") ? uiJuceOps() :
-	!strcmp(uiString, "console") ? uiNcursesOps() :
-	!strcmp(uiString, "xboard") ? uiXboardOps() :
-	!strcmp(uiString, "uci") ? uiUciOps() :
-	isatty(fileno(stdin)) && isatty(fileno(stdout)) ?
-	uiNcursesOps() : uiXboardOps();
+        !strcmp(uiString, "juce") ? uiJuceOps() :
+        !strcmp(uiString, "console") ? uiNcursesOps() :
+        !strcmp(uiString, "xboard") ? uiXboardOps() :
+        !strcmp(uiString, "uci") ? uiUciOps() :
+        isatty(fileno(stdin)) && isatty(fileno(stdout)) ?
+        uiNcursesOps() : uiXboardOps();
 
     CompThreadInit(&th);
     uiThreadInit(&th, &game);

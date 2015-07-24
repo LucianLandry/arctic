@@ -51,9 +51,9 @@ int LogPrint(int level, const char *format, ...)
 
     if (level <= gLogLevel)
     {
-	va_start(ap, format);
-	rv = vfprintf(gLogFile ? gLogFile : stderr, format, ap);
-	va_end(ap);
+        va_start(ap, format);
+        rv = vfprintf(gLogFile ? gLogFile : stderr, format, ap);
+        va_end(ap);
     }
 
     return rv;
@@ -66,14 +66,14 @@ void LogMoveList(int level, MoveListT *mvlist)
     int i;
     if (level > gLogLevel)
     {
-	return; /* no-op. */
+        return; /* no-op. */
     }
 
     LogPrint(level, "{mvlist lgh %d insrt %d co %d ",
-	     mvlist->lgh, mvlist->insrt, mvlist->capOnly);
+             mvlist->lgh, mvlist->insrt, mvlist->capOnly);
     for (i = 0; i < mvlist->lgh; i++)
     {
-	LogPrint(level, "%s ", MoveToString(tmpStr, mvlist->moves[i], &gMoveStyleLog, NULL));
+        LogPrint(level, "%s ", MoveToString(tmpStr, mvlist->moves[i], &gMoveStyleLog, NULL));
     }
     LogPrint(level, "}\n");
 }
@@ -91,7 +91,7 @@ void LogMove(int level, BoardT *board, MoveT *move)
 
     if (level > gLogLevel)
     {
-	return; // no-op
+        return; // no-op
     }
 
     // optimization: do all initialization after gLogLevel check.
@@ -104,25 +104,25 @@ void LogMove(int level, BoardT *board, MoveT *move)
     myLevelstr += sprintf(myLevelstr, "D%02d", board->depth);
     for (moveDepth = MIN(board->depth, 20); moveDepth > 0; moveDepth--)
     {
-	myLevelstr += sprintf(myLevelstr, "    ");
+        myLevelstr += sprintf(myLevelstr, "    ");
     }
     if (!capPiece.IsEmpty())
     {
-	sprintf(capstr, "(x%c)", nativeToAscii(capPiece));
+        sprintf(capstr, "(x%c)", nativeToAscii(capPiece));
     }
     if (move->promote != PieceType::Empty && move->promote != PieceType::Pawn)
     {
-	sprintf(promostr, "(->%c)", nativeToAscii(Piece(0, move->promote)));
+        sprintf(promostr, "(->%c)", nativeToAscii(Piece(0, move->promote)));
     }
     if (move->chk != FLAG)
     {
-	sprintf(chkstr, "(chk-%c%c)",
-		AsciiFile(move->chk), AsciiRank(move->chk));
+        sprintf(chkstr, "(chk-%c%c)",
+                AsciiFile(move->chk), AsciiRank(move->chk));
     }
     LogPrint(level, "%s%s%s%s%s\n",
-	     levelstr,
-	     MoveToString(tmpStr, *move, &gMoveStyleLog, NULL),
-	     capstr, promostr, chkstr);
+             levelstr,
+             MoveToString(tmpStr, *move, &gMoveStyleLog, NULL),
+             capstr, promostr, chkstr);
 }
 
 
@@ -133,18 +133,18 @@ void LogBoard(int level, BoardT *board)
 
     if (level > gLogLevel)
     {
-	return; // no-op
+        return; // no-op
     }
 
     LogPrint(level, "LogBoard:\n");
     for (rank = 7; rank >= 0; rank--)
     {
-	for (file = 0; file < 8; file++)
-	{
-	    chr = nativeToAscii(board->coord[toCoord(rank, file)]);
-	    LogPrint(level, "%c", chr == ' ' ? '.' : chr);
-	}
-	LogPrint(level, "\n");
+        for (file = 0; file < 8; file++)
+        {
+            chr = nativeToAscii(board->coord[toCoord(rank, file)]);
+            LogPrint(level, "%c", chr == ' ' ? '.' : chr);
+        }
+        LogPrint(level, "\n");
     }
 }
 
@@ -158,12 +158,12 @@ void LogMoveShow(int level, BoardT *board, MoveT *move, const char *caption)
 
     for (i = 7; i >= 0; i--)
     {
-	for (j = 0; j < 8; j++)
-	{
-	    ascii = nativeToAscii(board->coord[(i * 8) + j]);
-	    LogPrint(level, "%c", ascii == ' ' ? '.' : ascii);
-	}
-	LogPrint(level, "\n");
+        for (j = 0; j < 8; j++)
+        {
+            ascii = nativeToAscii(board->coord[(i * 8) + j]);
+            LogPrint(level, "%c", ascii == ' ' ? '.' : ascii);
+        }
+        LogPrint(level, "\n");
     }
 }
 
@@ -175,17 +175,17 @@ void LogPieceList(BoardT *board)
     int i, j;
     for (i = 0; i < kMaxPieces; i++)
     {
-	if (board->pieceList[i].lgh)
-	{
-	    LOG_EMERG("%d:", i);
-	    for (j = 0; j < board->pieceList[i].lgh; j++)
-	    {
-		LOG_EMERG("%c%c",
-			  AsciiFile(board->pieceList[i].coords[j]),
-			  AsciiRank(board->pieceList[i].coords[j]));
-	    }
-	    LOG_EMERG(".\n");
-	}
+        if (board->pieceList[i].lgh)
+        {
+            LOG_EMERG("%d:", i);
+            for (j = 0; j < board->pieceList[i].lgh; j++)
+            {
+                LOG_EMERG("%c%c",
+                          AsciiFile(board->pieceList[i].coords[j]),
+                          AsciiRank(board->pieceList[i].coords[j]));
+            }
+            LOG_EMERG(".\n");
+        }
     }
     LOG_EMERG("pieceList results.\n");
 }

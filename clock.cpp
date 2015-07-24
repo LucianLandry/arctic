@@ -52,13 +52,13 @@ void ClockStop(ClockT *myClock)
 {
     if (myClock->bRunning)
     {
-	myClock->bRunning = false;
-	myClock->timeTaken = calcTimeTaken(myClock);
+        myClock->bRunning = false;
+        myClock->timeTaken = calcTimeTaken(myClock);
 
-	if (!ClockIsInfinite(myClock))
-	{
-	    myClock->time -= myClock->timeTaken;
-	}
+        if (!ClockIsInfinite(myClock))
+        {
+            myClock->time -= myClock->timeTaken;
+        }
     }
 }
 
@@ -67,8 +67,8 @@ void ClockStart(ClockT *myClock)
 {
     if (!myClock->bRunning)
     {
-	myClock->bRunning = true;
-	myClock->turnStartTime = getBigTime();
+        myClock->bRunning = true;
+        myClock->turnStartTime = getBigTime();
     }
 }
 
@@ -77,15 +77,15 @@ static void ClockAddTime(ClockT *myClock, bigtime_t myTime)
 {
     if (myClock->time == CLOCK_TIME_INFINITE)
     {
-	return;
+        return;
     }
     if (myTime == CLOCK_TIME_INFINITE)
     {
-	myClock->time = myTime;
+        myClock->time = myTime;
     }
     else
     {
-	myClock->time += myTime;
+        myClock->time += myTime;
     }
 }
 
@@ -98,7 +98,7 @@ void ClockApplyIncrement(ClockT *myClock, int ply)
 {
     if (ClockIsInfinite(myClock))
     {
-	return;
+        return;
     }
 
     // Apply per-move increment (if any)
@@ -107,15 +107,15 @@ void ClockApplyIncrement(ClockT *myClock, int ply)
     // Add any time from a new time control.
     if (myClock->timeControlPeriod)
     {
-	if (// add 2 instead of 1, if want to apply 'before' move
-	    ((ply + 1) >> 1) % myClock->timeControlPeriod == 0)
-	{
-	    ClockAddTime(myClock, myClock->startTime);
-	}
+        if (// add 2 instead of 1, if want to apply 'before' move
+            ((ply + 1) >> 1) % myClock->timeControlPeriod == 0)
+        {
+            ClockAddTime(myClock, myClock->startTime);
+        }
     }
     else if (myClock->numMovesToNextTimeControl == 1)
     {
-	ClockAddTime(myClock, myClock->startTime);
+        ClockAddTime(myClock, myClock->startTime);
     }
 }
 
@@ -125,7 +125,7 @@ bigtime_t ClockGetTime(ClockT *myClock)
 {
     if (myClock->bRunning && !ClockIsInfinite(myClock))
     {
-	return myClock->time - calcTimeTaken(myClock);
+        return myClock->time - calcTimeTaken(myClock);
     }
     return myClock->time;
 }
@@ -135,9 +135,9 @@ bigtime_t ClockGetTime(ClockT *myClock)
 bigtime_t ClockGetPerMoveTime(ClockT *myClock)
 {
     if (myClock->perMoveLimit == CLOCK_TIME_INFINITE ||
-	!ClockIsRunning(myClock))
+        !ClockIsRunning(myClock))
     {
-	return myClock->perMoveLimit;
+        return myClock->perMoveLimit;
     }
     return myClock->perMoveLimit - calcTimeTaken(myClock);
 }
@@ -151,14 +151,14 @@ void ClockSetTime(ClockT *myClock, bigtime_t myTime)
     myClock->time = myTime;
     if (wasRunning)
     {
-	ClockStart(myClock);
+        ClockStart(myClock);
     }
 }
 
 bigtime_t ClockTimeTaken(ClockT *myClock)
 {
     return ClockIsRunning(myClock) ?
-	calcTimeTaken(myClock) : myClock->timeTaken;
+        calcTimeTaken(myClock) : myClock->timeTaken;
 }
 
 
@@ -172,23 +172,23 @@ bool TimeStringIsValid(char *str)
 
     if (!strcmp(str, CLOCK_TIME_INFINITE_STR))
     {
-	return true;
+        return true;
     }
 
     if (*str == '\0')
     {
-	return false;
+        return false;
     }
     do
     {
-	if (// must be digit or ':'
-	    (!isdigit(*str) && *str != ':') ||
-	    // ':' must have a number after it, and cannot be > 2 numbers.
-	    (*str == ':' && (++colCount > 2 || !isdigit(*(str + 1)))))
-	{
-	    isValid = false;
-	    break;
-	}
+        if (// must be digit or ':'
+            (!isdigit(*str) && *str != ':') ||
+            // ':' must have a number after it, and cannot be > 2 numbers.
+            (*str == ':' && (++colCount > 2 || !isdigit(*(str + 1)))))
+        {
+            isValid = false;
+            break;
+        }
     } while (*(++str) != '\0');
 
     return isValid;
@@ -202,9 +202,9 @@ static int strCount(const char *haystack, const char *needle)
     const char *occur;
 
     for (retVal = 0;
-	 (occur = strstr(haystack, needle)) != NULL;
-	 haystack = occur + strlen(needle), retVal++)
-	; // no-op
+         (occur = strstr(haystack, needle)) != NULL;
+         haystack = occur + strlen(needle), retVal++)
+        ; // no-op
 
     return retVal;
 }
@@ -221,38 +221,38 @@ bigtime_t TimeStringToBigTime(char *str)
 
     if (!TimeStringIsValid(str))
     {
-	assert(0);
+        assert(0);
     }
 
     if (!strcmp(str, CLOCK_TIME_INFINITE_STR))
     {
-	return CLOCK_TIME_INFINITE;
+        return CLOCK_TIME_INFINITE;
     }
 
     switch(strCount(str, ":"))
     {
     case 2:
-	if (sscanf(str, "%d:%d:%d", &hours, &minutes, &seconds) < 3 &&
-	    sscanf(str, ":%d:%d", &minutes, &seconds) < 2)
-	{
-	    assert(0);
-	}
-	break;
+        if (sscanf(str, "%d:%d:%d", &hours, &minutes, &seconds) < 3 &&
+            sscanf(str, ":%d:%d", &minutes, &seconds) < 2)
+        {
+            assert(0);
+        }
+        break;
     case 1:
-	if (sscanf(str, "%d:%d", &minutes, &seconds) < 2 &&
-	    sscanf(str, ":%d", &seconds) < 1)
-	{
-	    assert(0);
-	}
-	break;
+        if (sscanf(str, "%d:%d", &minutes, &seconds) < 2 &&
+            sscanf(str, ":%d", &seconds) < 1)
+        {
+            assert(0);
+        }
+        break;
     case 0:
-	if (sscanf(str, "%d", &seconds) < 1)
-	{
-	    assert(0);
-	}
-	break;
+        if (sscanf(str, "%d", &seconds) < 1)
+        {
+            assert(0);
+        }
+        break;
     default:
-	assert(0);
+        assert(0);
     }
 
     return ((bigtime_t) (hours * 3600 + minutes * 60 + seconds)) * 1000000;
@@ -269,15 +269,15 @@ char *TimeStringFromBigTime(char *result, bigtime_t myTime)
 
     if (myTime == CLOCK_TIME_INFINITE)
     {
-	sprintf(result, CLOCK_TIME_INFINITE_STR);
-	return result;
+        sprintf(result, CLOCK_TIME_INFINITE_STR);
+        return result;
     }
 
     // This rounds us up to the nearest second.
     // (The -1000000 check gets the math right for negative numbers.)
     if (myTime > -1000000 && myTime % 1000000)
     {
-	myTime += 1000000;
+        myTime += 1000000;
     }
 
     negative = (myTime < 0);
@@ -295,18 +295,18 @@ char *TimeStringFromBigTime(char *result, bigtime_t myTime)
 
     if (hours)
     {
-	sprintf(result, "%s%d:%02d:%02d",
-		negative ? "-" : "", hours, minutes, seconds);
+        sprintf(result, "%s%d:%02d:%02d",
+                negative ? "-" : "", hours, minutes, seconds);
     }
     else if (minutes)
     {
-	sprintf(result, "%s%d:%02d",
-		negative ? "-" : "", minutes, seconds);
+        sprintf(result, "%s%d:%02d",
+                negative ? "-" : "", minutes, seconds);
     }
     else
     {
-	sprintf(result, "%s:%02d",
-		negative ? "-" : "", seconds);
+        sprintf(result, "%s:%02d",
+                negative ? "-" : "", seconds);
     }
     return result;
 }
@@ -315,14 +315,14 @@ char *TimeStringFromBigTime(char *result, bigtime_t myTime)
 void ClocksReset(GameT *game)
 {
     memcpy(&game->actualClocks[0],
-	   &game->origClocks[0],
-	   sizeof(ClockT) * NUM_PLAYERS);
+           &game->origClocks[0],
+           sizeof(ClockT) * NUM_PLAYERS);
     
     if (GameCurrentPly(game) == 0)
     {
-	// Propagate changes to the SaveGameT -- we assume the game is not
-	// in progress.
-	SaveGameClocksSet(&game->sgame, game->clocks);
+        // Propagate changes to the SaveGameT -- we assume the game is not
+        // in progress.
+        SaveGameClocksSet(&game->sgame, game->clocks);
     }
 }
 
@@ -332,7 +332,7 @@ void ClocksStop(GameT *game)
     int i;
     for (i = 0; i < NUM_PLAYERS; i++)
     {
-	ClockStop(game->clocks[i]);
+        ClockStop(game->clocks[i]);
     }
 }
 
@@ -343,15 +343,15 @@ void ClocksPrint(GameT *game, char *context)
     ClockT *myClock;
     for (i = 0; i < NUM_PLAYERS; i++)
     {
-	myClock = game->clocks[i];
-	printf("ClocksPrint(%s): clock %d: %lld %lld %d %lld %c\n",
-	       context ? context : "",
-	       i,
-	       (long long) ClockGetTime(myClock),
-	       (long long) ClockGetInc(myClock),
-	       ClockGetTimeControlPeriod(myClock),
-	       (long long) ClockGetPerMoveLimit(myClock),
-	       ClockIsRunning(myClock) ? 'r' : 's');
+        myClock = game->clocks[i];
+        printf("ClocksPrint(%s): clock %d: %lld %lld %d %lld %c\n",
+               context ? context : "",
+               i,
+               (long long) ClockGetTime(myClock),
+               (long long) ClockGetInc(myClock),
+               ClockGetTimeControlPeriod(myClock),
+               (long long) ClockGetPerMoveLimit(myClock),
+               ClockIsRunning(myClock) ? 'r' : 's');
     }
 }
 
@@ -381,7 +381,7 @@ void GoaltimeCalc(GameT *game)
     int ply = game->savedBoard.ply;
     ClockT *myClock = game->clocks[turn];
     bigtime_t myTime, calcTime, altCalcTime, myInc, safeTime,
-	myPerMoveLimit, safeMoveLimit;
+        myPerMoveLimit, safeMoveLimit;
     int myTimeControlPeriod, numMovesToNextTimeControl;
     int numIncs;
 
@@ -392,23 +392,23 @@ void GoaltimeCalc(GameT *game)
     myInc = ClockGetInc(myClock);
 
     safeMoveLimit =
-	myPerMoveLimit == CLOCK_TIME_INFINITE ?	CLOCK_TIME_INFINITE :
-	myPerMoveLimit - MIN_TIME;	
+        myPerMoveLimit == CLOCK_TIME_INFINITE ? CLOCK_TIME_INFINITE :
+        myPerMoveLimit - MIN_TIME;      
 
     if (ClocksICS(game))
     {
-	safeMoveLimit = MIN(safeMoveLimit, ICS_FIRSTMOVE_LIMIT);
+        safeMoveLimit = MIN(safeMoveLimit, ICS_FIRSTMOVE_LIMIT);
     }
     safeMoveLimit = MAX(safeMoveLimit, 0);
 
     // Degenerate case.
     if (ClockIsInfinite(myClock))
     {
-	game->goalTime[turn] =
-	    myPerMoveLimit == CLOCK_TIME_INFINITE ?
-	    CLOCK_TIME_INFINITE :
-	    safeMoveLimit;
-	return;
+        game->goalTime[turn] =
+            myPerMoveLimit == CLOCK_TIME_INFINITE ?
+            CLOCK_TIME_INFINITE :
+            safeMoveLimit;
+        return;
     }
 
     safeTime = MAX(myTime - MIN_TIME, 0);
@@ -418,41 +418,41 @@ void GoaltimeCalc(GameT *game)
 
     if (myTimeControlPeriod || numMovesToNextTimeControl)
     {
-	// Anticipate the additional time we will possess to make our
-	// GAME_NUM_MOVES moves due to time-control increments.
-	if (myTimeControlPeriod)
-	{
-	    numMovesToNextTimeControl =
-		myTimeControlPeriod - ((ply >> 1) % myTimeControlPeriod);
-	}
-	numIncs = GAME_NUM_MOVES <= numMovesToNextTimeControl ? 0 :
-	    1 + (myTimeControlPeriod ?
-		 ((GAME_NUM_MOVES - numMovesToNextTimeControl - 1) /
-		  myTimeControlPeriod) :
-		 0);
+        // Anticipate the additional time we will possess to make our
+        // GAME_NUM_MOVES moves due to time-control increments.
+        if (myTimeControlPeriod)
+        {
+            numMovesToNextTimeControl =
+                myTimeControlPeriod - ((ply >> 1) % myTimeControlPeriod);
+        }
+        numIncs = GAME_NUM_MOVES <= numMovesToNextTimeControl ? 0 :
+            1 + (myTimeControlPeriod ?
+                 ((GAME_NUM_MOVES - numMovesToNextTimeControl - 1) /
+                  myTimeControlPeriod) :
+                 0);
 
-	calcTime += (ClockGetStartTime(myClock) * numIncs) / GAME_NUM_MOVES;
-	// However, say we have :30 on the clock, 10 moves to make, and a one-
-	// minute increment every two moves.  We want to burn only :15.
-	altCalcTime = safeTime / MIN(GAME_NUM_MOVES,
-				     numMovesToNextTimeControl);
-	calcTime = MIN(calcTime, altCalcTime);
+        calcTime += (ClockGetStartTime(myClock) * numIncs) / GAME_NUM_MOVES;
+        // However, say we have :30 on the clock, 10 moves to make, and a one-
+        // minute increment every two moves.  We want to burn only :15.
+        altCalcTime = safeTime / MIN(GAME_NUM_MOVES,
+                                     numMovesToNextTimeControl);
+        calcTime = MIN(calcTime, altCalcTime);
     }
 
     // Anticipate the additional time we will possess to make our
     // GAME_NUM_MOVES moves due to increments.
     if (myInc)
     {
-	numIncs = GAME_NUM_MOVES - 1;
-	calcTime += (myInc * numIncs) / GAME_NUM_MOVES;
-	// Fix cases like 10 second start time, 22 second increment
-	calcTime = MIN(calcTime, safeTime);
+        numIncs = GAME_NUM_MOVES - 1;
+        calcTime += (myInc * numIncs) / GAME_NUM_MOVES;
+        // Fix cases like 10 second start time, 22 second increment
+        calcTime = MIN(calcTime, safeTime);
     }
 
     // Do not think over any per-move limit.
     if (safeMoveLimit != CLOCK_TIME_INFINITE)
     {
-	calcTime = MIN(calcTime, safeMoveLimit);
+        calcTime = MIN(calcTime, safeMoveLimit);
     }
 
     // Refuse to think for a "negative" time.

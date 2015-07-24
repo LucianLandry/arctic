@@ -150,8 +150,8 @@ void initconio (void) /* This is needed, because ncurses needs to be initialized
       fprintf(stderr,"Attention: A color terminal may be required to run this application !\n");   
    noecho();
 #if 0 /* blandry: this is great and all, but it breaks getch() (which still
-	 uses stdscr).  However, note that fudging this, in turn, breaks
-	 window(). */
+         uses stdscr).  However, note that fudging this, in turn, breaks
+         window(). */
    conio_scr=newwin(0,0,0,0);
 #else
    conio_scr=stdscr;
@@ -164,27 +164,27 @@ void initconio (void) /* This is needed, because ncurses needs to be initialized
    for (y=0;y<=7;y++)
       for (x=0;x<=7;x++)
       {
-	  /* assert((8*y)+x+1 >= 1 && (8*y)+x+1 <= COLOR_PAIRS - 1); */
-	 assert(colortab(x) >= 0 && colortab(x) <= COLORS);
-	 assert(colortab(y) >= 0 && colortab(y) <= COLORS);
-	 if (x == 0 && y == 0)
-	 {
-	     /* blandry: here, x is foreground, and y is background.
-		(0, 0) is hardwired to gray on black, where we would
-		like to use it for black on black.  But we have to cram every
-		single color in because COLOR_PAIRS == 64 in several
-		implementations. */
-	     init_pair((8*y)+7, colortab(x), colortab(y));              
-	 }
-	 else if (x == 7 && y == 0)
-	 {
-	     /* blandry: do nothing (we will use pair "0", which is hardwired
-		to this	color) */
-	 }
+          /* assert((8*y)+x+1 >= 1 && (8*y)+x+1 <= COLOR_PAIRS - 1); */
+         assert(colortab(x) >= 0 && colortab(x) <= COLORS);
+         assert(colortab(y) >= 0 && colortab(y) <= COLORS);
+         if (x == 0 && y == 0)
+         {
+             /* blandry: here, x is foreground, and y is background.
+                (0, 0) is hardwired to gray on black, where we would
+                like to use it for black on black.  But we have to cram every
+                single color in because COLOR_PAIRS == 64 in several
+                implementations. */
+             init_pair((8*y)+7, colortab(x), colortab(y));              
+         }
+         else if (x == 7 && y == 0)
+         {
+             /* blandry: do nothing (we will use pair "0", which is hardwired
+                to this color) */
+         }
          else
-	 {
-	     init_pair((8*y)+x, colortab(x), colortab(y));
-	 }
+         {
+             init_pair((8*y)+x, colortab(x), colortab(y));
+         }
       }
    wattr_get(conio_scr, &txtattr, &ignore, NULL);
    bgc=0;

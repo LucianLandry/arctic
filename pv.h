@@ -55,7 +55,7 @@ struct BoardS;
 // Writes out a sequence of moves in the PV using style 'moveStyle'.
 // Returns the number of moves successfully converted.
 int PvBuildMoveString(PvT *pv, char *dstStr, int dstLen,
-		      const MoveStyleT *moveStyle, struct BoardS *board);
+                      const MoveStyleT *moveStyle, struct BoardS *board);
 
 void CvInit(CvT *cv);
 

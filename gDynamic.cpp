@@ -28,13 +28,13 @@ void gHistInit(void)
 
     /* reset history table. */
     for (i = 0; i < NUM_PLAYERS; i++)
-	for (j = 0; j < NUM_SQUARES; j++)
-	    for (k = 0; k < NUM_SQUARES; k++)
-	    {
-		/* -50, not -1, because -1 might trigger accidentally if
-		   we expand the history window beyond killer moves. */
-		gVars.hist[i] [j] [k] = -50;
-	    }
+        for (j = 0; j < NUM_SQUARES; j++)
+            for (k = 0; k < NUM_SQUARES; k++)
+            {
+                /* -50, not -1, because -1 might trigger accidentally if
+                   we expand the history window beyond killer moves. */
+                gVars.hist[i] [j] [k] = -50;
+            }
 }
 
 void gPvInit(void)
@@ -48,8 +48,8 @@ void gPvUpdate(PvT *goodPv)
 {
     PvT *pv = &gVars.pv; // shorthand.
     int numMoves = MIN3(MAX_PV_DEPTH,
-			(goodPv->level + 1),
-			(goodPv->depth + 1));
+                        (goodPv->level + 1),
+                        (goodPv->depth + 1));
 
     pv->eval = goodPv->eval;
     pv->level = MAX(pv->level, goodPv->level);

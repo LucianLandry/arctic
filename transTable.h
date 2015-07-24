@@ -61,10 +61,10 @@ bool TransTableQuickHitTest(uint64 zobrist);
 // Fills in 'hashEval' and 'hashMove' iff we had a successful hit.
 // Assumes a non-zero-size hash.
 bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
-		   int searchDepth, uint16 basePly, int alpha, int beta);
+                   int searchDepth, uint16 basePly, int alpha, int beta);
 
 void TransTableConditionalUpdate(PositionEvalT eval, MoveT move, uint64 zobrist,
-				 int searchDepth, uint16 basePly);
+                                 int searchDepth, uint16 basePly);
 
 #ifdef __cplusplus
 }

@@ -30,16 +30,16 @@ BoardComponent::BoardComponent()
 
     for (int i = 0; i < NUM_SQUARES; i++)
     {
-	squares[i].setColour(0,
-			     (File(i) + Rank(i)) & 1 ?
-			     light : dark);
-	addAndMakeVisible(&squares[i]);
+        squares[i].setColour(0,
+                             (File(i) + Rank(i)) & 1 ?
+                             light : dark);
+        addAndMakeVisible(&squares[i]);
     }
 
     // Give the squares pieces.
     BoardT myBoard;
     BoardSet(&myBoard, gPreCalc.normalStartingPieces, CASTLEALL, FLAG, 0, 0,
-	     0);
+             0);
     refresh(&myBoard);
 };
 
@@ -52,10 +52,10 @@ void BoardComponent::resized()
     Component::resized();
     for (int i = 0; i < NUM_SQUARES; i++)
     {
-	squares[i].setBoundsRelative(File(i) / 8.0f,
-				     (7.0f - Rank(i)) / 8.0f,
-				     1.0f / 8.0f,
-				     1.0f / 8.0f);
+        squares[i].setBoundsRelative(File(i) / 8.0f,
+                                     (7.0f - Rank(i)) / 8.0f,
+                                     1.0f / 8.0f,
+                                     1.0f / 8.0f);
     }    
 }
 
@@ -73,6 +73,6 @@ void BoardComponent::refresh(BoardT *board)
 {
     for (int i = 0; i < NUM_SQUARES; i++)
     {
-	squares[i].SetPiece(board->coord[i]);
+        squares[i].SetPiece(board->coord[i]);
     }
 }

@@ -90,9 +90,9 @@ Piece asciiToNative(char ascii)
 int asciiToCoord(char *inputStr)
 {
     return (inputStr[0] >= 'a' && inputStr[0] <= 'h' &&
-	    inputStr[1] >= '1' && inputStr[1] <= '8') ?
-	inputStr[0] - 'a' + ((inputStr[1] - '1') * 8) :
-	FLAG;
+            inputStr[1] >= '1' && inputStr[1] <= '8') ?
+        inputStr[0] - 'a' + ((inputStr[1] - '1') * 8) :
+        FLAG;
 }
 
 
@@ -100,10 +100,10 @@ static bool matchHelper(const char *str, const char *needle, bool caseSensitive)
 {
     int len = strlen(needle);
     return
-	str == NULL ? 0 :
-	!(caseSensitive ? strncmp(str, needle, len) :
-	  strncasecmp(str, needle, len)) &&
-	(isspace(str[len]) || str[len] == '\0');
+        str == NULL ? 0 :
+        !(caseSensitive ? strncmp(str, needle, len) :
+          strncasecmp(str, needle, len)) &&
+        (isspace(str[len]) || str[len] == '\0');
 }
 
 // Pattern matchers for tokens embedded at the start of a larger string.
@@ -130,7 +130,7 @@ int reportError(int silent, const char *errorFormatStr, ...)
 
     if (!silent)
     {
-	gUI->notifyError(tmpBuf);
+        gUI->notifyError(tmpBuf);
     }
     LOG_DEBUG("%s\n", tmpBuf);
     return -1;
@@ -168,137 +168,137 @@ int fenToBoard(const char *fenString, BoardT *result)
 
     if (fenString == NULL)
     {
-	return reportError
-	    (0,	"Error: fenToBoard: NULL fenString (missing arg?)");
+        return reportError
+            (0, "Error: fenToBoard: NULL fenString (missing arg?)");
     }
 
     // Read in everything.  This is insensitive to whitespace between fields,
     // which is what we want since we want to work w/UCI.
     if ((res = sscanf(fenString, " %80s %6s %6s %6s %d %d",
-		      coordStr, turnStr, cbyteStr, ebyteStr,
-		      &halfmove, &fullmove)) < 6)
+                      coordStr, turnStr, cbyteStr, ebyteStr,
+                      &halfmove, &fullmove)) < 6)
     {
-	return reportError
-	    (0,	"Error: fenToBoard: not enough arguments (%d)", res);
+        return reportError
+            (0, "Error: fenToBoard: not enough arguments (%d)", res);
     }
 
     // Read in 'coord'.
     for (i = 0;
-	 (chr = coordStr[i]) != '\0';
-	 i++)
+         (chr = coordStr[i]) != '\0';
+         i++)
     {
-	if (isdigit(chr))
-	{
-	    spaces = chr - '0';
-	    if (file + spaces > 8)
-	    {
-		return reportError
-		    (0,	"Error: fenToBoard: (%d,%d) too many spaces (%d)",
-		     rank, file, spaces);
-	    }
-	    file += spaces;
-	}
-	else if (chr == '/')
-	{
-	    if (file < 8 || rank <= 0)
-	    {
-		return reportError
-		    (0, "Error: fenToBoard: (%d,%d) bad separator",
-		     rank, file);
-	    }
-	    rank--;
-	    file = 0;
-	}
-	else if (!(piece = asciiToNative(chr)).IsEmpty())
-	{
-	    if (file >= 8)
-	    {
-		return reportError
-		    (0, "Error: fenToBoard: (%d,%d) too many pieces",
-		     rank, file);
-	    }
-	    coord[toCoord(rank, file++)] = piece;
-	}
-	else
-	{
-	    // Unknown token.  Assume it's an unknown piece.
-	    return reportError
-		(0, "Error: fenToBoard: (%d,%d) unknown piece %c",
-		 rank, file, chr);
-	}
+        if (isdigit(chr))
+        {
+            spaces = chr - '0';
+            if (file + spaces > 8)
+            {
+                return reportError
+                    (0, "Error: fenToBoard: (%d,%d) too many spaces (%d)",
+                     rank, file, spaces);
+            }
+            file += spaces;
+        }
+        else if (chr == '/')
+        {
+            if (file < 8 || rank <= 0)
+            {
+                return reportError
+                    (0, "Error: fenToBoard: (%d,%d) bad separator",
+                     rank, file);
+            }
+            rank--;
+            file = 0;
+        }
+        else if (!(piece = asciiToNative(chr)).IsEmpty())
+        {
+            if (file >= 8)
+            {
+                return reportError
+                    (0, "Error: fenToBoard: (%d,%d) too many pieces",
+                     rank, file);
+            }
+            coord[toCoord(rank, file++)] = piece;
+        }
+        else
+        {
+            // Unknown token.  Assume it's an unknown piece.
+            return reportError
+                (0, "Error: fenToBoard: (%d,%d) unknown piece %c",
+                 rank, file, chr);
+        }
     }
     if (file != 8 || rank != 0)
     {
-	return reportError
-	    (0, "Error: fenToBoard: (%d,%d) bad terminator",
-	     rank, file);
+        return reportError
+            (0, "Error: fenToBoard: (%d,%d) bad terminator",
+             rank, file);
     }
 
     // Read in turn.
     if (!strcmp(turnStr, "b"))
     {
-	turn = 1;
+        turn = 1;
     }
     else if (strcmp(turnStr, "w"))
     {
-	return reportError(0, "Error: fenToBoard: unknown turn %s", turnStr);
+        return reportError(0, "Error: fenToBoard: unknown turn %s", turnStr);
     }
 
     // Read in cbyte.
     if (strcmp(cbyteStr, "-")) // do nothing, if nothing to castle.
     {
-	for (i = 0;
-	     i < 4 && (chr = cbyteStr[i]) != '\0';
-	     i++)
-	{
-	    switch (chr)
-	    {
-	    case 'K':
-		cbyte |= CASTLEOO;
-		break;
-	    case 'Q':
-		cbyte |= CASTLEOOO;
-		break;
-	    case 'k':
-		cbyte |= CASTLEOO << 1;
-		break;
-	    case 'q':
-		cbyte |= CASTLEOOO << 1;
-		break;
-	    default:
-		return reportError
-		    (0, "Error: fenToBoard: unknown cbyte token '%c'", chr);
-	    }
-	}
-	if (i == 4 && cbyteStr[i] != '\0')
-	{
-	    return reportError(0, "Error: fenToBoard: cbyteStr too long (%c)",
-			       cbyteStr[i]);
-	}
+        for (i = 0;
+             i < 4 && (chr = cbyteStr[i]) != '\0';
+             i++)
+        {
+            switch (chr)
+            {
+            case 'K':
+                cbyte |= CASTLEOO;
+                break;
+            case 'Q':
+                cbyte |= CASTLEOOO;
+                break;
+            case 'k':
+                cbyte |= CASTLEOO << 1;
+                break;
+            case 'q':
+                cbyte |= CASTLEOOO << 1;
+                break;
+            default:
+                return reportError
+                    (0, "Error: fenToBoard: unknown cbyte token '%c'", chr);
+            }
+        }
+        if (i == 4 && cbyteStr[i] != '\0')
+        {
+            return reportError(0, "Error: fenToBoard: cbyteStr too long (%c)",
+                               cbyteStr[i]);
+        }
     }
 
     // Read in ebyte.
     if (strcmp(ebyteStr, "-"))
     {
-	if ((ebyte = asciiToCoord(ebyteStr)) == FLAG)
-	{
-	    return reportError(0, "Error: fenToBoard: bad ebyte");
-	}
-	if (ebyteStr[2] != '\0')
-	{
-	    return reportError(0, "Error: fenToBoard: ebyteStr too long (%c)",
-			       ebyteStr[2]);
-	}
+        if ((ebyte = asciiToCoord(ebyteStr)) == FLAG)
+        {
+            return reportError(0, "Error: fenToBoard: bad ebyte");
+        }
+        if (ebyteStr[2] != '\0')
+        {
+            return reportError(0, "Error: fenToBoard: ebyteStr too long (%c)",
+                               ebyteStr[2]);
+        }
     }
 
     // (halfmove and fullmove are already read in.)
     // At this point we think we have something worth checking.
     BoardSet(&tmpBoard, coord, cbyte, ebyte, turn,
-	     fenFullmoveToPly(fullmove, turn), halfmove);
+             fenFullmoveToPly(fullmove, turn), halfmove);
 
     if (BoardSanityCheck(&tmpBoard, 0) < 0)
     {
-	return -1;
+        return -1;
     }
 
     BoardCopy(result, &tmpBoard);
@@ -317,7 +317,7 @@ void setForceMode(ThinkContextT *th, GameT *game)
     ClocksStop(game);
     for (i = 0; i < NUM_PLAYERS; i++)
     {
-	game->control[i] = 0;
+        game->control[i] = 0;
     }
 }
 
@@ -325,11 +325,11 @@ char *findNextNonWhiteSpace(char *pStr)
 {
     if (pStr == NULL)
     {
-	return NULL;
+        return NULL;
     }
     while (isspace(*pStr) && *pStr != '\0')
     {
-	pStr++;
+        pStr++;
     }
     return *pStr != '\0' ? pStr : NULL;
 }
@@ -338,11 +338,11 @@ char *findNextWhiteSpace(char *pStr)
 {
     if (pStr == NULL)
     {
-	return NULL;
+        return NULL;
     }
     while (!isspace(*pStr) && *pStr != '\0')
     {
-	pStr++;
+        pStr++;
     }
     return *pStr != '\0' ? pStr : NULL;
 }
@@ -351,11 +351,11 @@ char *findNextWhiteSpaceOrNull(char *pStr)
 {
     if (pStr == NULL)
     {
-	return NULL;
+        return NULL;
     }
     while (!isspace(*pStr) && *pStr != '\0')
     {
-	pStr++;
+        pStr++;
     }
     return pStr;
 }
@@ -368,9 +368,9 @@ static char *copyToken(char *dst, int dstLen, char *src)
     int srcLen;
 
     if (src == NULL ||
-	(srcLen = (findNextWhiteSpaceOrNull(src) - src)) >= dstLen)
+        (srcLen = (findNextWhiteSpaceOrNull(src) - src)) >= dstLen)
     {
-	return NULL;
+        return NULL;
     }
     memcpy(dst, src, srcLen);
     dst[srcLen] = '\0';
@@ -390,25 +390,25 @@ bool isMove(char *inputStr, MoveT *resultMove, BoardT *board)
 
     if (copyToken(moveStr, sizeof(moveStr), inputStr) == NULL)
     {
-	return false;
+        return false;
     }
 
     if (!strcasecmp(moveStr, "O-O") || !strcasecmp(moveStr, "0-0"))
     {
-	MoveCreateFromCastle(resultMove, true, board->turn);
-	return true;
+        MoveCreateFromCastle(resultMove, true, board->turn);
+        return true;
     }
     if (!strcasecmp(moveStr, "O-O-O") || !strcasecmp(moveStr, "0-0-0"))
     {
-	MoveCreateFromCastle(resultMove, false, board->turn);
-	return true;
+        MoveCreateFromCastle(resultMove, false, board->turn);
+        return true;
     }
     else if (asciiToCoord(moveStr) != FLAG && asciiToCoord(&moveStr[2]) != FLAG)
     {
-	resultMove->src = asciiToCoord(moveStr);
-	resultMove->dst = asciiToCoord(&moveStr[2]);
-	MoveUnmangleCastle(resultMove, board);
-	return true;
+        resultMove->src = asciiToCoord(moveStr);
+        resultMove->dst = asciiToCoord(&moveStr[2]);
+        MoveUnmangleCastle(resultMove, board);
+        return true;
     }
     return false;
 }
@@ -426,7 +426,7 @@ bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
 
     if (!isMove(inputStr, resultMove, board))
     {
-	return false;
+        return false;
     }
 
     mlistGenerate(&moveList, board, 0);
@@ -434,27 +434,27 @@ bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
     // Search moveList for move.
     if ((foundMove = mlistSearch(&moveList, resultMove, 2)) == NULL)
     {
-	return false;
+        return false;
     }
 
     // Do we need to promote?
     if (MoveIsPromote(*resultMove, board))
     {
-	chr = inputStr[4];
-	if (chr != 'q' && chr != 'r' && chr != 'n' && chr != 'b')
-	{
-	    return false;
-	}
+        chr = inputStr[4];
+        if (chr != 'q' && chr != 'r' && chr != 'n' && chr != 'b')
+        {
+            return false;
+        }
 
-	Piece piece = asciiToNative(chr);
-	resultMove->promote = piece.Type();
-	    
-	foundMove = mlistSearch(&moveList, resultMove, 3);
-	assert(foundMove != NULL);
+        Piece piece = asciiToNative(chr);
+        resultMove->promote = piece.Type();
+            
+        foundMove = mlistSearch(&moveList, resultMove, 3);
+        assert(foundMove != NULL);
     }
     else
     {
-	resultMove->promote = foundMove->promote;
+        resultMove->promote = foundMove->promote;
     }
     resultMove->chk = foundMove->chk;
 
@@ -473,11 +473,11 @@ char *ChopBeforeNewLine(char *s)
 
     for (; *s != '\0'; s++)
     {
-	if (isNewLineChar(*s))
-	{
-	    *s = '\0';
-	    return origStr;
-	}
+        if (isNewLineChar(*s))
+        {
+            *s = '\0';
+            return origStr;
+        }
     }
     return origStr;
 }
@@ -492,15 +492,15 @@ static char *myFgets(char *s, int size, FILE *stream)
                    // "char" may be unsigned; 255 != -1
     if (size < 1)
     {
-	return NULL;
+        return NULL;
     }
     while (i < size - 1)
     {
-	if ((chr = fgetc(stream)) == EOF ||
-	    isNewLineChar((s[i++] = chr)))
-	{
-	    break;
-	}
+        if ((chr = fgetc(stream)) == EOF ||
+            isNewLineChar((s[i++] = chr)))
+        {
+            break;
+        }
     }
     s[i] = '\0';
     return (chr == EOF && i == 0) ? NULL : s;
@@ -521,40 +521,40 @@ char *getStdinLine(int maxLen, SwitcherContextT *sw)
     int bytesRead = 0; // for the current line
 
     while (bytesRead == 0 ||
-	   // expect line to be terminated w/a newline.  Otherwise, fgets()
-	   // ran out of room.
-	   !isNewLineChar(buf[bytesRead - 1]))
+           // expect line to be terminated w/a newline.  Otherwise, fgets()
+           // ran out of room.
+           !isNewLineChar(buf[bytesRead - 1]))
     {
-	if (maxLen > 0 && maxLen < bytesRead)
-	{
-	    reportError(0, "%s: maxLen exceeded, buffer was '%s'",
-			__func__, buf);
-	    exit(0);
-	}
-	if (bytesRead >= bufLen - 1 &&
-	    (buf = (char *) realloc(buf, (bufLen += 100))) == NULL)
-	{
-	    reportError(0, "%s: could not alloc %d bytes\n",
-			__func__, bufLen + 100);
-	    exit(0);
-	}
-	if (myFgets(&buf[bytesRead], bufLen - bytesRead, stdin) == NULL)
-	{
-	    reportError(0, "%s: fgets error %d, bailing\n", __func__, errno);
-	    exit(0);
-	}
-	bytesRead += strlen(&buf[bytesRead]);
-	if (bytesRead == 1 && isNewLineChar(buf[0]))
-	{
-	    // read stand-alone newline.  Just discard it, switch off, and
-	    // come back when we have more input.
-	    // The reason for these shenanigans is, if a windows program sends
-	    // us CRLF, we will hit this.  We could avoid this with fgets(),
-	    // but that would screw up when handling a single Mac-style CR
-	    // (0x0d) which is explicitly allowed by the UCI spec.
-	    bytesRead = 0;
-	    SwitcherSwitch(sw);
-	}
+        if (maxLen > 0 && maxLen < bytesRead)
+        {
+            reportError(0, "%s: maxLen exceeded, buffer was '%s'",
+                        __func__, buf);
+            exit(0);
+        }
+        if (bytesRead >= bufLen - 1 &&
+            (buf = (char *) realloc(buf, (bufLen += 100))) == NULL)
+        {
+            reportError(0, "%s: could not alloc %d bytes\n",
+                        __func__, bufLen + 100);
+            exit(0);
+        }
+        if (myFgets(&buf[bytesRead], bufLen - bytesRead, stdin) == NULL)
+        {
+            reportError(0, "%s: fgets error %d, bailing\n", __func__, errno);
+            exit(0);
+        }
+        bytesRead += strlen(&buf[bytesRead]);
+        if (bytesRead == 1 && isNewLineChar(buf[0]))
+        {
+            // read stand-alone newline.  Just discard it, switch off, and
+            // come back when we have more input.
+            // The reason for these shenanigans is, if a windows program sends
+            // us CRLF, we will hit this.  We could avoid this with fgets(),
+            // but that would screw up when handling a single Mac-style CR
+            // (0x0d) which is explicitly allowed by the UCI spec.
+            bytesRead = 0;
+            SwitcherSwitch(sw);
+        }
     }
 
     return buf;
@@ -580,7 +580,7 @@ static void uiThread(UiArgsT *args)
     SwitcherRegister(&myArgs.game->sw);
     while(1)
     {
-	gUI->playerMove(myArgs.th, myArgs.game);
+        gUI->playerMove(myArgs.th, myArgs.game);
     }    
 }
 

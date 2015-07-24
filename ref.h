@@ -35,8 +35,8 @@ typedef uint8 cell_t;
 #define FLAG            127
 #define FLAG64          0x7f7f7f7f7f7f7f7fLL; /* 8 FLAGs in a row */
 #define DIRFLAG         10  /* This is even, in order to optimize rook attack
-			       checks, and it is low, so I can define the
-			       precalculated 'attacks' array. */
+                               checks, and it is low, so I can define the
+                               precalculated 'attacks' array. */
 #define DOUBLE_CHECK    255 /* cannot be the same as FLAG. */
 
 // These are intended as markers in case I start trying to support some more

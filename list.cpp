@@ -113,7 +113,7 @@ void ListInsert(ListT *list, void *myElem, void *myPrevElem)
     // implicitly remove element from any previous list.
     if (elem->pOwner != NULL)
     {
-	ListRemove(elem->pOwner, myElem);
+        ListRemove(elem->pOwner, myElem);
     }
 
     // Sanity checks.
@@ -128,19 +128,19 @@ void ListInsert(ListT *list, void *myElem, void *myPrevElem)
 
     if (elem->pNext)
     {
-	elem->pNext->pPrev = elem;
+        elem->pNext->pPrev = elem;
     }
     else
     {
-	list->pTail = elem;
+        list->pTail = elem;
     }
     if (prevElem)
     {
-	prevElem->pNext = elem;
+        prevElem->pNext = elem;
     }
     else
     {
-	list->pHead = elem;
+        list->pHead = elem;
     }
     list->length++;       
 }
@@ -151,11 +151,11 @@ void ListInsertBefore(ListT *list, void *myElem, void *myNextElem)
 {
     if (myNextElem == NULL)
     {
-	ListEnq(list, myElem);
+        ListEnq(list, myElem);
     }
     else
     {
-	ListInsert(list, myElem, ListPrevious(list, myNextElem));
+        ListInsert(list, myElem, ListPrevious(list, myNextElem));
     }
 }
 

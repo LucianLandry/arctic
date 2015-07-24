@@ -37,7 +37,7 @@ public:
     // overridden from parent
     static ArcticApp *getInstance() noexcept
     {
-	return dynamic_cast<ArcticApp *> (juce::JUCEApplication::getInstance());
+        return dynamic_cast<ArcticApp *> (juce::JUCEApplication::getInstance());
     }
 
     // overridden from ApplicationCommandTarget:

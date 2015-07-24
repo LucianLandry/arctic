@@ -39,8 +39,8 @@ void MainComponent::resized()
     int bcSize = MIN(normalize(bcYSize), normalize(bcXSize));
 
     bc.setBounds(0,
-		 getHeight() - bcSize,
-		 bcSize, bcSize);
+                 getHeight() - bcSize,
+                 bcSize, bcSize);
 }
 
 #if 0
@@ -52,7 +52,7 @@ void MainWindow::resized()
     int bcSize = MIN(normalize(bcYSize), normalize(bcXSize));
 
     bc.setBounds(borderSize,
-		 getHeight() - bcSize - borderSize,
-		 bcSize, bcSize);
+                 getHeight() - bcSize - borderSize,
+                 bcSize, bcSize);
 }
 #endif

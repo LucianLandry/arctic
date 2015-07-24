@@ -28,7 +28,7 @@ typedef struct {
                          // is reset.  It is not the time the clock started
                          // running.
     bigtime_t time; // time left on clock.
-		    // Adjusted only when clock is stopped.
+                    // Adjusted only when clock is stopped.
     bigtime_t inc;  // post-increment (added to clock when it is stopped)
 
     // As in xboard, time controls are all the same.
@@ -94,7 +94,7 @@ static inline bigtime_t ClockGetPerMoveLimit(ClockT *myClock)
 }
 
 static inline void ClockSetTimeControlPeriod(ClockT *myClock,
-					     int myTimeControlPeriod)
+                                             int myTimeControlPeriod)
 {
     myClock->timeControlPeriod = myTimeControlPeriod;
 }

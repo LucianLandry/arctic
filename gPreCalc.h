@@ -60,10 +60,10 @@ typedef struct {
     // (pre-calculated) hashing support.
     struct
     {
-	uint64 coord[kMaxPieces] [NUM_SQUARES];
-	uint64 turn;
-	uint64 cbyte[16];
-	uint64 ebyte[NUM_SQUARES];
+        uint64 coord[kMaxPieces] [NUM_SQUARES];
+        uint64 turn;
+        uint64 cbyte[16];
+        uint64 ebyte[NUM_SQUARES];
     } zobrist;
 
     uint8 castleMask[NUM_SQUARES];

@@ -36,18 +36,18 @@ static Drawable *loadSVGFromPath(String path)
 PieceCache::PieceCache()
 {
     PieceMapT pieceMap[] = {
-	{Piece(0, PieceType::Pawn),   "Chess_plt45.svg"},
-	{Piece(1, PieceType::Pawn),   "Chess_pdt45.svg"},
-	{Piece(0, PieceType::Knight), "Chess_nlt45.svg"},
-	{Piece(1, PieceType::Knight), "Chess_ndt45.svg"},
-	{Piece(0, PieceType::Bishop), "Chess_blt45.svg"},
-	{Piece(1, PieceType::Bishop), "Chess_bdt45.svg"},
-	{Piece(0, PieceType::Rook),   "Chess_rlt45.svg"},
-	{Piece(1, PieceType::Rook),   "Chess_rdt45.svg"},
-	{Piece(0, PieceType::Queen),  "Chess_qlt45.svg"},
-	{Piece(1, PieceType::Queen),  "Chess_qdt45.svg"},
-	{Piece(0, PieceType::King),   "Chess_klt45.svg"},
-	{Piece(1, PieceType::King),   "Chess_kdt45.svg"}
+        {Piece(0, PieceType::Pawn),   "Chess_plt45.svg"},
+        {Piece(1, PieceType::Pawn),   "Chess_pdt45.svg"},
+        {Piece(0, PieceType::Knight), "Chess_nlt45.svg"},
+        {Piece(1, PieceType::Knight), "Chess_ndt45.svg"},
+        {Piece(0, PieceType::Bishop), "Chess_blt45.svg"},
+        {Piece(1, PieceType::Bishop), "Chess_bdt45.svg"},
+        {Piece(0, PieceType::Rook),   "Chess_rlt45.svg"},
+        {Piece(1, PieceType::Rook),   "Chess_rdt45.svg"},
+        {Piece(0, PieceType::Queen),  "Chess_qlt45.svg"},
+        {Piece(1, PieceType::Queen),  "Chess_qdt45.svg"},
+        {Piece(0, PieceType::King),   "Chess_klt45.svg"},
+        {Piece(1, PieceType::King),   "Chess_kdt45.svg"}
     };
 
     // FIXME this obviously needs to not be hardcoded
@@ -57,12 +57,12 @@ PieceCache::PieceCache()
 
     for (uint i = 0; i < sizeof(pieceMap) / sizeof(PieceMapT); i++)
     {
-	Drawable *img = loadSVGFromPath(basePath + String(pieceMap[i].path));
-	if (img == nullptr)
-	{
-	    loaded = false;
-	}
-	cache[pieceMap[i].piece.ToIndex()] = img;
+        Drawable *img = loadSVGFromPath(basePath + String(pieceMap[i].path));
+        if (img == nullptr)
+        {
+            loaded = false;
+        }
+        cache[pieceMap[i].piece.ToIndex()] = img;
     }
 }
 
@@ -80,8 +80,8 @@ Drawable *PieceCache::GetNew(Piece piece)
     Drawable *img;
     int index = piece.ToIndex();
     return
-	(index >= 0 && index < kMaxPieces &&
-	 (img = cache[index]) != nullptr) ?
-	img->createCopy() :
-	nullptr;
+        (index >= 0 && index < kMaxPieces &&
+         (img = cache[index]) != nullptr) ?
+        img->createCopy() :
+        nullptr;
 }

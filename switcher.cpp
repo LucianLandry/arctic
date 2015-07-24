@@ -28,8 +28,8 @@ void SwitcherInit(SwitcherContextT *sw)
 
     for (i = 0; i < SWITCHER_MAX_USERS; i++)
     {
-	retVal = sem_init(&sw->sems[i], 0, 0);
-	assert(retVal == 0);
+        retVal = sem_init(&sw->sems[i], 0, 0);
+        assert(retVal == 0);
     }
 }
 
@@ -41,13 +41,13 @@ void SwitcherRegister(SwitcherContextT *sw)
 
     if (numUsers == SWITCHER_MAX_USERS)
     {
-	assert(0);
+        assert(0);
     }
 
     if (numUsers != 0)
     {
-	/* Every thread but the 'initial' one blocks, waiting to run. */
-	sem_wait(&sw->sems[numUsers]);
+        /* Every thread but the 'initial' one blocks, waiting to run. */
+        sem_wait(&sw->sems[numUsers]);
     }
 }
 
@@ -59,7 +59,7 @@ void SwitcherSwitch(SwitcherContextT *sw)
 
     /* Goto next user. */
     if (++sw->currentUser == sw->numUsers)
-	sw->currentUser = 0;
+        sw->currentUser = 0;
 
     /* Let any other threads run. */
     sem_post(&sw->sems[sw->currentUser]);

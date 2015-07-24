@@ -28,7 +28,7 @@ public:
     // overridden from parent.  These are 'const' in Juce 2.0.
     juce::StringArray getMenuBarNames();
     juce::PopupMenu getMenuForIndex(int topLevelMenuIndex,
-					  const juce::String &menuName);
+                                          const juce::String &menuName);
     void menuItemSelected(int menuItemID, int topLevelMenuIndex); 
 private:
     juce::PopupMenu gameMenu;

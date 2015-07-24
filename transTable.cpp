@@ -69,8 +69,8 @@ int calcNumLeadingZeros(size_t numEntries)
     // more than 1k entries off.
     while (numEntries > 0x3fffff)
     {
-	numEntries >>= 1;
-	shiftCount++;
+        numEntries >>= 1;
+        shiftCount++;
     }
     return shiftCount;
 }
@@ -84,8 +84,8 @@ size_t calcHashMask(size_t numEntries)
 
     for (i = 0; i < leadingZeros; i++)
     {
-	result <<= 1;
-	result |= 1;
+        result <<= 1;
+        result |= 1;
     }
     return result;
 }
@@ -96,7 +96,7 @@ static size_t normalizeNumEntries(size_t numEntries)
 
     if (numEntries < 1)
     {
-	return 0;
+        return 0;
     }
 
     // numEntries should be a mult of NUM_HASH_LOCKS
@@ -109,7 +109,7 @@ static size_t normalizeNumEntries(size_t numEntries)
     // zero.
     while ((numEntries & (numEntries - 1)))
     {
-	numEntries &= (numEntries - 1);
+        numEntries &= (numEntries - 1);
     }
 #endif
 
@@ -162,9 +162,9 @@ size_t TransTableDefaultSize(void)
 static size_t sanitizeSize(int64 size)
 {
     return
-	size == TRANSTABLE_DEFAULT_SIZE ? TransTableDefaultSize() :
-	size < -1 ? 0 : // bad parameter
-	MIN((uint64) normalizeSize(size), TransTableMaxSize());
+        size == TRANSTABLE_DEFAULT_SIZE ? TransTableDefaultSize() :
+        size < -1 ? 0 : // bad parameter
+        MIN((uint64) normalizeSize(size), TransTableMaxSize());
 }
 
 static void sanityCheck(void)
@@ -183,7 +183,7 @@ static void resetEntries(void)
 
     for (i = 0; i < gHash.numEntries; i++)
     {
-	gHash.hash[i] = newHashEntry; // struct assign
+        gHash.hash[i] = newHashEntry; // struct assign
     }
 }
 
@@ -198,32 +198,32 @@ void TransTableInit(int64 size)
 
     if (!gHash.locksInitialized)
     {
-	for (i = 0; i < NUM_HASH_LOCKS; i++)
-	{
-	    SpinlockInit(&gHash.locks[i]);
-	}
-	gHash.locksInitialized = true;
+        for (i = 0; i < NUM_HASH_LOCKS; i++)
+        {
+            SpinlockInit(&gHash.locks[i]);
+        }
+        gHash.locksInitialized = true;
     }
 
     if ((uint64) size != gHash.size)
     {
-	newHash = (HashPositionT *) realloc(gHash.hash, size);
-	if (size == 0 || newHash != NULL)
-	{
-	    gHash.size = size;
-	    gHash.nextSize = size;
-	    gHash.hash = newHash;
-	    gHash.numEntries = size / sizeof(HashPositionT);
-	    gHash.numLeadingZeros = calcNumLeadingZeros(gHash.numEntries);
-	    gHash.hashMask = calcHashMask(gHash.numEntries);
-	    gHash.shiftedNumEntries = gHash.numEntries >> gHash.numLeadingZeros;
-	    gHash.shiftCount = 32 - gHash.numLeadingZeros;
-	}
-	else
-	{
-	    LOG_EMERG("Failed to init hash (size %" PRId64 ")\n", size);
-	    exit(0);
-	}
+        newHash = (HashPositionT *) realloc(gHash.hash, size);
+        if (size == 0 || newHash != NULL)
+        {
+            gHash.size = size;
+            gHash.nextSize = size;
+            gHash.hash = newHash;
+            gHash.numEntries = size / sizeof(HashPositionT);
+            gHash.numLeadingZeros = calcNumLeadingZeros(gHash.numEntries);
+            gHash.hashMask = calcHashMask(gHash.numEntries);
+            gHash.shiftedNumEntries = gHash.numEntries >> gHash.numLeadingZeros;
+            gHash.shiftCount = 32 - gHash.numLeadingZeros;
+        }
+        else
+        {
+            LOG_EMERG("Failed to init hash (size %" PRId64 ")\n", size);
+            exit(0);
+        }
     }
 
     resetEntries();
@@ -242,8 +242,8 @@ void TransTableReset(void)
 {
     if (!gHash.locksInitialized || gHash.nextSize != gHash.size)
     {
-	TransTableInit(gHash.nextSize);
-	return;
+        TransTableInit(gHash.nextSize);
+        return;
     }
 
     resetEntries();
@@ -265,25 +265,25 @@ size_t TransTableSize(void)
 #define QUIESCING (searchDepth < 0)
 
 static inline bool entryMatches(HashPositionT *hp, uint64 zobrist,
-				int alpha, int beta, int searchDepth)
+                                int alpha, int beta, int searchDepth)
 {
     return
-	hp->zobrist == zobrist &&
-	// Should not need since we blank the zobrist at reset time.
-	// hp->depth != HASH_NOENTRY &&
+        hp->zobrist == zobrist &&
+        // Should not need since we blank the zobrist at reset time.
+        // hp->depth != HASH_NOENTRY &&
 
-	// know eval exactly?
-	(hp->eval.highBound == hp->eval.lowBound ||
-	 // know it's good enough?
-	 hp->eval.lowBound >= beta ||
-	 // know it's bad enough?
-	 hp->eval.highBound <= alpha) &&
+        // know eval exactly?
+        (hp->eval.highBound == hp->eval.lowBound ||
+         // know it's good enough?
+         hp->eval.lowBound >= beta ||
+         // know it's bad enough?
+         hp->eval.highBound <= alpha) &&
 
-	// is the hashed search deep enough?
-	(QUIESCING || searchDepth <= hp->depth ||
-	 // For detected win/loss, depth does not matter.
-	 hp->eval.highBound <= EVAL_LOSS_THRESHOLD ||
-	 hp->eval.lowBound >= EVAL_WIN_THRESHOLD);
+        // is the hashed search deep enough?
+        (QUIESCING || searchDepth <= hp->depth ||
+         // For detected win/loss, depth does not matter.
+         hp->eval.highBound <= EVAL_LOSS_THRESHOLD ||
+         hp->eval.lowBound >= EVAL_WIN_THRESHOLD);
 }
 
 static inline size_t calcEntry(uint64 zobrist)
@@ -315,16 +315,16 @@ static inline size_t calcEntry(uint64 zobrist)
     // bits.
 #if 1
     return
-	(((zobrist & 0xffffffffUL) * gHash.shiftedNumEntries) >>
-	 gHash.shiftCount) ^
-	((zobrist >> 32) & gHash.hashMask);
+        (((zobrist & 0xffffffffUL) * gHash.shiftedNumEntries) >>
+         gHash.shiftCount) ^
+        ((zobrist >> 32) & gHash.hashMask);
 #endif
 }
 
 // Fills in 'hashEval' and 'hashMove' iff we had a successful hit.
 // Assumes TransTableQuickHitTest() returned true.
 bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
-		   int searchDepth, uint16 basePly, int alpha, int beta)
+                   int searchDepth, uint16 basePly, int alpha, int beta)
 {
     size_t entry = calcEntry(zobrist);
     HashPositionT *vHp = &gHash.hash[entry];
@@ -340,8 +340,8 @@ bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
     SpinlockLock(lock);
     if (!entryMatches(vHp, zobrist, alpha, beta, searchDepth))
     {
-	SpinlockUnlock(lock);
-	return false;
+        SpinlockUnlock(lock);
+        return false;
     }
 
     // re-record items in the hit hash position to "reinforce" it
@@ -349,8 +349,8 @@ bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
     // 1) base ply for this move.
     if (vHp->basePly != basePly)
     {
-	gStats.hashWroteNew++;
-	vHp->basePly = basePly;
+        gStats.hashWroteNew++;
+        vHp->basePly = basePly;
     }
     // 2) search depth (in case of checkmate, it might go up.  Not
     //    proven to be better.)
@@ -362,11 +362,11 @@ bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
 
     SpinlockUnlock(lock);
     LOG_DEBUG("hashHit alhbdmz: %d %s %d %d %s 0x%" PRIx64 "\n",
-	      alpha,
-	      PositionEvalToLogString(peStr, hashEval),
-	      beta, hashDepth,
-	      MoveToString(tmpStr, *hashMove, &gMoveStyleTT, NULL),
-	      zobrist);
+              alpha,
+              PositionEvalToLogString(peStr, hashEval),
+              beta, hashDepth,
+              MoveToString(tmpStr, *hashMove, &gMoveStyleTT, NULL),
+              zobrist);
 
     return true;
 }
@@ -375,7 +375,7 @@ void TransTablePrefetch(uint64 zobrist)
 {
     if (gHash.size)
     {
-	__builtin_prefetch(&gHash.hash[calcEntry(zobrist)]);
+        __builtin_prefetch(&gHash.hash[calcEntry(zobrist)]);
     }
 }
 
@@ -384,11 +384,11 @@ void TransTablePrefetch(uint64 zobrist)
 bool TransTableQuickHitTest(uint64 zobrist)
 {
     return gHash.size &&
-	gHash.hash[calcEntry(zobrist)].zobrist == zobrist;
+        gHash.hash[calcEntry(zobrist)].zobrist == zobrist;
 }
 
 void TransTableConditionalUpdate(PositionEvalT eval, MoveT move, uint64 zobrist,
-				 int searchDepth, uint16 basePly)
+                                 int searchDepth, uint16 basePly)
 {
     size_t entry = calcEntry(zobrist);
     HashPositionT *vHp = &gHash.hash[entry];
@@ -400,46 +400,46 @@ void TransTableConditionalUpdate(PositionEvalT eval, MoveT move, uint64 zobrist,
     // Do we want to update the table?
     // (HASH_NOENTRY should always trigger here)
     if (searchDepth > vHp->depth ||
-	// Replacing entries that came before this search is aggressive,
-	// but it works better than a 'numPieces' comparison.  We use "!="
-	// instead of "<" because we may move backwards in games as well
-	// (undoing moves, or setting positions etc.)
-	vHp->basePly != basePly ||
-	// Otherwise, use the position that gives us as much info as
-	// possible, and after that the most recently used (ie this move).
-	(searchDepth == vHp->depth &&
-	 (eval.highBound - eval.lowBound) <=
-	 (vHp->eval.highBound - vHp->eval.lowBound)))
+        // Replacing entries that came before this search is aggressive,
+        // but it works better than a 'numPieces' comparison.  We use "!="
+        // instead of "<" because we may move backwards in games as well
+        // (undoing moves, or setting positions etc.)
+        vHp->basePly != basePly ||
+        // Otherwise, use the position that gives us as much info as
+        // possible, and after that the most recently used (ie this move).
+        (searchDepth == vHp->depth &&
+         (eval.highBound - eval.lowBound) <=
+         (vHp->eval.highBound - vHp->eval.lowBound)))
     {
-	// We only lock the hashtable once we know we want to do an update.
-	// This lets us do slightly lazier locking.
+        // We only lock the hashtable once we know we want to do an update.
+        // This lets us do slightly lazier locking.
 
-	// Every single element of this structure (except 'pad') should
-	// always be updated, since:
-	// -- it is not blanked for a newgame
-	// -- the hash entry might have been overwritten in the meantime
-	// (by another thread, or at a different ply).
-	SpinlockT *lock = &gHash.locks[entry & (NUM_HASH_LOCKS - 1)];
-	SpinlockLock(lock);
+        // Every single element of this structure (except 'pad') should
+        // always be updated, since:
+        // -- it is not blanked for a newgame
+        // -- the hash entry might have been overwritten in the meantime
+        // (by another thread, or at a different ply).
+        SpinlockT *lock = &gHash.locks[entry & (NUM_HASH_LOCKS - 1)];
+        SpinlockLock(lock);
 
-	vHp->zobrist = zobrist;
-	vHp->eval = eval;
-	vHp->move = move; // may be gMoveNone
+        vHp->zobrist = zobrist;
+        vHp->eval = eval;
+        vHp->move = move; // may be gMoveNone
 
-	if (((volatile HashPositionT *)vHp)->basePly != basePly)
-	{
-	    gStats.hashWroteNew++;
-	    vHp->basePly = basePly;
-	}
+        if (((volatile HashPositionT *)vHp)->basePly != basePly)
+        {
+            gStats.hashWroteNew++;
+            vHp->basePly = basePly;
+        }
 
-	vHp->depth = searchDepth;
+        vHp->depth = searchDepth;
 
-	SpinlockUnlock(lock);
+        SpinlockUnlock(lock);
 
-	LOG_DEBUG("hashupdate lhdpmz: %s %d %d %s 0x%" PRIx64 "\n",
-		  PositionEvalToLogString(peStr, &eval),
-		  searchDepth, basePly,
-		  MoveToString(tmpStr, move, &gMoveStyleTT, NULL),
-		  zobrist);
+        LOG_DEBUG("hashupdate lhdpmz: %s %d %d %s 0x%" PRIx64 "\n",
+                  PositionEvalToLogString(peStr, &eval),
+                  searchDepth, basePly,
+                  MoveToString(tmpStr, move, &gMoveStyleTT, NULL),
+                  zobrist);
     }
 }

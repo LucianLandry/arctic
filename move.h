@@ -98,16 +98,16 @@ extern const MoveT gMoveNone;
 
 // Syntactic sugar.
 void MoveStyleSet(MoveStyleT *style,
-		  MoveNotationT notation,
-		  MoveCastleStyleT castleStyle,
-		  bool showCheck);
+                  MoveNotationT notation,
+                  MoveCastleStyleT castleStyle,
+                  bool showCheck);
 
 char *MoveToString(char *result,
-		   MoveT move,
-		   const MoveStyleT *style,
-		   // Used for disambiguation and legality checks, when !NULL.
-		   // Not mangled, but may be altered (to test checkmate).
-		   struct BoardS *board);
+                   MoveT move,
+                   const MoveStyleT *style,
+                   // Used for disambiguation and legality checks, when !NULL.
+                   // Not mangled, but may be altered (to test checkmate).
+                   struct BoardS *board);
 
 static inline bool MoveIsCastle(MoveT move)
 {

@@ -30,10 +30,10 @@ extern "C" {
 
 typedef struct {
     int lgh;                            // Length of list.  Should be 1st,
-					// for alignment purposes.
+                                        // for alignment purposes.
     int insrt;                          // Spot to insert 'preferred' move.
     int ekcoord;                        // Scratchpad for mlistGenerate(), for
-					// performance reasons.
+                                        // performance reasons.
     int capOnly;                        // Used for quiescing.
     MoveT moves[MLIST_MAX_MOVES];
 } MoveListT;

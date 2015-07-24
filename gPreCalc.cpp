@@ -84,7 +84,7 @@ static uint8 gAllNormalMoves[512 /* yes, this is the exact size needed */] =  {
     13, 21, 29, 37, 45, 53, 61, FLAG,
     14, 22, 30, 38, 46, 54, 62, FLAG,
     15, 23, 31, 39, 47, 55, 63, FLAG,
-	
+        
     /* 2 (northeast) direction */
     FLAG,
     15, FLAG,
@@ -101,7 +101,7 @@ static uint8 gAllNormalMoves[512 /* yes, this is the exact size needed */] =  {
     49, 58, FLAG,
     57, FLAG,
     FLAG,
-	
+        
     /* 3 (east) direction */
     1,  2,  3,  4,  5,  6,  7, FLAG,
     9, 10, 11, 12, 13, 14, 15, FLAG,
@@ -111,7 +111,7 @@ static uint8 gAllNormalMoves[512 /* yes, this is the exact size needed */] =  {
     41, 42, 43, 44, 45, 46, 47, FLAG,
     49, 50, 51, 52, 53, 54, 55, FLAG,
     57, 58, 59, 60, 61, 62, 63, FLAG,
-	
+        
     /* 4 (southeast) direction */
     FLAG,
     55, FLAG,
@@ -192,25 +192,25 @@ static int calcPawnMoves(uint8 *idx, int coord, int turn)
     /* degenerate case(s). */
     if (Rank(coord) == 0 || Rank(coord) == 7)
     {
-	for (i = 0; i < 4; i++)
-	{
-	    *(idx++) = FLAG;
-	}
-	return 4;
+        for (i = 0; i < 4; i++)
+        {
+            *(idx++) = FLAG;
+        }
+        return 4;
     }
 #endif
 
     /* calculate capture squares and e2e3 move. */
     for (i = 0; i < 3; i++)
     {
-	*(idx++) = *(gPreCalc.moves[toind[turn] [i]] [coord]);
+        *(idx++) = *(gPreCalc.moves[toind[turn] [i]] [coord]);
     }
     /* calculate e2e4 moves.  Even the ones that "do not exist" since we use
        this in attacked(). */
     *idx =
-	(coord < 56 /* 16 */ && !turn) || (coord > 15 /* 47 */ && turn) ?
-	*(gPreCalc.moves[toind[turn] [2]] [coord] + 1) :
-	FLAG;
+        (coord < 56 /* 16 */ && !turn) || (coord > 15 /* 47 */ && turn) ?
+        *(gPreCalc.moves[toind[turn] [2]] [coord] + 1) :
+        FLAG;
     return 4;
 }
 
@@ -219,10 +219,10 @@ static int whiteGoodNightMove(uint8 *el1, uint8 *el2)
 {
     int rankDiff = Rank(*el1) - Rank(*el2);
     return rankDiff != 0 ? -rankDiff : /* higher rank comes first for White */
-	/* .. But if both moves are on the same rank, we want the one closest
-	   to center. */
-	abs((3 + 4) - (int) (File(*el1) * 2)) -
-	abs((3 + 4) - (int) (File(*el2) * 2));
+        /* .. But if both moves are on the same rank, we want the one closest
+           to center. */
+        abs((3 + 4) - (int) (File(*el1) * 2)) -
+        abs((3 + 4) - (int) (File(*el2) * 2));
 }
 
 
@@ -230,10 +230,10 @@ static int blackGoodNightMove(uint8 *el1, uint8 *el2)
 {
     int rankDiff = Rank(*el1) - Rank(*el2);
     return rankDiff != 0 ? rankDiff : /* lower rank comes first for Black */
-	/* .. But if both moves are on the same rank, we want the one closest
-	   to center. */
-	abs((3 + 4) - (int) (File(*el1) * 2)) -
-	abs((3 + 4) - (int) (File(*el2) * 2));
+        /* .. But if both moves are on the same rank, we want the one closest
+           to center. */
+        abs((3 + 4) - (int) (File(*el1) * 2)) -
+        abs((3 + 4) - (int) (File(*el2) * 2));
 }
 
 
@@ -248,31 +248,31 @@ static int calcNightMoves(uint8 *moveArray, int coord, int turn)
     uint8 *ptr = myMoves;
 
     if (Rank(coord) < 6 && File(coord) > 0)
-	*(ptr++) = coord + 15; /* b1-a3 type moves */
+        *(ptr++) = coord + 15; /* b1-a3 type moves */
     if (Rank(coord) < 6 && File(coord) < 7)
-	*(ptr++) = coord + 17; /* a1-b3 type moves */
+        *(ptr++) = coord + 17; /* a1-b3 type moves */
     if (Rank(coord) < 7 && File(coord) > 1)
-	*(ptr++) = coord + 6;  /* c1-a2 type moves */
+        *(ptr++) = coord + 6;  /* c1-a2 type moves */
     if (Rank(coord) < 7 && File(coord) < 6)
-	*(ptr++) = coord + 10; /* a1-c2 type moves */
+        *(ptr++) = coord + 10; /* a1-c2 type moves */
     if (Rank(coord) > 0 && File(coord) > 1)
-	*(ptr++) = coord - 10; /* c2-a1 type moves */
+        *(ptr++) = coord - 10; /* c2-a1 type moves */
     if (Rank(coord) > 0 && File(coord) < 6)
-	*(ptr++) = coord - 6;  /* a2-c1 type moves */
+        *(ptr++) = coord - 6;  /* a2-c1 type moves */
     if (Rank(coord) > 1 && File(coord) > 0)
-	*(ptr++) = coord - 17; /* b3-a1 type moves */
+        *(ptr++) = coord - 17; /* b3-a1 type moves */
     if (Rank(coord) > 1 && File(coord) < 7)
-	*(ptr++) = coord - 15; /* a3-b1 type moves */
+        *(ptr++) = coord - 15; /* a3-b1 type moves */
 
     /* sort moves according to what will probably be best. */
     qsort(myMoves, ptr - myMoves, sizeof(uint8),
-	  (QSORTFUNC) (turn ? blackGoodNightMove : whiteGoodNightMove));
+          (QSORTFUNC) (turn ? blackGoodNightMove : whiteGoodNightMove));
 
     *(ptr++) = FLAG; /* terminate 'myMoves'. */
 
     /* ... and copy it over. */
     for (ptr = myMoves; (*(moveArray++) = *(ptr++)) != FLAG; )
-	; /* no-op */
+        ; /* no-op */
 
     return ptr - myMoves;
 }
@@ -284,7 +284,7 @@ static int dirf(int from, int to)
     int rdiff = Rank(to) - Rank(from);
     int fdiff = File(to) - File(from);
     if (from == to)
-	return DIRFLAG;                         /* This is undefined. */
+        return DIRFLAG;                         /* This is undefined. */
     if (!rdiff)
         res = 3;                                /* - move */
     else if (!fdiff)
@@ -303,7 +303,7 @@ static int dirf(int from, int to)
 static int distancef(uint8 coord1, uint8 coord2)
 {
     return abs(Rank(coord1) - Rank(coord2)) +
-	abs(File(coord1) - File(coord2));
+        abs(File(coord1) - File(coord2));
 }
 
 
@@ -318,41 +318,41 @@ static int centerDistancef(uint8 coord1)
 
 
 static void rowinit(int d, int start, int finc, int sinc, uint8 *moves[] [NUM_SQUARES],
-		    uint8 *ptr)
+                    uint8 *ptr)
 {
     int temp, i;
     int row = 0;
     for (i = temp = start; row < 8;)
     {
-	moves[d] [i] = ptr++;
-	if (*moves[d] [i] == FLAG)
-	{
-	    i = (temp += sinc);
-	    row++;
-	}
-	else i += finc;
+        moves[d] [i] = ptr++;
+        if (*moves[d] [i] == FLAG)
+        {
+            i = (temp += sinc);
+            row++;
+        }
+        else i += finc;
     }
 }
 
 
 static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [NUM_SQUARES],
-		     uint8 *ptr)
+                     uint8 *ptr)
 {
     int temp, i, j;
     for (i = start; abs(i - start) < 8; i += finc)
-	for (j = i; ; j += sinc - finc)
-	{
-	    moves[d] [j] = ptr++;
-	    if (*moves[d] [j] == FLAG)
-		break;
-	}
+        for (j = i; ; j += sinc - finc)
+        {
+            moves[d] [j] = ptr++;
+            if (*moves[d] [j] == FLAG)
+                break;
+        }
     for (temp = (i = start + sinc + finc * 7); abs(i - temp) < 49; i += sinc)
-	for (j = i; ; j += sinc - finc)
-	{
-	    moves[d] [j] = ptr++;
-	    if (*moves[d] [j] == FLAG)
-		break;
-	}
+        for (j = i; ; j += sinc - finc)
+        {
+            moves[d] [j] = ptr++;
+            if (*moves[d] [j] == FLAG)
+                break;
+        }
 }
 
 static void castleMaskInit(void)
@@ -362,22 +362,22 @@ static void castleMaskInit(void)
 
     for (i = 0; i < NUM_SQUARES; i++)
     {
-	gPreCalc.castleMask[i] = ~0x0;
+        gPreCalc.castleMask[i] = ~0x0;
     }
     for (i = 0; i < NUM_PLAYERS; i++)
     {
-	castleStart = &gVariant->castling[i].start;
-	gPreCalc.castleMask[castleStart->king] &= ~(CASTLEBOTH << i);
-	gPreCalc.castleMask[castleStart->rookOO] &= ~(CASTLEOO << i);
-	gPreCalc.castleMask[castleStart->rookOOO] &= ~(CASTLEOOO << i);
+        castleStart = &gVariant->castling[i].start;
+        gPreCalc.castleMask[castleStart->king] &= ~(CASTLEBOTH << i);
+        gPreCalc.castleMask[castleStart->rookOO] &= ~(CASTLEOO << i);
+        gPreCalc.castleMask[castleStart->rookOOO] &= ~(CASTLEOOO << i);
     }
 }
 
 uint64 random64(void)
 {
     return
-	// Even on a 64-bit platform, RAND_MAX may only be 32 bits.
-	(((uint64) random()) << 32) ^ ((uint64) random());
+        // Even on a 64-bit platform, RAND_MAX may only be 32 bits.
+        (((uint64) random()) << 32) ^ ((uint64) random());
 }
 
 
@@ -409,11 +409,11 @@ void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
     ptr = gAllNightMoves;
     for (i = 0; i < NUM_PLAYERS; i++)
     {
-	for (j = 0; j < NUM_SQUARES; j++)
-	{
-	    gPreCalc.moves[8 + i] [j] = ptr;
-	    ptr += calcNightMoves(ptr, j, i);
-	}
+        for (j = 0; j < NUM_SQUARES; j++)
+        {
+            gPreCalc.moves[8 + i] [j] = ptr;
+            ptr += calcNightMoves(ptr, j, i);
+        }
     }
     assert(ptr = gAllNightMoves + sizeof(gAllNightMoves));
 
@@ -421,11 +421,11 @@ void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
     ptr = gAllPawnMoves;
     for (i = 0; i < NUM_PLAYERS; i++)
     {
-	for (j = 0; j < NUM_SQUARES; j++)
-	{
-	    gPreCalc.moves[10 + i] [j] = ptr;
-	    ptr += calcPawnMoves(ptr, j, i);
-	}
+        for (j = 0; j < NUM_SQUARES; j++)
+        {
+            gPreCalc.moves[10 + i] [j] = ptr;
+            ptr += calcPawnMoves(ptr, j, i);
+        }
     }
     assert(ptr = gAllPawnMoves + sizeof(gAllPawnMoves));
 
@@ -433,11 +433,11 @@ void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
     for (i = 0; i < NUM_SQUARES; i++)
     {
         for (j = 0; j < NUM_SQUARES; j++)
-	{
+        {
             gPreCalc.dir[i] [j] = dirf(i, j);
-	    gPreCalc.distance[i] [j] = distancef(i, j);
-	}
-	gPreCalc.centerDistance[i] = centerDistancef(i);
+            gPreCalc.distance[i] [j] = distancef(i, j);
+        }
+        gPreCalc.centerDistance[i] = centerDistancef(i);
     }
 
     Piece::Init();
@@ -453,30 +453,30 @@ void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
     // initialize zobrist hashing.
     for (i = 0; i < NUM_SQUARES; i++)
     {
-	for (j = 0; j < kMaxPieces; j++)
-	{
-	    gPreCalc.zobrist.coord[j] [i] =
-		// Using 0 for empty squares simplifies zobrist calculation
-		// when making moves later (do not have to XOR in empty squares,
-		// but it is not an error to do so).
-		(j >> NUM_PLAYERS_BITS) ? random64() : 0;
-	}
+        for (j = 0; j < kMaxPieces; j++)
+        {
+            gPreCalc.zobrist.coord[j] [i] =
+                // Using 0 for empty squares simplifies zobrist calculation
+                // when making moves later (do not have to XOR in empty squares,
+                // but it is not an error to do so).
+                (j >> NUM_PLAYERS_BITS) ? random64() : 0;
+        }
 
-	gPreCalc.zobrist.ebyte[i] = random64();
-	
-	if (i < 16)
-	{
-	    // We also use 0 for the cbyte where no one can castle.
-	    gPreCalc.zobrist.cbyte[i] = (i > 0) ? random64() : 0;
-	}
+        gPreCalc.zobrist.ebyte[i] = random64();
+        
+        if (i < 16)
+        {
+            // We also use 0 for the cbyte where no one can castle.
+            gPreCalc.zobrist.cbyte[i] = (i > 0) ? random64() : 0;
+        }
     }
     gPreCalc.zobrist.turn = random64();
 
     gPreCalc.userSpecifiedHashSize = userSpecifiedHashSize;
     // initialize number of (known) processors.
     gPreCalc.numProcs =
-	numCpuThreads != -1 ? numCpuThreads : // User override
-	SystemTotalProcessors();
+        numCpuThreads != -1 ? numCpuThreads : // User override
+        SystemTotalProcessors();
 
     gPreCalc.normalStartingPieces = gNormalStartingPieces;
 

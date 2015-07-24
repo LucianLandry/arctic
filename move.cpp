@@ -38,7 +38,7 @@ static uint8 moveCastleToTurn(MoveT move)
 static bool moveIsSane(MoveT move)
 {
     return
-	move.src < NUM_SQUARES &&
+        move.src < NUM_SQUARES &&
         move.dst < NUM_SQUARES &&
 
         int(move.promote) >= 0 &&
@@ -46,38 +46,38 @@ static bool moveIsSane(MoveT move)
         // kMaxPieceTypes; maybe I should just add that.
         Piece(NUM_PLAYERS - 1, move.promote).ToIndex() <= kMaxPieces &&
 
-	(move.chk == FLAG || move.chk == DOUBLE_CHECK ||
-	 move.chk < NUM_SQUARES) &&
+        (move.chk == FLAG || move.chk == DOUBLE_CHECK ||
+         move.chk < NUM_SQUARES) &&
 
-	// Do not allow a "non-"move (unless we are castling)
-	(move.src != move.dst ||
-	 (moveCastleToTurn(move) < NUM_PLAYERS &&
-	  (move.src >> NUM_PLAYERS_BITS) <= 1 &&
-	  move.promote == PieceType::Empty));
+        // Do not allow a "non-"move (unless we are castling)
+        (move.src != move.dst ||
+         (moveCastleToTurn(move) < NUM_PLAYERS &&
+          (move.src >> NUM_PLAYERS_BITS) <= 1 &&
+          move.promote == PieceType::Empty));
 }
 
 // Safely print a move that seems to make no sense.
 static char *moveToStringInsane(char *result, MoveT move)
 {
     sprintf(result, "(INS! %x.%x.%x.%x)",
-	    move.src, move.dst, int(move.promote), move.chk);
+            move.src, move.dst, int(move.promote), move.chk);
     return result;
 }
 
 static char *moveToStringMnDebug(char *result, MoveT move)
 {
     sprintf(result, "%c%c%c%c.%d.%c%c",
-	    AsciiFile(move.src),
-	    AsciiRank(move.src),
-	    AsciiFile(move.dst),
-	    AsciiRank(move.dst),
-	    int(move.promote),
-	    (move.chk == FLAG ? 'F' :
-	     move.chk == DOUBLE_CHECK ? 'D' :
-	     AsciiFile(move.chk)),
-	    (move.chk == FLAG ? 'F' :
-	     move.chk == DOUBLE_CHECK ? 'D' :
-	     AsciiRank(move.chk)));
+            AsciiFile(move.src),
+            AsciiRank(move.src),
+            AsciiFile(move.dst),
+            AsciiRank(move.dst),
+            int(move.promote),
+            (move.chk == FLAG ? 'F' :
+             move.chk == DOUBLE_CHECK ? 'D' :
+             AsciiFile(move.chk)),
+            (move.chk == FLAG ? 'F' :
+             move.chk == DOUBLE_CHECK ? 'D' :
+             AsciiRank(move.chk)));
     return result;
 }
 
@@ -86,15 +86,15 @@ static char *moveToStringMnDebug(char *result, MoveT move)
 static int moveToStringMnCAN(char *result, MoveT move)
 {
     char promoString[2] =
-	{(move.promote != PieceType::Empty && move.promote != PieceType::Pawn ?
-	  (char) tolower(nativeToAscii(Piece(0, move.promote))) :
-	  '\0'), '\0'};
+        {(move.promote != PieceType::Empty && move.promote != PieceType::Pawn ?
+          (char) tolower(nativeToAscii(Piece(0, move.promote))) :
+          '\0'), '\0'};
     return sprintf(result, "%c%c%c%c%s",
-		   AsciiFile(move.src),
-		   AsciiRank(move.src),
-		   AsciiFile(move.dst),
-		   AsciiRank(move.dst),
-		   promoString);
+                   AsciiFile(move.src),
+                   AsciiRank(move.src),
+                   AsciiFile(move.dst),
+                   AsciiRank(move.dst),
+                   promoString);
 }
 
 static bool canUseK2Notation(CastleStartCoordsT *start, cell_t dst)
@@ -106,20 +106,20 @@ static bool canUseK2Notation(CastleStartCoordsT *start, cell_t dst)
     king = start->king;
 
     if (rookOO != rookOOO &&
-	((rookOO <= king && rookOOO <= king) ||
-	 (rookOO >= king && rookOOO >= king)))
+        ((rookOO <= king && rookOOO <= king) ||
+         (rookOO >= king && rookOOO >= king)))
     {
-	// Cannot use king-moves-2 notation when both rooks are different,
-	// but on the same side of the king (although this does not occur in
-	// any variations I am aware of); because the move would be ambiguous.
-	return false;
+        // Cannot use king-moves-2 notation when both rooks are different,
+        // but on the same side of the king (although this does not occur in
+        // any variations I am aware of); because the move would be ambiguous.
+        return false;
     }
 
     // Can only use king-moves-2 notation if the destination is on the same
     // rank.
     return
-	Rank(king) == Rank(dst) &&
-	abs(dst - king) == 2;
+        Rank(king) == Rank(dst) &&
+        abs(dst - king) == 2;
 }
 
 // Attempt to transmute our normal castle style to a king-moves-2 style
@@ -137,7 +137,7 @@ static bool moveMangleCsK2(MoveT *move)
 
     if (!canUseK2Notation(start, dst))
     {
-	return false;
+        return false;
     }
 
     move->src = king;
@@ -183,46 +183,46 @@ static int moveToStringMnSAN(char *result, MoveT move, BoardT *board)
     MoveListT mvlist;
 
     if (!myPiece.IsPawn())
-	// Print piece (type) to move.
-	sanStr += sprintf(sanStr, "%c", nativeToBoardAscii(myPiece));
+        // Print piece (type) to move.
+        sanStr += sprintf(sanStr, "%c", nativeToBoardAscii(myPiece));
     else if (isCapture)
-	// Need to spew the file we are capturing from.
-	sanStr += sprintf(sanStr, "%c", AsciiFile(src));
+        // Need to spew the file we are capturing from.
+        sanStr += sprintf(sanStr, "%c", AsciiFile(src));
 
     mlistGenerate(&mvlist, board, 0);
 
     // Is there ambiguity about which piece will be moved?
     for (i = 0; i < mvlist.lgh; i++)
     {
-	if (!myPiece.IsPawn() && // already taken care of, above
-	    mvlist.moves[i].src != src &&
-	    mvlist.moves[i].dst == dst &&
-	    coord[mvlist.moves[i].src] == myPiece)
-	{
-	    // Yes.  Note: both conditions could easily be true.
-	    if (sameFile)
-		sameFile = File(mvlist.moves[i].src) == File(src);
-	    if (sameRank)
-		sameRank = Rank(mvlist.moves[i].src) == Rank(src);
-	}
+        if (!myPiece.IsPawn() && // already taken care of, above
+            mvlist.moves[i].src != src &&
+            mvlist.moves[i].dst == dst &&
+            coord[mvlist.moves[i].src] == myPiece)
+        {
+            // Yes.  Note: both conditions could easily be true.
+            if (sameFile)
+                sameFile = File(mvlist.moves[i].src) == File(src);
+            if (sameRank)
+                sameRank = Rank(mvlist.moves[i].src) == Rank(src);
+        }
     }
 
     // ... disambiguate the src piece, if necessary.
     if (!sameFile)
-	sanStr += sprintf(sanStr, "%c", AsciiFile(src));
+        sanStr += sprintf(sanStr, "%c", AsciiFile(src));
     if (!sameRank)
-	sanStr += sprintf(sanStr, "%c", AsciiRank(src));
+        sanStr += sprintf(sanStr, "%c", AsciiRank(src));
 
     if (isCapture)
-	sanStr += sprintf(sanStr, "x");
+        sanStr += sprintf(sanStr, "x");
 
     // spew the destination coord.
     sanStr += sprintf(sanStr, "%c%c", AsciiFile(dst), AsciiRank(dst));
 
     if (isPromote)
     {
-	// spew piece type to promote to.
-	sanStr += sprintf(sanStr, "%c",
+        // spew piece type to promote to.
+        sanStr += sprintf(sanStr, "%c",
                           nativeToBoardAscii(Piece(0, move.promote)));
     }
         
@@ -238,11 +238,11 @@ static bool moveIsLegal(MoveT move, BoardT *board)
 }
 
 char *MoveToString(char *result,
-		   MoveT move,
-		   const MoveStyleT *style,
-		   // Used for disambiguation and legality checks, when !NULL.
-		   // Not mangled, but may be altered (to test checkmate).
-		   struct BoardS *board)
+                   MoveT move,
+                   const MoveStyleT *style,
+                   // Used for disambiguation and legality checks, when !NULL.
+                   // Not mangled, but may be altered (to test checkmate).
+                   struct BoardS *board)
 {
     // These shorthand copies may be modified.
     MoveNotationT notation = style->notation;
@@ -252,75 +252,75 @@ char *MoveToString(char *result,
 
     if (!moveIsSane(move))
     {
-	// With our hashing scheme, we may end up with moves that are not
-	//  legal, but we should never end up with moves that are not sane
-	//  (except possibly gMoveNone).
-	// We still may want to print such a move before we assert (or
-	//  whatever).
-	return moveToStringInsane(result, move);
+        // With our hashing scheme, we may end up with moves that are not
+        //  legal, but we should never end up with moves that are not sane
+        //  (except possibly gMoveNone).
+        // We still may want to print such a move before we assert (or
+        //  whatever).
+        return moveToStringInsane(result, move);
     }
     if (board != NULL && !moveIsLegal(move, board))
     {
-	result[0] = '\0';
-	return result;
+        result[0] = '\0';
+        return result;
     }
     if (notation == mnDebug)
     {
-	return moveToStringMnDebug(result, move);
+        return moveToStringMnDebug(result, move);
     }
     if (MoveIsCastle(move))
     {
-	// Transmute the move if we need to (and can); otherwise fall back to
-	//  our default.
-	if (castleStyle == csKxR)
-	{
-	    moveMangleCsKxR(&move);
-	}
-	else if (castleStyle == csK2 && !moveMangleCsK2(&move))
-	{
-	    castleStyle = csOO;
-	}
+        // Transmute the move if we need to (and can); otherwise fall back to
+        //  our default.
+        if (castleStyle == csKxR)
+        {
+            moveMangleCsKxR(&move);
+        }
+        else if (castleStyle == csK2 && !moveMangleCsK2(&move))
+        {
+            castleStyle = csOO;
+        }
     }
     if (MoveIsCastle(move))
     {
-	if (castleStyle == csOO)
-	{
-	    sprintf(result, MoveIsCastleOO(move) ? "O-O" : "O-O-O");
-	    return result;
-	}
-	if (castleStyle == csFIDE)
-	{
-	    sprintf(result, MoveIsCastleOO(move) ? "0-0" : "0-0-0");
-	    return result;
-	}
+        if (castleStyle == csOO)
+        {
+            sprintf(result, MoveIsCastleOO(move) ? "O-O" : "O-O-O");
+            return result;
+        }
+        if (castleStyle == csFIDE)
+        {
+            sprintf(result, MoveIsCastleOO(move) ? "0-0" : "0-0-0");
+            return result;
+        }
     }
     if (notation == mnSAN && board == NULL)
     {
-	// Cannot use SAN with no board context.
-	notation = mnCAN;
+        // Cannot use SAN with no board context.
+        notation = mnCAN;
     }
 
     moveStr +=
-	notation == mnSAN ? moveToStringMnSAN(result, move, board) :
-	// Assume mnCAN at this point.
-	moveToStringMnCAN(result, move);
+        notation == mnSAN ? moveToStringMnSAN(result, move, board) :
+        // Assume mnCAN at this point.
+        moveToStringMnCAN(result, move);
 
     if (showCheck && move.chk != FLAG)
     {
-	bool isMate = false;
-	MoveListT mvlist;
-	UnMakeT unmake;
+        bool isMate = false;
+        MoveListT mvlist;
+        UnMakeT unmake;
 
-	if (board != NULL)
-	{
-	    // Piece in check.  Is this checkmate?
-	    BoardMoveMake(board, &move, &unmake);
-	    mlistGenerate(&mvlist, board, 0);
-	    BoardMoveUnmake(board, &unmake);
-	    isMate = (mvlist.lgh == 0);
-	}
+        if (board != NULL)
+        {
+            // Piece in check.  Is this checkmate?
+            BoardMoveMake(board, &move, &unmake);
+            mlistGenerate(&mvlist, board, 0);
+            BoardMoveUnmake(board, &unmake);
+            isMate = (mvlist.lgh == 0);
+        }
 
-	moveStr += sprintf(moveStr, "%c", isMate ? '#' : '+');
+        moveStr += sprintf(moveStr, "%c", isMate ? '#' : '+');
     }
 
     return result;
@@ -328,9 +328,9 @@ char *MoveToString(char *result,
 
 // Syntactic sugar.
 void MoveStyleSet(MoveStyleT *style,
-		  MoveNotationT notation,
-		  MoveCastleStyleT castleStyle,
-		  bool showCheck)
+                  MoveNotationT notation,
+                  MoveCastleStyleT castleStyle,
+                  bool showCheck)
 {
     style->notation = notation;
     style->castleStyle = castleStyle;
@@ -340,9 +340,9 @@ void MoveStyleSet(MoveStyleT *style,
 bool MoveIsPromote(MoveT move, struct BoardS *board)
 {
     return
-	!MoveIsCastle(move) &&
-	board->coord[move.src].IsPawn() &&
-	(move.dst > 55 || move.dst < 8);
+        !MoveIsCastle(move) &&
+        board->coord[move.src].IsPawn() &&
+        (move.dst > 55 || move.dst < 8);
 }
 
 // This is only a partial move creation routine as it does not fill in
@@ -371,43 +371,43 @@ void MoveUnmangleCastle(MoveT *move, struct BoardS *board)
 
     if (MoveIsCastle(*move))
     {
-	return; // do not unmangle if this move is already a castle request
+        return; // do not unmangle if this move is already a castle request
     }
 
     start = &gVariant->castling[turn].start;
     rookOO = start->rookOO;
 
     if (src != start->king ||
-	!BoardCanCastle(board, turn))
+        !BoardCanCastle(board, turn))
     {
-	return;
+        return;
     }
 
     // We know now we're at least trying to move a 'king' that can castle.
     if (dst == rookOO || dst == start->rookOOO)
     {
-	// Attempting KxR.
-	isCastleOO = (dst == rookOO);
+        // Attempting KxR.
+        isCastleOO = (dst == rookOO);
     }
     else if (abs(dst - src) == 2)
     {
-	// Attempting K moves 2.
-	if (!canUseK2Notation(start, dst))
-	{
-	    return;
-	}
-	isCastleOO =
-	    (rookOO > src && dst > move->src) ||
-	    (rookOO < src && dst < move->src);
+        // Attempting K moves 2.
+        if (!canUseK2Notation(start, dst))
+        {
+            return;
+        }
+        isCastleOO =
+            (rookOO > src && dst > move->src) ||
+            (rookOO < src && dst < move->src);
     }
     else
     {
-	return; // King not moving 2, and not capturing own rook
+        return; // King not moving 2, and not capturing own rook
     }
 
     if ((isCastleOO && BoardCanCastleOO(board, turn)) ||
-	(!isCastleOO && BoardCanCastleOOO(board, turn)))
+        (!isCastleOO && BoardCanCastleOOO(board, turn)))
     {
-	MoveCreateFromCastle(move, isCastleOO, turn);
+        MoveCreateFromCastle(move, isCastleOO, turn);
     }
 }

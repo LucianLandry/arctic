@@ -20,16 +20,16 @@ static VariantT gChess =
 {
     .castling =
     {
-	// White
-	{ .start  = { .king = 4, .rookOO = 7, .rookOOO = 0 },
-	  .endOO  = { .king = 6, .rook = 5 },
-	  .endOOO = { .king = 2, .rook = 3 }
-	},
-	// Black
-	{ .start  = { .king = 60, .rookOO = 63, .rookOOO = 56 },
-	  .endOO  = { .king = 62, .rook = 61 },
-	  .endOOO = { .king = 58, .rook = 59 }
-	},
+        // White
+        { .start  = { .king = 4, .rookOO = 7, .rookOOO = 0 },
+          .endOO  = { .king = 6, .rook = 5 },
+          .endOOO = { .king = 2, .rook = 3 }
+        },
+        // Black
+        { .start  = { .king = 60, .rookOO = 63, .rookOOO = 56 },
+          .endOO  = { .king = 62, .rook = 61 },
+          .endOOO = { .king = 58, .rook = 59 }
+        },
     }
 };
 
@@ -38,16 +38,16 @@ static VariantT gWild0 =
 {
     .castling =
     {
-	// White
-	{ .start  = { .king = 4, .rookOO = 7, .rookOOO = 0 },
-	  .endOO  = { .king = 6, .rook = 5 },
-	  .endOOO = { .king = 2, .rook = 3 }
-	},
-	// Black
-	{ .start  = { .king = 59, .rookOO = 56, .rookOOO = 63 },
-	  .endOO  = { .king = 57, .rook = 58 },
-	  .endOOO = { .king = 61, .rook = 60 }
-	},
+        // White
+        { .start  = { .king = 4, .rookOO = 7, .rookOOO = 0 },
+          .endOO  = { .king = 6, .rook = 5 },
+          .endOOO = { .king = 2, .rook = 3 }
+        },
+        // Black
+        { .start  = { .king = 59, .rookOO = 56, .rookOOO = 63 },
+          .endOO  = { .king = 57, .rook = 58 },
+          .endOOO = { .king = 61, .rook = 60 }
+        },
     }
 };
 #endif

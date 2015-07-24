@@ -44,16 +44,16 @@ void SquareComponent::transformPiece()
     if (piecePicture != nullptr)
     {
 #if 0
-	piecePicture->setTransformToFit(getLocalBounds().toFloat(), 0);
+        piecePicture->setTransformToFit(getLocalBounds().toFloat(), 0);
 #else
-	DrawableComposite *dc = dynamic_cast<DrawableComposite *>(piecePicture.get());
-	if (dc != nullptr)
-	{
-	    RectanglePlacement placement(0);
-	    dc->setTransform
-		(placement.getTransformToFit(dc->getContentArea().resolve(nullptr),
-					     getLocalBounds().toFloat()));
-	}
+        DrawableComposite *dc = dynamic_cast<DrawableComposite *>(piecePicture.get());
+        if (dc != nullptr)
+        {
+            RectanglePlacement placement(0);
+            dc->setTransform
+                (placement.getTransformToFit(dc->getContentArea().resolve(nullptr),
+                                             getLocalBounds().toFloat()));
+        }
 #endif
     }
 }
@@ -62,7 +62,7 @@ void SquareComponent::SetPiece(Piece p)
 {
     if (piece == p)
     {
-	return; // no-op
+        return; // no-op
     }
 
     piece = p;
@@ -70,9 +70,9 @@ void SquareComponent::SetPiece(Piece p)
     // May remove an old piece.
     if ((piecePicture = gPieceCache->GetNew(piece)) != nullptr)
     {
-	transformPiece();
-	// Need to draw the new piece we just created.
-	addAndMakeVisible(piecePicture);
+        transformPiece();
+        // Need to draw the new piece we just created.
+        addAndMakeVisible(piecePicture);
     }
 }
 

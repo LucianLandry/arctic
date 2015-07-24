@@ -95,11 +95,11 @@ static void sendBuf(int sock, void *buf, int len)
     int sent;
     while (len > 0)
     {
-	while ((sent = send(sock, buf, len, 0)) < 0 && errno == EINTR)
-	    ;
-	assert(sent > 0);
-	len -= sent;
-	buf = (char *) buf + sent;
+        while ((sent = send(sock, buf, len, 0)) < 0 && errno == EINTR)
+            ;
+        assert(sent > 0);
+        len -= sent;
+        buf = (char *) buf + sent;
     }
 }
 static void recvBuf(int sock, void *buf, int len)
@@ -107,21 +107,21 @@ static void recvBuf(int sock, void *buf, int len)
     int recvd;
     while (len > 0)
     {
-	while ((recvd = recv(sock, buf, len, 0)) < 0 && errno == EINTR)
-	    ;
-	assert(recvd > 0);
-	len -= recvd;
-	buf = (char *) buf + recvd;
+        while ((recvd = recv(sock, buf, len, 0)) < 0 && errno == EINTR)
+            ;
+        assert(recvd > 0);
+        len -= recvd;
+        buf = (char *) buf + recvd;
     }
 }
 
 
 static void compSend(int sock, eThinkMsgT msg, ThinkContextT *th,
-		     void *buffer, int bufLen)
+                     void *buffer, int bufLen)
 {
     uint8 msgLen = sizeof(eThinkMsgT) + bufLen;
     assert(msgLen >= sizeof(eThinkMsgT) &&
-	   msgLen <= sizeof(eThinkMsgT) + MAXBUFLEN);
+           msgLen <= sizeof(eThinkMsgT) + MAXBUFLEN);
 
     LOG_DEBUG("compSend: sock %d msg %d len %d\n", sock, msg, msgLen);
 
@@ -131,7 +131,7 @@ static void compSend(int sock, eThinkMsgT msg, ThinkContextT *th,
     sendBuf(sock, &msg, sizeof(eThinkMsgT));
     if (bufLen)
     {
-	sendBuf(sock, buffer, bufLen);
+        sendBuf(sock, buffer, bufLen);
     }
 }
 
@@ -143,14 +143,14 @@ static void compSendCmd(ThinkContextT *th, eThinkMsgT cmd)
 
 
 static void compSendRsp(ThinkContextT *th, eThinkMsgT rsp,
-			void *buffer, int bufLen)
+                        void *buffer, int bufLen)
 {
     compSend(th->slaveSock, rsp, th, buffer, bufLen);
 }
 
 
 static eThinkMsgT compRecv(int sock, ThinkContextT *th,
-			   void *buffer, int bufLen)
+                           void *buffer, int bufLen)
 {
     uint8 msgLen;
     eThinkMsgT msg;
@@ -161,7 +161,7 @@ static eThinkMsgT compRecv(int sock, ThinkContextT *th,
     /* Wait for the msgLen, response, and buffer (if any). */
     recvBuf(sock, &msgLen, 1);
     assert(msgLen >= sizeof(eThinkMsgT) &&
-	   msgLen <= sizeof(eThinkMsgT) + MAXBUFLEN);
+           msgLen <= sizeof(eThinkMsgT) + MAXBUFLEN);
     LOG_DEBUG("compRecv: sock %d len %d wait msg\n", sock, msgLen);
 
     recvBuf(sock, &msg, sizeof(eThinkMsgT));
@@ -170,30 +170,30 @@ static eThinkMsgT compRecv(int sock, ThinkContextT *th,
     msgLen -= sizeof(eThinkMsgT);
     if (msgLen) /* any buffer to recv? */
     {
-	/* Yes, there is. */
-	if (msgLen <= bufLen) /* Can we get the full message? */
-	{
-	    /* Yes, just recv directly into the buffer. */
-	    recvBuf(sock, buffer, msgLen);
-	}
-	else
-	{
-	    /* No -- get as much as we can. */
-	    recvBuf(sock, myBuf, msgLen);
-	    if (buffer)
-	    {
-		memcpy(buffer, myBuf, bufLen);
-	    }
-	}
+        /* Yes, there is. */
+        if (msgLen <= bufLen) /* Can we get the full message? */
+        {
+            /* Yes, just recv directly into the buffer. */
+            recvBuf(sock, buffer, msgLen);
+        }
+        else
+        {
+            /* No -- get as much as we can. */
+            recvBuf(sock, myBuf, msgLen);
+            if (buffer)
+            {
+                memcpy(buffer, myBuf, bufLen);
+            }
+        }
     }
 
     if (msg == eRspDraw || msg == eRspMove || msg == eRspResign ||
-	msg == eRspSearchDone)
+        msg == eRspSearchDone)
     {
-	th->isThinking = 0;
-	th->isPondering = 0;
-	th->isSearching = 0;
-	th->moveNow = 0;
+        th->isThinking = 0;
+        th->isPondering = 0;
+        th->isSearching = 0;
+        th->moveNow = 0;
     }
     return msg;
 }
@@ -232,13 +232,13 @@ void ThinkerCmdBoardSet(ThinkContextT *th, BoardT *board)
 
     if (board != NULL)
     {
-	BoardCopy(&th->searchArgs.localBoard, board);
+        BoardCopy(&th->searchArgs.localBoard, board);
     }
 }
 
 
 static void doThink(ThinkContextT *th, eThinkMsgT cmd, BoardT *board,
-		    SaveGameT *sgame, MoveListT *mvlist)
+                    SaveGameT *sgame, MoveListT *mvlist)
 {
     // If we were previously thinking, just start over.
     ThinkerCmdBail(th);
@@ -252,27 +252,27 @@ static void doThink(ThinkContextT *th, eThinkMsgT cmd, BoardT *board,
 
     if (mvlist != NULL)
     {
-	memcpy(&th->searchArgs.mvlist, mvlist, sizeof(th->searchArgs.mvlist));
+        memcpy(&th->searchArgs.mvlist, mvlist, sizeof(th->searchArgs.mvlist));
     }
     else
     {
-	memset(&th->searchArgs.mvlist, 0, sizeof(th->searchArgs.mvlist));
+        memset(&th->searchArgs.mvlist, 0, sizeof(th->searchArgs.mvlist));
     }
 
     if (cmd == eCmdThink)
     {
-	th->isThinking = 1;
+        th->isThinking = 1;
     }
     else
     {
-	assert(cmd == eCmdPonder);
-	th->isPondering = 1;
+        assert(cmd == eCmdPonder);
+        th->isPondering = 1;
     }
     compSendCmd(th, cmd);
 }
 
 void ThinkerCmdThinkEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
-		       MoveListT *mvlist)
+                       MoveListT *mvlist)
 {
     return doThink(th, eCmdThink, board, sgame, mvlist);
 }
@@ -283,7 +283,7 @@ void ThinkerCmdThink(ThinkContextT *th, BoardT *board, SaveGameT *sgame)
 }
 
 void ThinkerCmdPonderEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
-			MoveListT *mvlist)
+                        MoveListT *mvlist)
 {
     return doThink(th, eCmdPonder, board, sgame, mvlist);
 }
@@ -302,9 +302,9 @@ void ThinkerCmdMoveNow(ThinkContextT *th)
 {
     if (ThinkerCompIsBusy(th))
     {
-	th->moveNow = 1;
-	// I do not think this is necessary until we try to support clustering.
-	// compSendCmd(th, eCmdMoveNow);
+        th->moveNow = 1;
+        // I do not think this is necessary until we try to support clustering.
+        // compSendCmd(th, eCmdMoveNow);
     }
 }
 
@@ -314,14 +314,14 @@ void ThinkerCmdBail(ThinkContextT *th)
     eThinkMsgT rsp;
     if (ThinkerCompIsBusy(th))
     {
-	ThinkerCmdMoveNow(th);
+        ThinkerCmdMoveNow(th);
 
-	// Wait for, and discard, the computer's move.
-	do
-	{
-	    rsp = compRecv(th->masterSock, th, NULL, 0);
-	} while (rsp != eRspDraw && rsp != eRspMove && rsp != eRspResign &&
-		 rsp != eRspSearchDone);
+        // Wait for, and discard, the computer's move.
+        do
+        {
+            rsp = compRecv(th->masterSock, th, NULL, 0);
+        } while (rsp != eRspDraw && rsp != eRspMove && rsp != eRspResign &&
+                 rsp != eRspSearchDone);
     }
     assert(!ThinkerCompIsBusy(th));
 }
@@ -362,11 +362,11 @@ void ThinkerRspNotifyStats(ThinkContextT *th, CompStatsT *stats)
 void ThinkerRspNotifyPv(ThinkContextT *th, PvRspArgsT *pvArgs)
 {
     compSendRsp(th, eRspPv, pvArgs,
-		sizeof(PvRspArgsT) -
-		// Only bother sending the number of valid moves.
-		sizeof(MoveT) *
-		((pvArgs->pv.depth + 1)
-		 - MAX_PV_DEPTH));
+                sizeof(PvRspArgsT) -
+                // Only bother sending the number of valid moves.
+                sizeof(MoveT) *
+                ((pvArgs->pv.depth + 1)
+                 - MAX_PV_DEPTH));
 }
 
 
@@ -377,8 +377,8 @@ eThinkMsgT ThinkerCompWaitThinkOrPonder(ThinkContextT *th)
     LOG_DEBUG("ThinkerCompWaitThinkOrPonder: start\n");
     do
     {
-	cmd = ThinkerRecvCmd(th, NULL, 0);
-	LOG_DEBUG("ThinkerCompWaitThinkOrPonder: recvd cmd %d\n", cmd);
+        cmd = ThinkerRecvCmd(th, NULL, 0);
+        LOG_DEBUG("ThinkerCompWaitThinkOrPonder: recvd cmd %d\n", cmd);
     } while (cmd != eCmdThink && cmd != eCmdPonder);
 
     return cmd;
@@ -391,8 +391,8 @@ eThinkMsgT ThinkerCompWaitSearch(ThinkContextT *th)
     LOG_DEBUG("ThinkerCompWaitSearch: start\n");
     do
     {
-	cmd = ThinkerRecvCmd(th, NULL, 0);
-	LOG_DEBUG("ThinkerCompWaitSearch: recvd cmd %d\n", cmd);
+        cmd = ThinkerRecvCmd(th, NULL, 0);
+        LOG_DEBUG("ThinkerCompWaitSearch: recvd cmd %d\n", cmd);
     } while (cmd != eCmdSearch);
 
     return cmd;
@@ -404,10 +404,10 @@ static ThinkContextT *searcherGet(void)
     int i;
     for (i = 0; i < gSG.count; i++)
     {
-	if (!ThinkerCompIsBusy(&gSG.th[i]))
-	{
-	    return &gSG.th[i];
-	}
+        if (!ThinkerCompIsBusy(&gSG.th[i]))
+        {
+            return &gSG.th[i];
+        }
     }
     assert(0);
     return NULL;
@@ -418,10 +418,10 @@ int ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT *move)
 {
     if (gSG.numSearching < gSG.count)
     {
-	// Delegate a move.
-	ThinkerCmdSearch(searcherGet(), alpha, beta, *move);
-	gSG.numSearching++;
-	return 1;
+        // Delegate a move.
+        ThinkerCmdSearch(searcherGet(), alpha, beta, *move);
+        gSG.numSearching++;
+        return 1;
     }
     return 0;
 }
@@ -435,13 +435,13 @@ void ThinkerSearchersMoveMake(MoveT *move, UnMakeT *unmake, int mightDraw)
     BoardT *localBoard;
     for (i = 0; i < gSG.count; i++)
     {
-	localBoard = &gSG.th[i].searchArgs.localBoard;
-	if (mightDraw)
-	{
-	    BoardPositionSave(localBoard);
-	}
-	BoardMoveMake(localBoard, move, unmake);
-	localBoard->depth++;
+        localBoard = &gSG.th[i].searchArgs.localBoard;
+        if (mightDraw)
+        {
+            BoardPositionSave(localBoard);
+        }
+        BoardMoveMake(localBoard, move, unmake);
+        localBoard->depth++;
     }
 }
 
@@ -452,9 +452,9 @@ void ThinkerSearchersMoveUnmake(UnMakeT *unmake)
     BoardT *localBoard;
     for (i = 0; i < gSG.count; i++)
     {
-	localBoard = &gSG.th[i].searchArgs.localBoard;
-	localBoard->depth--;
-	BoardMoveUnmake(localBoard, unmake);
+        localBoard = &gSG.th[i].searchArgs.localBoard;
+        localBoard->depth--;
+        BoardMoveUnmake(localBoard, unmake);
     }
 }
 
@@ -466,22 +466,22 @@ static int searcherWaitOne(void)
     eThinkMsgT rsp;
 
     while ((res = poll(gSG.pfds, gSG.count, -1)) == -1
-	   && errno == EINTR)
+           && errno == EINTR)
     {
-	continue;
+        continue;
     }
     assert(res > 0); // other errors should not happen
     for (i = 0; i < gSG.count; i++)
     {
-	assert(!(gSG.pfds[i].revents & (POLLERR | POLLHUP | POLLNVAL)));
-	if (gSG.pfds[i].revents & POLLIN)
-	{
-	    // Received response from slave.
-	    rsp = ThinkerRecvRsp(&gSG.th[i], NULL, 0);
-	    assert(rsp == eRspSearchDone);
-	    gSG.numSearching--;
-	    return i;
-	}
+        assert(!(gSG.pfds[i].revents & (POLLERR | POLLHUP | POLLNVAL)));
+        if (gSG.pfds[i].revents & POLLIN)
+        {
+            // Received response from slave.
+            rsp = ThinkerRecvRsp(&gSG.th[i], NULL, 0);
+            assert(rsp == eRspSearchDone);
+            gSG.numSearching--;
+            return i;
+        }
     }
     assert(0);
     return -1;
@@ -492,7 +492,7 @@ PositionEvalT ThinkerSearchersWaitOne(MoveT **move, PvT *pv)
     SearchArgsT *sa = &gSG.th[searcherWaitOne()].searchArgs;
     *move = &sa->move;
     memcpy(pv, &sa->pv,
-	   sizeof(PvT) + (sizeof(MoveT) * (sa->pv.depth + 1 - MAX_PV_DEPTH)));
+           sizeof(PvT) + (sizeof(MoveT) * (sa->pv.depth + 1 - MAX_PV_DEPTH)));
     return sa->eval;
 }
 
@@ -501,11 +501,11 @@ void ThinkerSearchersBail(void)
     int i;
     for (i = 0; i < gSG.count && gSG.numSearching > 0; i++)
     {
-	if (ThinkerCompIsSearching(&gSG.th[i]))
-	{
-	    ThinkerCmdBail(&gSG.th[i]);
-	    gSG.numSearching--;
-	}
+        if (ThinkerCompIsSearching(&gSG.th[i]))
+        {
+            ThinkerCmdBail(&gSG.th[i]);
+            gSG.numSearching--;
+        }
     }
 }
 
@@ -520,7 +520,7 @@ void ThinkerSearchersBoardSet(BoardT *board)
     int i;
     for (i = 0; i < gSG.count; i++)
     {
-	ThinkerCmdBoardSet(&gSG.th[i], board);
+        ThinkerCmdBoardSet(&gSG.th[i], board);
     }
 }
 
@@ -529,8 +529,8 @@ void ThinkerSearchersSetDepthAndLevel(int depth, int level)
     int i;
     for (i = 0; i < gSG.count; i++)
     {
-	gSG.th[i].searchArgs.localBoard.depth = depth;
-	gSG.th[i].searchArgs.localBoard.level = level;
+        gSG.th[i].searchArgs.localBoard.depth = depth;
+        gSG.th[i].searchArgs.localBoard.level = level;
     }
 }
 
@@ -544,13 +544,13 @@ void ThinkerSearchersCreate(int numThreads, THREAD_FUNC threadFunc)
     gSG.count = numThreads;
     for (i = 0; i < gSG.count; i++)
     {
-	sargs.th = &gSG.th[i];
-	ThinkerInit(sargs.th);
-	ThreadCreate(threadFunc, (ThreadArgsT *) &sargs);
+        sargs.th = &gSG.th[i];
+        ThinkerInit(sargs.th);
+        ThreadCreate(threadFunc, (ThreadArgsT *) &sargs);
 
-	// (also initialize the associated poll structures --
-	//  it is global so is already zero.)
-	gSG.pfds[i].fd = sargs.th->masterSock;
-	gSG.pfds[i].events = POLLIN;
+        // (also initialize the associated poll structures --
+        //  it is global so is already zero.)
+        gSG.pfds[i].fd = sargs.th->masterSock;
+        gSG.pfds[i].events = POLLIN;
     }
 }

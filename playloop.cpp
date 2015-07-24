@@ -30,9 +30,9 @@
 static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
 {
     union {
-	CompStatsT stats;
-	PvRspArgsT pvArgs;
-	MoveT move;
+        CompStatsT stats;
+        PvRspArgsT pvArgs;
+        MoveT move;
     } rspBuf;
 
     int turn;
@@ -41,83 +41,83 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
 
     if (!gVars.ponder && !game->control[board->turn])
     {
-	LOG_EMERG("bad rsp %d\n", rsp);
-	assert(0);
+        LOG_EMERG("bad rsp %d\n", rsp);
+        assert(0);
     }
 
     switch(rsp)
     {
     case eRspStats:
-	gUI->notifyComputerStats(game, &rspBuf.stats);
-	break;
+        gUI->notifyComputerStats(game, &rspBuf.stats);
+        break;
     case eRspPv:
-	gUI->notifyPV(game, &rspBuf.pvArgs);
-	break;
+        gUI->notifyPV(game, &rspBuf.pvArgs);
+        break;
     case eRspDraw:
-	if (!game->control[board->turn])
-	{
-	    // Decided or forced to draw while pondering.  Ignore and let the
-	    // player make their move.
-	    gUI->notifyReady();
-	    break;
-	}
+        if (!game->control[board->turn])
+        {
+            // Decided or forced to draw while pondering.  Ignore and let the
+            // player make their move.
+            gUI->notifyReady();
+            break;
+        }
 
-	// Only claimed draws, not automatic draws, should go through
-	// this path.
-	if (rspBuf.move.src != FLAG && gUI->shouldCommitMoves())
-	{
-	    GameMoveCommit(game, &rspBuf.move, th, 1);
-	}
+        // Only claimed draws, not automatic draws, should go through
+        // this path.
+        if (rspBuf.move.src != FLAG && gUI->shouldCommitMoves())
+        {
+            GameMoveCommit(game, &rspBuf.move, th, 1);
+        }
 
-	ClocksStop(game);
-	game->bDone = true;
-	gUI->notifyReady();
+        ClocksStop(game);
+        game->bDone = true;
+        gUI->notifyReady();
 
-	if (BoardDrawFiftyMove(board))
-	{
-	    gUI->notifyDraw("fifty-move rule", &rspBuf.move);
-	}
-	else if (BoardDrawThreefoldRepetition(board))
-	{
-	    gUI->notifyDraw("threefold repetition", &rspBuf.move);
-	}
-	else
-	{
-	    assert(0);
-	}
-	break;
+        if (BoardDrawFiftyMove(board))
+        {
+            gUI->notifyDraw("fifty-move rule", &rspBuf.move);
+        }
+        else if (BoardDrawThreefoldRepetition(board))
+        {
+            gUI->notifyDraw("threefold repetition", &rspBuf.move);
+        }
+        else
+        {
+            assert(0);
+        }
+        break;
     case eRspMove:
-	if (!game->control[board->turn])
-	{
-	    // Decided or forced to move while pondering.  Ignore and let the
-	    // player make their move.
-	    gUI->notifyReady();
-	    break;
-	}
+        if (!game->control[board->turn])
+        {
+            // Decided or forced to move while pondering.  Ignore and let the
+            // player make their move.
+            gUI->notifyReady();
+            break;
+        }
 
-	gUI->notifyMove(rspBuf.move);
-	if (gUI->shouldCommitMoves())
-	{
-	    GameMoveCommit(game, &rspBuf.move, th, 0);
-	}
-	LogFlush();
-	break;
+        gUI->notifyMove(rspBuf.move);
+        if (gUI->shouldCommitMoves())
+        {
+            GameMoveCommit(game, &rspBuf.move, th, 0);
+        }
+        LogFlush();
+        break;
     case eRspResign:
-	turn =
-	    // Computer resigned its position while pondering?
-	    !game->control[board->turn] ?
-	    board->turn ^ 1 : // (yes)
-	    board->turn;      // (no)
+        turn =
+            // Computer resigned its position while pondering?
+            !game->control[board->turn] ?
+            board->turn ^ 1 : // (yes)
+            board->turn;      // (no)
 
-	ClocksStop(game);
-	game->bDone = true;
-	gUI->notifyReady();
-	LOG_DEBUG("%d resigns\n", turn);
-	LogFlush();
-	gUI->notifyResign(turn);
-	break;
+        ClocksStop(game);
+        game->bDone = true;
+        gUI->notifyReady();
+        LOG_DEBUG("%d resigns\n", turn);
+        LogFlush();
+        gUI->notifyResign(turn);
+        break;
     default:
-	assert(0);
+        assert(0);
     }
 
     return rsp;
@@ -129,7 +129,7 @@ void PlayloopCompMoveNowAndSync(GameT *game, ThinkContextT *th)
     eThinkMsgT rsp;
     if (!ThinkerCompIsBusy(th))
     {
-	return;
+        return;
     }
 
     // At this point, even if the computer moved in the meantime, we
@@ -138,7 +138,7 @@ void PlayloopCompMoveNowAndSync(GameT *game, ThinkContextT *th)
 
     do
     {
-	rsp = PlayloopCompProcessRsp(game, th);
+        rsp = PlayloopCompProcessRsp(game, th);
     } while (rsp == eRspStats || rsp == eRspPv);
 
     // ... but now we definitely have (processed the response).
@@ -164,96 +164,96 @@ void PlayloopRun(GameT *game, ThinkContextT *th)
 
     while (1)
     {
-	tickTimeout = -1;
-	moveNowTimeout = -1;
-	pollTimeout = -1;
-	turn = game->savedBoard.turn;
-	moveNowOnTimeout = false;
-	myTime = ClockGetTime(game->clocks[turn]);
-	myPerMoveTime = ClockGetPerMoveTime(game->clocks[turn]);
-	myTime = MIN(myTime, myPerMoveTime);
+        tickTimeout = -1;
+        moveNowTimeout = -1;
+        pollTimeout = -1;
+        turn = game->savedBoard.turn;
+        moveNowOnTimeout = false;
+        myTime = ClockGetTime(game->clocks[turn]);
+        myPerMoveTime = ClockGetPerMoveTime(game->clocks[turn]);
+        myTime = MIN(myTime, myPerMoveTime);
 
-	// In ClocksICS mode, the clock will run on the first move even though
-	// we would rather it not.  Making it run makes the time recalc in the
-	// poll loop much more robust (since many things might happen to the
-	// clock in the meanwhile).
-	// But, it means we should skip any tick notification.
-	if (!ClocksICS(game) &&
-	    ClockIsRunning(game->clocks[turn]) &&
-	    myTime != CLOCK_TIME_INFINITE)
-	{
-	    // Try to keep the UI time display refreshed.
+        // In ClocksICS mode, the clock will run on the first move even though
+        // we would rather it not.  Making it run makes the time recalc in the
+        // poll loop much more robust (since many things might happen to the
+        // clock in the meanwhile).
+        // But, it means we should skip any tick notification.
+        if (!ClocksICS(game) &&
+            ClockIsRunning(game->clocks[turn]) &&
+            myTime != CLOCK_TIME_INFINITE)
+        {
+            // Try to keep the UI time display refreshed.
 
-	    // Start by finding usec until next tick.
-	    tickTimeout =
-		(myTime < 0 ?
-		 // Avoid machine-dependent behavior of / and % w/negative
-		 // numbers.
-		 1000000 - (llabs(myTime) % 1000000) :
-		 myTime % 1000000); // normal case (positive)
+            // Start by finding usec until next tick.
+            tickTimeout =
+                (myTime < 0 ?
+                 // Avoid machine-dependent behavior of / and % w/negative
+                 // numbers.
+                 1000000 - (llabs(myTime) % 1000000) :
+                 myTime % 1000000); // normal case (positive)
 
-	    tickTimeout /= 1000; // ... converted to msec
-	    tickTimeout += 1; // ... and adjusted for division truncation
-	}
+            tickTimeout /= 1000; // ... converted to msec
+            tickTimeout += 1; // ... and adjusted for division truncation
+        }
 
-	// The computer cannot currently decide for itself when to move, so
-	// we decide for it.
-	if (ClockIsRunning(game->clocks[turn]) &&
-	    game->control[turn] &&
-	    game->goalTime[turn] != CLOCK_TIME_INFINITE)
-	{
-	    // Yes.
-	    moveNowTimeout = (myTime - game->goalTime[turn]) / 1000;
-	    moveNowTimeout = MAX(moveNowTimeout, 0);	    
+        // The computer cannot currently decide for itself when to move, so
+        // we decide for it.
+        if (ClockIsRunning(game->clocks[turn]) &&
+            game->control[turn] &&
+            game->goalTime[turn] != CLOCK_TIME_INFINITE)
+        {
+            // Yes.
+            moveNowTimeout = (myTime - game->goalTime[turn]) / 1000;
+            moveNowTimeout = MAX(moveNowTimeout, 0);        
 
-	    moveNowOnTimeout = tickTimeout == -1 || moveNowTimeout < tickTimeout;
-	}
+            moveNowOnTimeout = tickTimeout == -1 || moveNowTimeout < tickTimeout;
+        }
 
-	pollTimeout =
-	    tickTimeout != -1 && moveNowTimeout != -1 ?
-	    MIN(tickTimeout, moveNowTimeout) :
-	    tickTimeout != -1 ? tickTimeout :
-	    moveNowTimeout;
+        pollTimeout =
+            tickTimeout != -1 && moveNowTimeout != -1 ?
+            MIN(tickTimeout, moveNowTimeout) :
+            tickTimeout != -1 ? tickTimeout :
+            moveNowTimeout;
 
-	// poll for input from either stdin (UI), or the computer, or timeout.
-	res = poll(pfds, 2, pollTimeout);
+        // poll for input from either stdin (UI), or the computer, or timeout.
+        res = poll(pfds, 2, pollTimeout);
 
-	if (res == 0)
-	{
-	    // poll timed out.  Do appropriate action and re-poll.
-	    if (moveNowOnTimeout)
-	    {
-		// So we do not trigger again
-		game->goalTime[turn] = CLOCK_TIME_INFINITE;
-		ThinkerCmdMoveNow(th);
-	    }
-	    else
-	    {
-		// Tick, tock...
-		gUI->notifyTick(game);
-	    }
-	    continue;
-	}
+        if (res == 0)
+        {
+            // poll timed out.  Do appropriate action and re-poll.
+            if (moveNowOnTimeout)
+            {
+                // So we do not trigger again
+                game->goalTime[turn] = CLOCK_TIME_INFINITE;
+                ThinkerCmdMoveNow(th);
+            }
+            else
+            {
+                // Tick, tock...
+                gUI->notifyTick(game);
+            }
+            continue;
+        }
 
-	if (res == -1 && errno == EINTR) continue;
-	assert(res > 0); /* other errors should not happen. */
-	assert(!(pfds[1].revents & (POLLERR | POLLHUP | POLLNVAL)));
+        if (res == -1 && errno == EINTR) continue;
+        assert(res > 0); /* other errors should not happen. */
+        assert(!(pfds[1].revents & (POLLERR | POLLHUP | POLLNVAL)));
 
-	if (pfds[0].revents & (POLLERR | POLLHUP | POLLNVAL))
-	{
-	    LOG_DEBUG("stdin recvd event 0x%x, bailing\n", pfds[0].revents);
-	    return;
-	}
+        if (pfds[0].revents & (POLLERR | POLLHUP | POLLNVAL))
+        {
+            LOG_DEBUG("stdin recvd event 0x%x, bailing\n", pfds[0].revents);
+            return;
+        }
 
-	if (pfds[0].revents & POLLIN)
-	{
-	    SwitcherSwitch(&game->sw);
-	}
-	// 'else' because user-input handler may change the state on us,
-	// so we need to re-poll...
-	else if (pfds[1].revents & POLLIN)
-	{
-	    PlayloopCompProcessRsp(game, th);
-	}
+        if (pfds[0].revents & POLLIN)
+        {
+            SwitcherSwitch(&game->sw);
+        }
+        // 'else' because user-input handler may change the state on us,
+        // so we need to re-poll...
+        else if (pfds[1].revents & POLLIN)
+        {
+            PlayloopCompProcessRsp(game, th);
+        }
     }
 }
