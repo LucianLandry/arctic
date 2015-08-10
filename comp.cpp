@@ -421,15 +421,18 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     // Trying to order the declared variables by their struct size, to
     // increase cache hits, does not work.  Trying instead by functionality.
     // and/or order of usage, is also not reliable.
-    int turn, ncheck, searchDepth;
+    int searchDepth;
 
-    int mightDraw; // bool.  Is it possible to hit a draw while evaluating from
-                   // this position.
+    uint8 turn;
+    cell_t ncheck;
+    bool mightDraw; // Is it possible to hit a draw while evaluating from
+                    //  this position.
+    bool masterNode;  // multithread support.
+
     MoveT hashMove;
     PositionEvalT hashEval;
     MoveT bestMove;
     PositionEvalT retVal;
-    int masterNode;  // multithread support.
     MoveT move;
     int preEval, improvement, i, secondBestVal;
     int cookie;
@@ -437,7 +440,6 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     int newVal;
     UnMakeT unmake;
     PvT newPv;
-    MoveList mvlist;
     int strgh;
     uint16 basePly = board->ply - board->depth;
 
@@ -542,6 +544,9 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     }
 
     gStats.moveGenNodes++;
+
+    MoveList mvlist;
+
     if (board->depth || !th->searchArgs.mvlist.NumMoves())
     {
         mvlist.GenerateLegalMoves(*board, QUIESCING && ncheck == FLAG);
@@ -629,7 +634,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     masterNode = (th == gThinker && // master node
                   searchDepth > 1); // not subject to futility pruning
 #else // disables move delegation.
-    masterNode = 0;
+    masterNode = false;
 #endif
 
     move = MoveNone;

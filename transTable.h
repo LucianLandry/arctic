@@ -37,8 +37,6 @@ void TransTableLazyInit(int64 size);
 // Clear the global transposition table.
 void TransTableReset(void);
 
-
-
 // Return the number of unique entries that can be stored in the transposition
 // table.
 size_t TransTableNumEntries(void); 
