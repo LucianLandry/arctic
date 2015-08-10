@@ -37,7 +37,7 @@ Done:
 Build improvements: use Git for version control, cmake for building
 Bugfix: uiXboard: handle 0 increment and 0 moves per timecontrol properly
 Bugfix: uiUci: fix 'searchMoves' parameter handling (untested)
-Cleanup: use C99 bool where I can.
+Cleanup: use C99 bool where I can.  Also cleanup no-move detection.
 Bugfix: must use llabs() instead of abs() for handling time.
 Reimplemented transposition table (presumably a better one), and added hooks
         for controlling it to uiUci/uiXboard.

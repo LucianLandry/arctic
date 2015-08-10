@@ -149,7 +149,7 @@ void updatePv(BoardT *board, PvT *goodPv, PvT *childPv, MoveT move,
 {
     int depth = board->depth;
 
-    if (depth < MAX_PV_DEPTH && move.src != FLAG)
+    if (depth < MAX_PV_DEPTH && move != MoveNone)
     {
         // This be a good move.
         goodPv->moves[0] = move; // struct assign
@@ -239,7 +239,7 @@ static PositionEvalT tryMove(BoardT *board, MoveT move,
     board->depth--;
     if (board->depth < MAX_CV_DEPTH)
     {
-        cv->moves[board->depth].src = FLAG;
+        cv->moves[board->depth] = MoveNone;
     }
 
     // restore the current board position.
@@ -607,7 +607,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
         /* This doesn't work well, perhaps poor interaction w/history table. */
         /* mlistSortByCap(&mvlist, board); */
         if (board->depth <= gVars.pv.level &&
-            gVars.pv.moves[board->depth].src != FLAG)
+            gVars.pv.moves[board->depth] != MoveNone)
         {
             // Try the principal variation move (if applicable) first.
             mvlist.UseAsFirstMove(gVars.pv.moves[board->depth]);
@@ -824,8 +824,8 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
         (MoveIsCastle(bestMove) || // castling is not currently preferred
          board->coord[bestMove.dst].IsEmpty()))
     {
-        assert(bestMove.src != FLAG); // aka MoveNone.src
-        /* move is at least one point better than others. */
+        assert(bestMove != MoveNone);
+        // move is at least one point better than others.
         gVars.hist[turn]
             [bestMove.src] [bestMove.dst] = board->ply;
     }
@@ -1012,7 +1012,7 @@ static void computermove(ThinkContextT *th, bool bPonder)
     // pondering and side to move is about to be checkmated, for instance)
     // For the former, we cannot assume we are in a lost position.
     // In either case, just use the first move.
-    if (move.src == FLAG)
+    if (move == MoveNone)
     {
         move = mvlist.Moves(0); // struct assign
     }

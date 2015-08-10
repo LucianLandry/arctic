@@ -243,7 +243,9 @@ static void finishMoves(GameT *game, BoardT *fenBoard, MoveT *move, char *pToken
 
     printf("info string %s: diverged move was: %s\n",
            __func__,
-           move && move->src != FLAG ? MoveToString(tmpStr, *move, &gMoveStyleUCI, NULL) : "0000");
+           (move && *move != MoveNone ?
+            MoveToString(tmpStr, *move, &gMoveStyleUCI, NULL) :
+            "0000"));
     if (move != NULL)
     {
         lastPly = GameLastPly(game);
@@ -816,7 +818,7 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
         gUciState.bPonder = false;
         // GameFastForward(game, 1, th) does not work here, since the clock
         // is restored to infinite time.  So:
-        if (gUciState.ponderMove.src != FLAG)
+        if (gUciState.ponderMove != MoveNone)
         {
             GameMoveMake(game, &gUciState.ponderMove);
         }
@@ -846,10 +848,8 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
 static void uciNotifyMove(MoveT move)
 {
     char tmpStr[MOVE_STRING_MAX], tmpStr2[MOVE_STRING_MAX];
-    MoveT ponderMove =
-        gUciState.result.ponderMove.src == FLAG ? MoveNone :
-        gUciState.result.ponderMove;
-    bool bShowPonderMove = move.src != FLAG && ponderMove.src != FLAG;
+    MoveT ponderMove = gUciState.result.ponderMove;
+    bool bShowPonderMove = move != MoveNone && ponderMove != MoveNone;
 
     if (gUciState.bPonder || gUciState.bInfinite)
     {
@@ -859,7 +859,7 @@ static void uciNotifyMove(MoveT move)
     }
 
     printf("bestmove %s%s%s\n",
-           (move.src != FLAG ?
+           (move != MoveNone ?
             MoveToString(tmpStr, move, &gMoveStyleUCI, NULL) :
             "0000"),
            bShowPonderMove ? " ponder " : "",
@@ -879,8 +879,7 @@ static void uciNotifyDraw(const char *reason, MoveT *move)
     // in order to justify complicating the engine code to say "I cannot claim
     // a draw but my opponent can, what is my best move".
     printf("info string engine claims a draw (reason: %s)\n", reason);
-    uciNotifyMove(move != NULL && move->src != FLAG ? *move :
-                  MoveNone);
+    uciNotifyMove(move != NULL ? *move : MoveNone);
 }
 
 
@@ -939,8 +938,7 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
 
     // Save away a next move to ponder on, if possible.
     gUciState.result.ponderMove =
-        pv->moves[0].src != FLAG && pv->moves[1].src != FLAG ?
-        pv->moves[1] : MoveNone;
+        pv->moves[0] != MoveNone ? pv->moves[1] : MoveNone;
 
     if (gUciState.bPonder)
     {

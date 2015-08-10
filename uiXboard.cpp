@@ -628,7 +628,7 @@ void xboardNotifyDraw(const char *reason, MoveT *move)
        can make a move before we can claim the draw.  This only matters
        when playing on a chess server.  FIXME.
     */
-    if (move != NULL && move->src != FLAG)
+    if (move != NULL && *move != MoveNone)
     {
         xboardNotifyMove(*move);
     }

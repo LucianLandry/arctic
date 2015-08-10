@@ -56,6 +56,12 @@ struct MoveT
             *reinterpret_cast<const uint32 *>(this) ==
             *reinterpret_cast<const uint32 *>(&other);
     }
+    inline bool operator!=(const MoveT &other) const
+    {
+        return
+            *reinterpret_cast<const uint32 *>(this) !=
+            *reinterpret_cast<const uint32 *>(&other);
+    }
     // Empirically, overloading operator= similarly to "force" integer compares
     //  does not appear to work well at all.
 };

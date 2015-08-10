@@ -33,7 +33,7 @@ void PvInit(PvT *pv)
     pv->level = 0;
     for (i = 0; i < MAX_PV_DEPTH; i++)
     {
-        pv->moves[i].src = FLAG;
+        pv->moves[i] = MoveNone;
     }
 }
 
@@ -41,15 +41,15 @@ void PvDecrement(PvT *pv, MoveT *move)
 {
     bool bPredictedMove =
         move != NULL &&
-        move->src != FLAG &&
-        !memcmp(move, &pv->moves[0], sizeof(MoveT));
+        *move != MoveNone &&
+        *move == pv->moves[0];
 
     // Adjust the principal variation (shrink it by depth one after a move).
     // If we did not make the move the computer predicted, this can
     // result in nonsensical moves being kept around.  But we can still use
     // the PV as a hint as to what moves to prefer.
     memmove(&pv->moves[0], &pv->moves[1], MAX_PV_DEPTH - 1);
-    pv->moves[MAX_PV_DEPTH - 1].src = FLAG;
+    pv->moves[MAX_PV_DEPTH - 1] = MoveNone;
     pv->eval = -pv->eval;
     if (pv->eval >= EVAL_WIN_THRESHOLD && pv->eval < EVAL_WIN)
     {
@@ -86,7 +86,7 @@ void PvRewind(PvT *pv, int numPlies)
 
     for (i = 0; i < numPlies; i++)
     {
-        pv->moves[i].src = FLAG;
+        pv->moves[i] = MoveNone;
     }
     // We need to clear everything else out, though, because it is no longer
     // valid since we have no idea what move might be selected.
@@ -112,7 +112,7 @@ void CvInit(CvT *cv)
     int i;
     for (i = 0; i < MAX_CV_DEPTH; i++)
     {
-        cv->moves[i].src = FLAG;
+        cv->moves[i] = MoveNone;
     }
 }
 

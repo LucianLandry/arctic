@@ -64,7 +64,7 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
 
         // Only claimed draws, not automatic draws, should go through
         // this path.
-        if (rspBuf.move.src != FLAG && gUI->shouldCommitMoves())
+        if (rspBuf.move != MoveNone && gUI->shouldCommitMoves())
         {
             GameMoveCommit(game, &rspBuf.move, th, 1);
         }

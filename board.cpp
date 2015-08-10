@@ -440,7 +440,7 @@ void BoardMoveMake(BoardT *board, MoveT move, UnMakeT *unmake)
     board->zobrist = BoardZobristCalcFromMove(board, move);
     TransTablePrefetch(board->zobrist);
 
-    assert(src != FLAG); // This seems to happen too often.
+    assert(move != MoveNone); // This seems to happen too often.
 
 #ifdef DEBUG_CONSISTENCY_CHECK
     BoardConsistencyCheck(board, "BoardMoveMake1", 1);
@@ -1057,7 +1057,7 @@ int BoardCapWorthCalc(const BoardT *board, MoveT move)
         cv = &board->cv;
         // prints out moves in reverse order.
         for (i = MIN(MAX_CV_DEPTH, board->depth) - 1;
-             i >= 0 && cv->moves[i].src != FLAG;
+             i >= 0 && cv->moves[i] != MoveNone;
              i--)
         {
             LOG_EMERG("%d:%s\n", i,
@@ -1068,7 +1068,7 @@ int BoardCapWorthCalc(const BoardT *board, MoveT move)
         // main thread has any additional moves.
         cv = CompMainCv();
         for (;
-             i >= 0 && cv->moves[i].src != FLAG;
+             i >= 0 && cv->moves[i] != MoveNone;
              i--)
         {
             LOG_EMERG("%d:%s\n", i,
