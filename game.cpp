@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                game.c - current game and associated state.
+//               game.cpp - current game and associated state.
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -21,11 +21,10 @@
 #include "gDynamic.h" // gPvDecrement()
 #include "gPreCalc.h"
 #include "log.h"
-#include "moveList.h"
+#include "MoveList.h"
 #include "switcher.h"
 #include "transTable.h"
 #include "ui.h"
-#include <stdio.h> // debug
 
 // Helper function.
 // Assume a change in thinking is necessary.
@@ -116,17 +115,17 @@ void GameMoveMake(GameT *game, MoveT *move)
         BoardPositionSave(board);
         LOG_DEBUG("making move (%d %d): ",
                   board->ply >> 1, turn);
-        LogMove(eLogDebug, board, move);
+        LogMove(eLogDebug, board, *move);
 
         if (ClocksICS(game)) // have to check this before we make the move
         {
-            BoardMoveMake(board, move, NULL);
+            BoardMoveMake(board, *move, NULL);
             // normally would expect this to trigger on plies 1 and 2.
             ClockReset(myClock); // pretend like nothing happened to the clock
         }
         else
         {
-            BoardMoveMake(board, move, NULL);
+            BoardMoveMake(board, *move, NULL);
             ClockApplyIncrement(myClock, board->ply);
         }
         SaveGameMoveCommit(&game->sgame, move, ClockGetTime(myClock));
@@ -141,7 +140,7 @@ void GameMoveMake(GameT *game, MoveT *move)
 void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
                     int declaredDraw)
 {
-    MoveListT mvlist;
+    MoveList mvlist;
     BoardT *board = &game->savedBoard; // shorthand.
     int turn;
 
@@ -166,15 +165,15 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
     ClockStart(game->clocks[turn]);
     gUI->statusDraw(game);
 
-    mlistGenerate(&mvlist, board, 0);
-
+    mvlist.GenerateLegalMoves(*board, false);
+    
     if (BoardDrawInsufficientMaterial(board))
     {
         ClocksStop(game);
         gUI->notifyDraw("insufficient material", NULL);
         game->bDone = true;
     }
-    else if (!mvlist.lgh)
+    else if (!mvlist.NumMoves())
     {
         ClocksStop(game);
         if (board->ncheck[turn] == FLAG)

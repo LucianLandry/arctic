@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                gDynamic.c - all global dynamic variables.
+//                gDynamic.cpp - all global dynamic variables.
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com

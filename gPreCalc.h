@@ -38,13 +38,13 @@ typedef struct {
     // 5 - south
     // 6 - southwest
     // 7 - west
-    // 8 - night move.
-    // 9 - night move (special, used only for calculating black night moves.
-    //     This is so forward night-moves are always tried first.
+    // 8 - knight move.
+    // 9 - knight move (special, used only for calculating black night moves.
+    //     This is so forward night-moves are always tried first.)
     // 10 - white pawn move (not a valid direction)
     // 11 - black pawn move (not a valid direction)
     // Each 'list' is terminated with a FLAG.
-    uint8 *moves[12] [NUM_SQUARES];
+    cell_t *moves[12] [NUM_SQUARES];
 
     // pre-calculated direction from one square to another.
     uint8 dir[NUM_SQUARES] [NUM_SQUARES]; 

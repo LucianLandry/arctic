@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                    pv.h - preferred variation handling.
+//                   pv.cpp - preferred variation handling.
 //                           -------------------
 //  copyright            : (C) 2013 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -140,7 +140,7 @@ int PvBuildMoveString(PvT *pv, char *dstStr, int dstLen,
         if (sanStr[0])
         {
             // Move was legal, advance to next move so we can check it.
-            BoardMoveMake(&myBoard, moves, NULL);
+            BoardMoveMake(&myBoard, *moves, NULL);
         }
         else
         {

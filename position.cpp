@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                  position.c - position-related functions.
+//                 position.cpp - position-related functions.
 //                           -------------------
 //  copyright            : (C) 2013 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com

@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                    uiNcurses.c - ncurses UI for Arctic
+//                   uiNcurses.cpp - ncurses UI for Arctic
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -951,7 +951,7 @@ static void UISetDebugLoggingLevel(void)
     while ((i = UIBarf("Set debug level to (0-2) (higher -> more verbose)? >") - '0') < 0 ||
            i > 2)
         ;
-    LogSetLevel(i);
+    LogSetLevel(LogLevelT(i));
 }
 
 
@@ -1007,7 +1007,7 @@ static void UINotifyResign(int turn)
 }
 
 
-static void UIMovelistShow(MoveListT *mvlist, BoardT *board)
+static void UIMovelistShow(MoveList *mvlist, BoardT *board)
 {
     int i;
     char result[MOVE_STRING_MAX];
@@ -1016,9 +1016,9 @@ static void UIMovelistShow(MoveListT *mvlist, BoardT *board)
     textcolor(SYSTEMCOL);
     gotoxy(1, 1);
 
-    for (i = 0; i < mvlist->lgh; i++)
+    for (i = 0; i < mvlist->NumMoves(); i++)
     {
-        cprintf("%s ", MoveToString(result, mvlist->moves[i], &msUI, board));
+        cprintf("%s ", MoveToString(result, mvlist->Moves(i), &msUI, board));
     }
     UIBarf("possible moves.");
 }
@@ -1049,7 +1049,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
 {
     MoveT *foundMove;
     uint8 chr;
-    MoveListT movelist;
+    MoveList movelist;
     uint8 comstr[2] = {FLAG, FLAG};
     MoveT myMove;
     int myLevel;
@@ -1184,7 +1184,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
 
     /* at this point must be a move or request for moves. */
     /* get valid moves. */
-    mlistGenerate(&movelist, board, 0);
+    movelist.GenerateLegalMoves(*board, false);
     if (comstr[0] == 'G')       /* display moves */
     {
         UIMovelistShow(&movelist, board);
@@ -1203,7 +1203,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     MoveUnmangleCastle(&myMove, board);
 
     /* search movelist for comstr */
-    if ((foundMove = mlistSearch(&movelist, &myMove, 2)) == NULL)
+    if ((foundMove = movelist.SearchSrcDst(myMove)) == NULL)
     {
         UIBarf("Sorry, invalid move.");
         UITicksDraw();
@@ -1224,7 +1224,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
         Piece piece = asciiToNative(chr);
         myMove.promote = piece.Type();
 
-        foundMove = mlistSearch(&movelist, &myMove, 3);
+        foundMove = movelist.SearchSrcDstPromote(myMove);
         assert(foundMove != NULL);
     }
     else

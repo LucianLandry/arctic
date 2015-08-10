@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                       uiXboard.c - Xboard interface.
+//                      uiXboard.cpp - Xboard interface.
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -37,7 +37,7 @@
 #include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
-#include "moveList.h"
+#include "MoveList.h"
 #include "playloop.h"
 #include "ui.h"
 #include "uiUtil.h"

@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                  saveGame.c - saveable game structures.
+//                 saveGame.cpp - saveable game structures.
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -16,16 +16,16 @@
 
 #include <assert.h>
 #include <errno.h>
-#include <sys/types.h> // stat(2)
-#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>    // malloc(3)
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h> // stat(2)
 #include <unistd.h>
 
 #include "board.h"
 #include "log.h"
-#include "moveList.h"
+#include "MoveList.h"
 #include "saveGame.h"
 
 #define SAVEFILE "arctic.sav"
@@ -166,8 +166,8 @@ void SaveGameClocksSet(SaveGameT *sgame, ClockT *clocks[])
 int SaveGameGotoPly(SaveGameT *sgame, int ply, BoardT *board, ClockT *clocks[])
 {
     int i, plyOffset;
-    MoveListT moveList;
-    MoveT *move;
+    MoveList moveList;
+    MoveT move;
 
     BoardT myBoard;     // temp variables.
     ClockT myClocks[2];
@@ -200,9 +200,9 @@ int SaveGameGotoPly(SaveGameT *sgame, int ply, BoardT *board, ClockT *clocks[])
     plyOffset = ply - sgame->firstPly;
     for (i = 0; i < plyOffset; i++)
     {
-        move = &sgame->plies[i].move;
-        mlistGenerate(&moveList, &myBoard, 0);
-        if (mlistSearch(&moveList, move, sizeof(MoveT)) == NULL)
+        move = sgame->plies[i].move;
+        moveList.GenerateLegalMoves(myBoard, false);
+        if (moveList.Search(move) == NULL)
         {
             LOG_DEBUG("SaveGameGotoPly(): bad move %d\n", i);
             return -1;

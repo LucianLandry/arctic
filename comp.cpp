@@ -144,15 +144,15 @@ do { if (retVal.lowBound < (eval).lowBound) \
 do { return (PositionEvalT) {(low), (high)}; } while (0)
 
 
-void updatePv(BoardT *board, PvT *goodPv, PvT *childPv, MoveT *move,
+void updatePv(BoardT *board, PvT *goodPv, PvT *childPv, MoveT move,
               int eval)
 {
     int depth = board->depth;
 
-    if (depth < MAX_PV_DEPTH && move->src != FLAG)
+    if (depth < MAX_PV_DEPTH && move.src != FLAG)
     {
         // This be a good move.
-        goodPv->moves[0] = *move; // struct assign
+        goodPv->moves[0] = move; // struct assign
 
         if (childPv && childPv->depth)
         {
@@ -186,7 +186,7 @@ void updatePv(BoardT *board, PvT *goodPv, PvT *childPv, MoveT *move,
     }
 }
 
-static PositionEvalT tryMove(BoardT *board, MoveT *move,
+static PositionEvalT tryMove(BoardT *board, MoveT move,
                              int alpha, int beta, PvT *newPv,
                              ThinkContextT *th, int *hashHitOnly)
 {
@@ -203,7 +203,7 @@ static PositionEvalT tryMove(BoardT *board, MoveT *move,
     // and not ever have to worry about a crash.
     if (board->depth < MAX_CV_DEPTH)
     {
-        cv->moves[board->depth] = *move; // struct assign
+        cv->moves[board->depth] = move; // struct assign
     }
     board->depth++;
 
@@ -358,17 +358,17 @@ static int potentialImprovement(BoardT *board)
 // Side effect: removes the move from the list.
 static PositionEvalT tryNextHashMove(BoardT *board, int alpha, int beta,
                                      PvT *newPv, ThinkContextT *th,
-                                     MoveListT *mvlist, int *cookie,
+                                     MoveList *mvlist, int *cookie,
                                      MoveT *hashMove)
 {
     PositionEvalT myEval = {EVAL_LOSS, EVAL_LOSS};
     int hashHitOnly = HASH_MISS;
     int i;
-    MoveT *move;
+    MoveT move;
 
-    for (i = *cookie; i < mvlist->lgh; i++)
+    for (i = *cookie; i < mvlist->NumMoves(); i++)
     {
-        move = &mvlist->moves[i];
+        move = mvlist->Moves(i);
 
         hashHitOnly = HASH_HIT; // assume the best case
         myEval = tryMove(board, move,
@@ -381,8 +381,8 @@ static PositionEvalT tryNextHashMove(BoardT *board, int alpha, int beta,
     {
         // We found a move, and 'evaluated' it. ...
         // Copy off and remove it.
-        *hashMove = *move; // struct assign
-        mlistMoveDelete(mvlist, i);
+        *hashMove = move; // struct assign
+        mvlist->DeleteMove(i);
         *cookie = i;
     }
     else
@@ -430,14 +430,14 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     MoveT bestMove;
     PositionEvalT retVal;
     int masterNode;  // multithread support.
-    MoveT *move;
+    MoveT move;
     int preEval, improvement, i, secondBestVal;
     int cookie;
     PositionEvalT myEval;
     int newVal;
     UnMakeT unmake;
     PvT newPv;
-    MoveListT mvlist;
+    MoveList mvlist;
     int strgh;
     uint16 basePly = board->ply - board->depth;
 
@@ -531,7 +531,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
                       basePly, alpha, beta))
     {
         // record the move (if there is one).
-        updatePv(board, goodPv, NULL, &hashMove, hashEval.lowBound);
+        updatePv(board, goodPv, NULL, hashMove, hashEval.lowBound);
         return hashEval;
     }
     if (hashHitOnly != NULL)
@@ -542,18 +542,18 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     }
 
     gStats.moveGenNodes++;
-    if (board->depth || !th->searchArgs.mvlist.lgh)
+    if (board->depth || !th->searchArgs.mvlist.NumMoves())
     {
-        mlistGenerate(&mvlist, board, QUIESCING && ncheck == FLAG);
+        mvlist.GenerateLegalMoves(*board, QUIESCING && ncheck == FLAG);
     }
     else
     {
-        memcpy(&mvlist, &th->searchArgs.mvlist, sizeof(MoveListT));
+        mvlist = th->searchArgs.mvlist;
     }
-    LOGMOVELIST_DEBUG(&mvlist);
+    MOVELIST_LOGDEBUG(mvlist);
 
-    /* bestMove must be initialized before we goto out. */
-    bestMove = gMoveNone; // struct assign
+    // bestMove must be initialized before we goto out.
+    bestMove = MoveNone; // struct assign
 
     if (QUIESCING &&
         board->pieceList[Piece(0, PieceType::Pawn).ToIndex()].lgh == 0 &&
@@ -573,11 +573,11 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 
     /* Note:  ncheck for any side guaranteed to be correct *only* after
        the other side has made its move. */
-    if (!(mvlist.lgh))
+    if (!mvlist.NumMoves())
     {
         strgh =
-            ncheck != FLAG ? EVAL_LOSS : /* checkmate detected */
-            !QUIESCING ? 0 : /* stalemate detected */
+            ncheck != FLAG ? EVAL_LOSS : // checkmate detected
+            !QUIESCING     ? 0 :         // stalemate detected
             strgh;
         SET_BOUND(strgh, strgh);
         goto out;
@@ -593,10 +593,10 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
         }
 
         alpha = MAX(strgh, alpha);
-        if (mvlist.lgh > 1)
+        if (mvlist.NumMoves() > 1)
         {
-            mlistSortByCap(&mvlist, board);
-            LOGMOVELIST_DEBUG(&mvlist);
+            mvlist.SortByCapWorth(*board);
+            MOVELIST_LOGDEBUG(mvlist);
         }
 
         // If we find no better moves ...
@@ -610,7 +610,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
             gVars.pv.moves[board->depth].src != FLAG)
         {
             // Try the principal variation move (if applicable) first.
-            mlistFirstMove(&mvlist, &gVars.pv.moves[board->depth]);
+            mvlist.UseAsFirstMove(gVars.pv.moves[board->depth]);
         }
 
         // Save board position for later draw detection, if applicable.
@@ -632,7 +632,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     masterNode = 0;
 #endif
 
-    move = NULL;
+    move = MoveNone;
 
     if (searchDepth == 1)
     {
@@ -645,16 +645,16 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
            and then run out of time before evaluating the good move we meant
            to pick. */
         board->depth != 0 &&
-        mvlist.lgh > 1 ? 0 : -1;
+        mvlist.NumMoves() > 1 ? 0 : -1;
 #else // disables trying hashed moves first.
     cookie = -1;
 #endif
 
     for (i = 0, secondBestVal = alpha;
-         i < mvlist.lgh || (masterNode && ThinkerSearchersSearching());
+         i < mvlist.NumMoves() || (masterNode && ThinkerSearchersSearching());
          i++)
     {
-        assert(i <= mvlist.lgh);
+        assert(i <= mvlist.NumMoves());
 
         if (cookie > -1)
         {
@@ -664,7 +664,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
                                      &mvlist, &cookie, &hashMove);
             if (cookie == -1) /* no move found? */
                 continue;
-            move = &hashMove;
+            move = hashMove;
             /* Otherwise, use this myEval/move combination to adjust our
                variables. */
         }
@@ -675,29 +675,29 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
         {
             if (i == 0)
             {
-                LOG_DEBUG("bldbg: comp1\n");
+                // LOG_DEBUG("bldbg: comp1\n");
                 // First move is special (for PV).  We process it (almost)
                 // normally.
-                move = &mvlist.moves[i];
+                move = mvlist.Moves(i);
                 ThinkerSearchersMoveMake(move, &unmake, mightDraw);
                 myEval = tryMove(board, move, alpha, beta, &newPv, th, NULL);
                 ThinkerSearchersMoveUnmake(&unmake);
             }
-            else if (i < mvlist.lgh &&  // have a move to search?
+            else if (i < mvlist.NumMoves() &&  // have a move to search?
                      // have someone to delegate it to?
-                     ThinkerSearcherGetAndSearch(alpha, beta, &mvlist.moves[i]))
+                     ThinkerSearcherGetAndSearch(alpha, beta, mvlist.Moves(i)))
             {
                 // We delegated it successfully.
-                LOG_DEBUG("bldbg: comp2\n");
+                // LOG_DEBUG("bldbg: comp2\n");
                 continue;
             }
             else 
             {
-                LOG_DEBUG("bldbg: comp3\n");
+                // LOG_DEBUG("bldbg: comp3\n");
                 // Either do not have a move to search, or
                 // nobody to search on it.  Wait for an eval to become
                 // available.
-                LOG_DEBUG("bldbg: comp3.5\n");
+                // LOG_DEBUG("bldbg: comp3.5\n");
                 myEval = ThinkerSearchersWaitOne(&move, &newPv);
                 i--; // this counters i++
             }
@@ -705,10 +705,10 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
         else
         {
             // Normal search.
-            move = &mvlist.moves[i];
+            move = mvlist.Moves(i);
 
             if ((QUIESCING || (searchDepth < 2 && !mightDraw)) &&
-                move->chk == FLAG &&
+                move.chk == FLAG &&
                 ((preEval =
                   BoardCapWorthCalc(board, move) + strgh + improvement)
                  <= alpha))
@@ -738,10 +738,10 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
                    already.
                 */
 
-                if (i >= mvlist.insrt - 1)
+                if (!mvlist.IsPreferredMove(i + 1))
                 {
-                    /* ... in this case, the other moves will not help either,
-                       so... */
+                    // ... in this case, the other moves will not help either,
+                    //  so...
                     break;
                 }
                 continue;
@@ -778,10 +778,10 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 
         if (newVal > alpha)
         {
-            bestMove = *move; // struct assign
+            bestMove = move; // struct assign
             alpha = newVal;
 
-            updatePv(board, goodPv, &newPv, &bestMove, newVal);
+            updatePv(board, goodPv, &newPv, bestMove, newVal);
 
             if (newVal >= beta) // ie, will leave other side just as bad
                                 // off (if not worse)
@@ -791,7 +791,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
                     ThinkerSearchersBail();
                     retVal.highBound = EVAL_WIN;
                 }
-                else if (cookie != -1 || i != mvlist.lgh - 1)
+                else if (cookie != -1 || i != mvlist.NumMoves() - 1)
                 {
                     retVal.highBound = EVAL_WIN;
                 }
@@ -824,7 +824,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
         (MoveIsCastle(bestMove) || // castling is not currently preferred
          board->coord[bestMove.dst].IsEmpty()))
     {
-        assert(bestMove.src != FLAG); // aka gMoveNone.src
+        assert(bestMove.src != FLAG); // aka MoveNone.src
         /* move is at least one point better than others. */
         gVars.hist[turn]
             [bestMove.src] [bestMove.dst] = board->ply;
@@ -885,9 +885,9 @@ static void computermove(ThinkContextT *th, bool bPonder)
     PvT pv;
     BoardT *board = &th->searchArgs.localBoard;
     int resigned = 0;
-    MoveListT mvlist;
+    MoveList mvlist;
     UnMakeT unmake;
-    MoveT *move = pv.moves;
+    MoveT move = MoveNone;
     bool bWillDraw = false;
 
     // Do impose some kind of max search depth to prevent a tight loop (and a
@@ -896,7 +896,7 @@ static void computermove(ThinkContextT *th, bool bPonder)
     // searches would be futile, I would implement it.
     int maxSearchDepth = gVars.maxLevel == NO_LIMIT ? 100 : gVars.maxLevel;
 
-    move->src = FLAG;
+    pv.moves[0] = MoveNone;
     board->depth = 0;   // start search from root depth.
 
     // Clear stats.
@@ -914,25 +914,25 @@ static void computermove(ThinkContextT *th, bool bPonder)
         BoardRandomize(board);
     }
 
-    mlistGenerate(&mvlist, board, 0);
-
+    mvlist.GenerateLegalMoves(*board, false);
+    
     if (!bPonder &&
 
         // only one move to make -- do not think about it.
-        (mvlist.lgh == 1 ||
+        (mvlist.NumMoves() == 1 ||
 
          // Special case optimization (normal game, 1st move).
          // The move is not worth thinking about any further.
          BoardIsNormalStartingPosition(board)))
     {
-        *move = mvlist.moves[0]; // struct assign
+        move = mvlist.Moves(0); // struct assign
     }
     else
     {
         // Use the principal variation move (if it exists) if we run out of
         // time before we figure out a move to recommend.
-        mlistFirstMove(&mvlist, gVars.pv.moves);
-
+        mvlist.UseAsFirstMove(gVars.pv.moves[0]);
+        
         // setup known search parameters across the slaves.
         ThinkerSearchersBoardSet(board);
 
@@ -995,7 +995,9 @@ static void computermove(ThinkContextT *th, bool bPonder)
                 break;
             }
         }
+
         board->level = 0; /* reset board->level */
+        move = pv.moves[0];
     }
 
     ThinkerRspNotifyStats(th, &gStats);
@@ -1010,9 +1012,9 @@ static void computermove(ThinkContextT *th, bool bPonder)
     // pondering and side to move is about to be checkmated, for instance)
     // For the former, we cannot assume we are in a lost position.
     // In either case, just use the first move.
-    if (move->src == FLAG)
+    if (move.src == FLAG)
     {
-        *move = mvlist.moves[0]; // struct assign
+        move = mvlist.Moves(0); // struct assign
     }
 
     /* If we can draw after this move, do so. */
@@ -1034,14 +1036,12 @@ static void computermove(ThinkContextT *th, bool bPonder)
 static void *searcherThread(SearcherArgsT *args)
 {
     BoardT *board;
-    MoveT *move;
     ThinkContextT *th = args->th;
 
     ThreadNotifyCreated("searcherThread", (ThreadArgsT *) args);
 
     // Shorthand.
     board = &th->searchArgs.localBoard;
-    move = &th->searchArgs.move;
 
     // We cycle, basically:
     // -- waiting on a board position/move combo from the compThread
@@ -1056,7 +1056,8 @@ static void *searcherThread(SearcherArgsT *args)
 
         // Make the appropriate move, bump depth etc.
         th->searchArgs.eval =
-            tryMove(board, move,
+            tryMove(board,
+                    th->searchArgs.move,
                     th->searchArgs.alpha,
                     th->searchArgs.beta,
                     &th->searchArgs.pv,

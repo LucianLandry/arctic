@@ -20,11 +20,9 @@
 
 #include "board.h"
 #include "move.h"
-#include "moveList.h"
+#include "MoveList.h"
 #include "uiUtil.h"
 #include "variant.h"
-
-const MoveT gMoveNone = {FLAG, 0, PieceType::Empty, 0};
 
 // Pull information about whose turn it is from this move.
 // It only works for castling moves!
@@ -180,7 +178,7 @@ static int moveToStringMnSAN(char *result, MoveT move, BoardT *board)
     bool isPromote =
         move.promote != PieceType::Empty && move.promote != PieceType::Pawn;
     bool sameFile = true, sameRank = true;
-    MoveListT mvlist;
+    MoveList mvlist;
 
     if (!myPiece.IsPawn())
         // Print piece (type) to move.
@@ -189,21 +187,21 @@ static int moveToStringMnSAN(char *result, MoveT move, BoardT *board)
         // Need to spew the file we are capturing from.
         sanStr += sprintf(sanStr, "%c", AsciiFile(src));
 
-    mlistGenerate(&mvlist, board, 0);
+    mvlist.GenerateLegalMoves(*board, false);
 
     // Is there ambiguity about which piece will be moved?
-    for (i = 0; i < mvlist.lgh; i++)
+    for (i = 0; i < mvlist.NumMoves(); i++)
     {
         if (!myPiece.IsPawn() && // already taken care of, above
-            mvlist.moves[i].src != src &&
-            mvlist.moves[i].dst == dst &&
-            coord[mvlist.moves[i].src] == myPiece)
+            mvlist.Moves(i).src != src &&
+            mvlist.Moves(i).dst == dst &&
+            coord[mvlist.Moves(i).src] == myPiece)
         {
             // Yes.  Note: both conditions could easily be true.
             if (sameFile)
-                sameFile = File(mvlist.moves[i].src) == File(src);
+                sameFile = File(mvlist.Moves(i).src) == File(src);
             if (sameRank)
-                sameRank = Rank(mvlist.moves[i].src) == Rank(src);
+                sameRank = Rank(mvlist.Moves(i).src) == Rank(src);
         }
     }
 
@@ -231,10 +229,10 @@ static int moveToStringMnSAN(char *result, MoveT move, BoardT *board)
 
 static bool moveIsLegal(MoveT move, BoardT *board)
 {
-    MoveListT moveList;
+    MoveList moveList;
 
-    mlistGenerate(&moveList, board, 0);
-    return mlistSearch(&moveList, &move, 4) != NULL;
+    moveList.GenerateLegalMoves(*board, false);
+    return moveList.Search(move) != NULL;
 }
 
 char *MoveToString(char *result,
@@ -254,7 +252,7 @@ char *MoveToString(char *result,
     {
         // With our hashing scheme, we may end up with moves that are not
         //  legal, but we should never end up with moves that are not sane
-        //  (except possibly gMoveNone).
+        //  (except possibly MoveNone).
         // We still may want to print such a move before we assert (or
         //  whatever).
         return moveToStringInsane(result, move);
@@ -308,16 +306,16 @@ char *MoveToString(char *result,
     if (showCheck && move.chk != FLAG)
     {
         bool isMate = false;
-        MoveListT mvlist;
+        MoveList mvlist;
         UnMakeT unmake;
 
         if (board != NULL)
         {
             // Piece in check.  Is this checkmate?
-            BoardMoveMake(board, &move, &unmake);
-            mlistGenerate(&mvlist, board, 0);
+            BoardMoveMake(board, move, &unmake);
+            mvlist.GenerateLegalMoves(*board, false);
             BoardMoveUnmake(board, &unmake);
-            isMate = (mvlist.lgh == 0);
+            isMate = (mvlist.NumMoves() == 0);
         }
 
         moveStr += sprintf(moveStr, "%c", isMate ? '#' : '+');

@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                          clock.c - clock control
+//                         clock.cpp - clock control
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com

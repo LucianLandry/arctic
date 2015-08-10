@@ -62,8 +62,11 @@ typedef struct BoardS {
                      // (NOTE: this is not always the case; some edited
                      //  positions might have black to move first.)
 
-    int ncheck[NUM_PLAYERS]; // Says if either side is currently in check.
-
+    // Says if either side is currently in check.
+    // actually follows FLAG:coord:DOUBLE_CHECK convention.
+    // Read: no check, check, doublecheck.
+    cell_t ncheck[NUM_PLAYERS];
+    
     // This is a way to quickly look up the number and location of any
     // type of piece on the board.
     CoordListT pieceList[kMaxPieces];
@@ -142,7 +145,7 @@ typedef struct {
 void BoardInit(BoardT *board);
 
 // 'unmake' is filled in by BoardMakeMove() and used by BoardUnmakeMove().
-void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake);
+void BoardMoveMake(BoardT *board, MoveT move, UnMakeT *unmake);
 void BoardMoveUnmake(BoardT *board, UnMakeT *unmake);
 int BoardSanityCheck(BoardT *board, int silent);
 int BoardConsistencyCheck(BoardT *board, const char *failString, int checkz);
@@ -192,15 +195,15 @@ static inline bool BoardPositionHit(BoardT *board, uint64 zobrist)
 // slightly slower.
 bool BoardPositionsSame(BoardT *b1, BoardT *b2);
 
-int BoardCapWorthCalc(BoardT *board, MoveT *move);
+int BoardCapWorthCalc(const BoardT *board, MoveT move);
 
 // These functions only (obviously) return whether it *may be* possible to
 // castle now or in the future.
-static inline bool BoardCanCastleOO(BoardT *board, int turn)
+static inline bool BoardCanCastleOO(const BoardT *board, int turn)
 {
     return (board->cbyte >> turn) & CASTLEOO;
 }
-static inline bool BoardCanCastleOOO(BoardT *board, int turn)
+static inline bool BoardCanCastleOOO(const BoardT *board, int turn)
 {
     return (board->cbyte >> turn) & CASTLEOOO;
 }

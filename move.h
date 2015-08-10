@@ -22,10 +22,6 @@
 #include "ref.h"
 #include "Piece.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // Our basic structure for representing a chess move.
 // The normal convention will be to try to pass around MoveTs by structure
 //  (not with pointers) because doing so should be cheaper (4 bytes vs 8 bytes
@@ -38,7 +34,8 @@ extern "C" {
 //  and the notation is portable across chess variants.  We mask in 'turn'
 //  because it becomes easier to convert back to other notations.
 
-typedef struct {
+struct MoveT
+{
     cell_t src;    // For a null/invalid move, src = FLAG (and the contents
                    //  of the other fields are undefined.)
     cell_t dst;
@@ -52,8 +49,23 @@ typedef struct {
                    // FLAG if not a checking move.
                    // Coordinate of checking piece, if single check
                    // DOUBLE_CHECK otherwise.
-} MoveT;
+                   // (this is the same convention as BoardT->ncheck[])
+    inline bool operator==(const MoveT &other) const
+    {
+        return
+            *reinterpret_cast<const uint32 *>(this) ==
+            *reinterpret_cast<const uint32 *>(&other);
+    }
+    // Empirically, overloading operator= similarly to "force" integer compares
+    //  does not appear to work well at all.
+};
 
+static_assert(sizeof(uint32) == sizeof(MoveT),
+              "MoveT.operator== is broken");
+    
+// "No" move (fails moveIsSane(), so do not try to print it)
+const MoveT MoveNone = {FLAG, 0, PieceType::Empty, 0};
+    
 // Any stringified-move (including null terminator) is guaranteed to fit into
 // a char[MOVE_STRING_MAX].
 #define MOVE_STRING_MAX (20) // Need this length for insane strings (rounded
@@ -92,9 +104,6 @@ typedef struct {
 } MoveStyleT;
 
 struct BoardS; // forward declaration
-
-// "No" move (fails moveIsSane(), so do not try to print it)
-extern const MoveT gMoveNone;
 
 // Syntactic sugar.
 void MoveStyleSet(MoveStyleT *style,
@@ -138,9 +147,5 @@ void MoveCreateFromCastle(MoveT *move, bool castleOO, int turn);
 //  just moving the king one space to the right.
 // Assumes we are 'unmangling' a move from the players whose turn it is.
 void MoveUnmangleCastle(MoveT *move, struct BoardS *board);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // MOVE_H

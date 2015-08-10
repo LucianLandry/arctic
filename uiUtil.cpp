@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                 uiUtil.c - UI-oriented utility functions.
+//                uiUtil.cpp - UI-oriented utility functions.
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -25,7 +25,7 @@
 #include "clockUtil.h"
 #include "gDynamic.h"
 #include "log.h"
-#include "moveList.h"
+#include "MoveList.h"
 #include "ui.h"
 #include "uiUtil.h"
 
@@ -420,7 +420,7 @@ bool isMove(char *inputStr, MoveT *resultMove, BoardT *board)
 // Currently we can only handle algebraic notation.
 bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
 {
-    MoveListT moveList;
+    MoveList moveList;
     MoveT *foundMove;
     uint8 chr;
 
@@ -429,10 +429,10 @@ bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
         return false;
     }
 
-    mlistGenerate(&moveList, board, 0);
+    moveList.GenerateLegalMoves(*board, false);
 
     // Search moveList for move.
-    if ((foundMove = mlistSearch(&moveList, resultMove, 2)) == NULL)
+    if ((foundMove = moveList.SearchSrcDst(*resultMove)) == NULL)
     {
         return false;
     }
@@ -449,15 +449,11 @@ bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
         Piece piece = asciiToNative(chr);
         resultMove->promote = piece.Type();
             
-        foundMove = mlistSearch(&moveList, resultMove, 3);
+        foundMove = moveList.SearchSrcDstPromote(*resultMove);
         assert(foundMove != NULL);
     }
-    else
-    {
-        resultMove->promote = foundMove->promote;
-    }
-    resultMove->chk = foundMove->chk;
 
+    *resultMove = *foundMove;
     return true;
 }
 

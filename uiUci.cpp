@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//           uiUci.c - UCI (Universal Chess Interface) interface.
+//          uiUci.cpp - UCI (Universal Chess Interface) interface.
 //                           -------------------
 //  copyright            : (C) 2009 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -77,7 +77,7 @@
 #include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
-#include "moveList.h"
+#include "MoveList.h"
 #include "playloop.h"
 #include "transTable.h"
 #include "ui.h"
@@ -113,7 +113,7 @@ static struct {
                           // What happens in reality is that if we do stop
                           // searching, we cache the search results and do not
                           // inform the UI until it directs us to stop.
-    MoveListT searchList; // list of moves we are supposed to search on.
+    MoveList searchList;  // list of moves we are supposed to search on.
 
     // Cached results from the engine.
     struct {
@@ -182,7 +182,7 @@ static void uciInit(GameT *ignore)
 
     // gUciState is already cleared (since it is global).
     // Initialize whatever fields we need to.
-    gUciState.ponderMove = gMoveNone;
+    gUciState.ponderMove = MoveNone;
 
 #if 1 // bldbg: goes out for debugging
     // use random moves.
@@ -318,7 +318,7 @@ static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
     gVars.ponder = 0;
 
     gUciState.bBadPosition = false; // assume the best case
-    gUciState.ponderMove = gMoveNone;
+    gUciState.ponderMove = MoveNone;
     bFen = matches(pToken, "fen");
 
     if (!bFen && !matches(pToken, "startpos"))
@@ -383,7 +383,7 @@ static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
             return;
         }
         gUciState.ponderMove = myMove; // struct copy
-        BoardMoveMake(&fenBoard, &myMove, NULL);
+        BoardMoveMake(&fenBoard, myMove, NULL);
         if (SaveGameGotoPly(&game->sgame, fenBoard.ply, board, NULL) < 0 ||
             !BoardPositionsSame(board, &fenBoard))
         {
@@ -490,7 +490,7 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
 {
     MoveT myMove;
     BoardT *board = &game->savedBoard; // shorthand.
-    MoveListT searchList;
+    MoveList searchList;
     int i;
 
     // Some temp state.  These are all processed at once after the entire
@@ -507,8 +507,6 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
     int nodes = NO_LIMIT;
     int movetime = -1;
     int mate = -1;
-
-    memset(&searchList, 0, sizeof(MoveListT));
 
     if (gUciState.bSearching)
     {
@@ -535,7 +533,7 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
                  isLegalMove(findNextToken(pToken), &myMove, board);
                  pToken = findNextToken(pToken))
             {
-                mlistMoveAdd(&searchList, board, &myMove);
+                searchList.AddMove(*board, myMove);
             }
         }
         else if (matches(pToken, "ponder"))
@@ -626,9 +624,9 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
 
     // At this point we have a valid command.
     // Reset and/or transfer state.
-    memcpy(&gUciState.searchList, &searchList, sizeof(MoveListT));
-    gUciState.result.bestMove = gMoveNone;
-    gUciState.result.ponderMove = gMoveNone;
+    gUciState.searchList = searchList;
+    gUciState.result.bestMove = MoveNone;
+    gUciState.result.ponderMove = MoveNone;
     gUciState.bPonder = bPonder;
     gUciState.bInfinite = bInfinite;
 
@@ -799,7 +797,7 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
             gUciState.bGotUciNewGame = true;
             gUciState.initialTime[0] = 0;
             gUciState.initialTime[1] = 0;
-            gUciState.ponderMove = gMoveNone;
+            gUciState.ponderMove = MoveNone;
             GameNew(game, th);
         }
     }
@@ -849,7 +847,7 @@ static void uciNotifyMove(MoveT move)
 {
     char tmpStr[MOVE_STRING_MAX], tmpStr2[MOVE_STRING_MAX];
     MoveT ponderMove =
-        gUciState.result.ponderMove.src == FLAG ? gMoveNone :
+        gUciState.result.ponderMove.src == FLAG ? MoveNone :
         gUciState.result.ponderMove;
     bool bShowPonderMove = move.src != FLAG && ponderMove.src != FLAG;
 
@@ -882,7 +880,7 @@ static void uciNotifyDraw(const char *reason, MoveT *move)
     // a draw but my opponent can, what is my best move".
     printf("info string engine claims a draw (reason: %s)\n", reason);
     uciNotifyMove(move != NULL && move->src != FLAG ? *move :
-                  gMoveNone);
+                  MoveNone);
 }
 
 
@@ -892,7 +890,7 @@ static void uciNotifyResign(int turn)
     // Since our resignation threshold is so low, we normally do not "resign"
     // unless we are actually mated.
     printf("info string engine (turn %d) resigns\n", turn);
-    uciNotifyMove(gMoveNone);
+    uciNotifyMove(MoveNone);
 }
 
 
@@ -942,7 +940,7 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
     // Save away a next move to ponder on, if possible.
     gUciState.result.ponderMove =
         pv->moves[0].src != FLAG && pv->moves[1].src != FLAG ?
-        pv->moves[1] : gMoveNone;
+        pv->moves[1] : MoveNone;
 
     if (gUciState.bPonder)
     {
@@ -950,7 +948,7 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
         // do not advertise the PV (to avoid confusing the UI).
         // (If the UI is mean and tries to make us ponder on the first move,
         // this just means we will never display the PV since ponderMove ==
-        // gMoveNone)
+        // MoveNone)
         if (memcmp(&pv->moves[0], &gUciState.ponderMove, sizeof(MoveT)))
         {
             bDisplayPv = false;

@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//              gPreCalc.c - all constant (or init-time) globals.
+//            gPreCalc.cpp - all constant (or init-time) globals.
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -57,7 +57,7 @@ static Piece gNormalStartingPieces[NUM_SQUARES] =
 };
 
 
-static uint8 gAllNormalMoves[512 /* yes, this is the exact size needed */] =  {
+static cell_t gAllNormalMoves[512 /* yes, this is the exact size needed */] =  {
     /* 0 (northwest) direction */
     FLAG,
     8, FLAG,
@@ -170,13 +170,13 @@ static uint8 gAllNormalMoves[512 /* yes, this is the exact size needed */] =  {
 
 /* This is split equally between best night moves for white from a given
    coord, and best moves for black. */
-static uint8 gAllNightMoves[800];
+static cell_t gAllKnightMoves[800];
 
 
 /* contains (up to) 4 valid squares of advancement: 2 capture squares (if
    valid), then any valid e2e4-like move, then the appropriate e2e3 move.
    Each side uses a different set of squares. */
-static uint8 gAllPawnMoves[4 * NUM_SQUARES * 2];
+static cell_t gAllPawnMoves[4 * NUM_SQUARES * 2];
 
 
 /* Note how we already need to have calculated rook and bishop moves. */
@@ -215,7 +215,7 @@ static int calcPawnMoves(uint8 *idx, int coord, int turn)
 }
 
 
-static int whiteGoodNightMove(uint8 *el1, uint8 *el2)
+static int whiteGoodKnightMove(uint8 *el1, uint8 *el2)
 {
     int rankDiff = Rank(*el1) - Rank(*el2);
     return rankDiff != 0 ? -rankDiff : /* higher rank comes first for White */
@@ -226,7 +226,7 @@ static int whiteGoodNightMove(uint8 *el1, uint8 *el2)
 }
 
 
-static int blackGoodNightMove(uint8 *el1, uint8 *el2)
+static int blackGoodKnightMove(uint8 *el1, uint8 *el2)
 {
     int rankDiff = Rank(*el1) - Rank(*el2);
     return rankDiff != 0 ? rankDiff : /* lower rank comes first for Black */
@@ -242,7 +242,7 @@ typedef int (*QSORTFUNC)(const void *, const void *);
 
 /* Calculates night moves for 'coord' and 'turn' (in preferred order).
    Returns number of moves (+ FLAG) copied into 'moveArray'. */
-static int calcNightMoves(uint8 *moveArray, int coord, int turn)
+static int calcKnightMoves(uint8 *moveArray, int coord, int turn)
 {
     uint8 myMoves[9];
     uint8 *ptr = myMoves;
@@ -266,7 +266,7 @@ static int calcNightMoves(uint8 *moveArray, int coord, int turn)
 
     /* sort moves according to what will probably be best. */
     qsort(myMoves, ptr - myMoves, sizeof(uint8),
-          (QSORTFUNC) (turn ? blackGoodNightMove : whiteGoodNightMove));
+          (QSORTFUNC) (turn ? blackGoodKnightMove : whiteGoodKnightMove));
 
     *(ptr++) = FLAG; /* terminate 'myMoves'. */
 
@@ -385,7 +385,7 @@ uint64 random64(void)
 void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
 {
     int i, d, j;
-    uint8 *ptr = gAllNormalMoves;
+    cell_t *ptr = gAllNormalMoves;
 
     /* initialize moves array. */
     for (d = 0; d < 8; d++) /* d signifies direction */
@@ -406,16 +406,16 @@ void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
     }
 
     /* Calculate knight-move arrays.  Can reuse ptr. */
-    ptr = gAllNightMoves;
+    ptr = gAllKnightMoves;
     for (i = 0; i < NUM_PLAYERS; i++)
     {
         for (j = 0; j < NUM_SQUARES; j++)
         {
             gPreCalc.moves[8 + i] [j] = ptr;
-            ptr += calcNightMoves(ptr, j, i);
+            ptr += calcKnightMoves(ptr, j, i);
         }
     }
-    assert(ptr = gAllNightMoves + sizeof(gAllNightMoves));
+    assert(ptr = gAllKnightMoves + sizeof(gAllKnightMoves));
 
     /* Calculate pawn-move arrays.  Can reuse ptr. */
     ptr = gAllPawnMoves;

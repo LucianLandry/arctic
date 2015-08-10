@@ -19,7 +19,7 @@
 
 #include "aTypes.h"
 #include "board.h"
-#include "moveList.h"
+#include "move.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,19 +31,19 @@ typedef enum {
     eLogDebug
 } LogLevelT;
 
-// private, should not be used by outside modules.
-extern int gLogLevel;
+// private, should not be used by outside modules.  Use LogLevel() instead.
+extern LogLevelT gLogLevel;
 
 void LogInit(void);
-void LogSetLevel(int level);
+static inline LogLevelT LogLevel(void);
+void LogSetLevel(LogLevelT level);
 void LogFlush(void);
-int LogPrint(int level, const char *format, ...)
+int LogPrint(LogLevelT level, const char *format, ...)
     __attribute__ ((format (printf, 2, 3)));
-void LogMoveShow(int level, BoardT *board, MoveT *move, const char *caption);
-void LogPieceList(BoardT *board);
-void LogMoveList(int level, MoveListT *mvlist);
-void LogMove(int level, BoardT *board, MoveT *move);
-void LogBoard(int level, BoardT *board);
+void LogMoveShow(LogLevelT level, const BoardT *board, MoveT move, const char *caption);
+void LogPieceList(const BoardT *board);
+void LogMove(LogLevelT level, const BoardT *board, MoveT move);
+void LogBoard(LogLevelT level, const BoardT *board);
 
 #define LOG_EMERG(format, ...) LogPrint(eLogEmerg, (format), ##__VA_ARGS__)
 
@@ -69,9 +69,6 @@ void LogBoard(int level, BoardT *board);
 #define LOGMOVE_DEBUG(board, move) \
     LogMove(eLogDebug, (board), (move))
 
-#define LOGMOVELIST_DEBUG(mvlist) \
-    LogMoveList(eLogDebug, (mvlist))
- 
 #else // !ENABLE_DEBUG_LOGGING
 
 #define LOG_DEBUG(format, ...)
@@ -80,6 +77,11 @@ void LogBoard(int level, BoardT *board);
 
 #endif // ifdef ENABLE_DEBUG_LOGGING
 
+static inline LogLevelT LogLevel(void)
+{
+    return gLogLevel;
+}
+    
 #ifdef __cplusplus
 }
 #endif

@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                playloop.c - main loop and support routines.
+//               playloop.cpp - main loop and support routines.
 //                           -------------------
 //  copyright            : (C) 2008 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com

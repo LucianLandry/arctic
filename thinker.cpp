@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//           thinker.c - chess-oriented message passing interface
+//          thinker.cpp - chess-oriented message passing interface
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -65,28 +65,34 @@ typedef struct {
 
 static SearcherGroupT gSG;
 
-// Initialize a given ThinkContentT.
+// Initialize a given SearchArgsT.
+void SearchArgsInit(SearchArgsT *sa)
+{
+    SaveGameInit(&sa->sgame);
+    BoardInit(&sa->localBoard);
+    sa->alpha = EVAL_LOSS;
+    sa->beta = EVAL_WIN;
+    // mvlist has its own constructor.
+    sa->move = MoveNone;
+    PvInit(&sa->pv);
+    sa->eval = (PositionEvalT) {EVAL_LOSS, EVAL_WIN};
+}
+
+// Initialize a given ThinkContextT.
 void ThinkerInit(ThinkContextT *th)
 {
     int err;
     int socks[2];
-
-    memset(th, 0, sizeof(ThinkContextT));
 
     err = socketpair(PF_UNIX, SOCK_STREAM, 0, socks);
     assert(err == 0);
 
     th->masterSock = socks[0];
     th->slaveSock = socks[1];
-
-    BoardInit(&th->searchArgs.localBoard);
-    SaveGameInit(&th->searchArgs.sgame);
-    // These should not be really necessary, but for completeness' sake...
-    th->searchArgs.alpha = EVAL_LOSS;
-    th->searchArgs.beta = EVAL_WIN;
-    th->searchArgs.move = gMoveNone;
-    PvInit(&th->searchArgs.pv);
-    th->searchArgs.eval = (PositionEvalT) {EVAL_LOSS, EVAL_WIN};
+    th->isThinking = false;
+    th->isPondering = false;
+    th->isSearching = false;
+    SearchArgsInit(&th->searchArgs);
 }
 
 
@@ -190,10 +196,10 @@ static eThinkMsgT compRecv(int sock, ThinkContextT *th,
     if (msg == eRspDraw || msg == eRspMove || msg == eRspResign ||
         msg == eRspSearchDone)
     {
-        th->isThinking = 0;
-        th->isPondering = 0;
-        th->isSearching = 0;
-        th->moveNow = 0;
+        th->isThinking = false;
+        th->isPondering = false;
+        th->isSearching = false;
+        th->moveNow = false;
     }
     return msg;
 }
@@ -220,7 +226,7 @@ void ThinkerCmdSearch(ThinkContextT *th, int alpha, int beta, MoveT move)
     th->searchArgs.alpha = alpha;
     th->searchArgs.beta = beta;
     th->searchArgs.move = move;
-    th->isSearching = 1;
+    th->isSearching = true;
 
     compSendCmd(th, eCmdSearch);
 }
@@ -238,7 +244,7 @@ void ThinkerCmdBoardSet(ThinkContextT *th, BoardT *board)
 
 
 static void doThink(ThinkContextT *th, eThinkMsgT cmd, BoardT *board,
-                    SaveGameT *sgame, MoveListT *mvlist)
+                    SaveGameT *sgame, MoveList *mvlist)
 {
     // If we were previously thinking, just start over.
     ThinkerCmdBail(th);
@@ -251,28 +257,24 @@ static void doThink(ThinkContextT *th, eThinkMsgT cmd, BoardT *board,
     SaveGameCopy(&th->searchArgs.sgame, sgame);
 
     if (mvlist != NULL)
-    {
-        memcpy(&th->searchArgs.mvlist, mvlist, sizeof(th->searchArgs.mvlist));
-    }
+        th->searchArgs.mvlist = *mvlist;
     else
-    {
-        memset(&th->searchArgs.mvlist, 0, sizeof(th->searchArgs.mvlist));
-    }
-
+        th->searchArgs.mvlist.DeleteAllMoves();
+    
     if (cmd == eCmdThink)
     {
-        th->isThinking = 1;
+        th->isThinking = true;
     }
     else
     {
         assert(cmd == eCmdPonder);
-        th->isPondering = 1;
+        th->isPondering = true;
     }
     compSendCmd(th, cmd);
 }
 
 void ThinkerCmdThinkEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
-                       MoveListT *mvlist)
+                       MoveList *mvlist)
 {
     return doThink(th, eCmdThink, board, sgame, mvlist);
 }
@@ -283,7 +285,7 @@ void ThinkerCmdThink(ThinkContextT *th, BoardT *board, SaveGameT *sgame)
 }
 
 void ThinkerCmdPonderEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
-                        MoveListT *mvlist)
+                        MoveList *mvlist)
 {
     return doThink(th, eCmdPonder, board, sgame, mvlist);
 }
@@ -302,7 +304,7 @@ void ThinkerCmdMoveNow(ThinkContextT *th)
 {
     if (ThinkerCompIsBusy(th))
     {
-        th->moveNow = 1;
+        th->moveNow = true;
         // I do not think this is necessary until we try to support clustering.
         // compSendCmd(th, eCmdMoveNow);
     }
@@ -327,15 +329,15 @@ void ThinkerCmdBail(ThinkContextT *th)
 }
 
 
-void ThinkerRspDraw(ThinkContextT *th, MoveT *move)
+void ThinkerRspDraw(ThinkContextT *th, MoveT move)
 {
-    compSendRsp(th, eRspDraw, move, sizeof(MoveT));
+    compSendRsp(th, eRspDraw, &move, sizeof(MoveT));
 }
 
 
-void ThinkerRspMove(ThinkContextT *th, MoveT *move)
+void ThinkerRspMove(ThinkContextT *th, MoveT move)
 {
-    compSendRsp(th, eRspMove, move, sizeof(MoveT));
+    compSendRsp(th, eRspMove, &move, sizeof(MoveT));
 }
 
 
@@ -414,12 +416,12 @@ static ThinkContextT *searcherGet(void)
 }
 
 // Returns (bool) if we successfully delegated a move.
-int ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT *move)
+int ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT move)
 {
     if (gSG.numSearching < gSG.count)
     {
         // Delegate a move.
-        ThinkerCmdSearch(searcherGet(), alpha, beta, *move);
+        ThinkerCmdSearch(searcherGet(), alpha, beta, move);
         gSG.numSearching++;
         return 1;
     }
@@ -429,7 +431,7 @@ int ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT *move)
 // The purpose of ThinkerSearchersMove(Un)[Mm]ake() is to keep all all
 // search threads' boards in lock-step with the 'masterNode's board.  All moves
 // but the PV are delegated to a searcher thread even on a uni-processor.
-void ThinkerSearchersMoveMake(MoveT *move, UnMakeT *unmake, int mightDraw)
+void ThinkerSearchersMoveMake(MoveT move, UnMakeT *unmake, int mightDraw)
 {
     int i;
     BoardT *localBoard;
@@ -487,10 +489,10 @@ static int searcherWaitOne(void)
     return -1;
 }
 
-PositionEvalT ThinkerSearchersWaitOne(MoveT **move, PvT *pv)
+PositionEvalT ThinkerSearchersWaitOne(MoveT *move, PvT *pv)
 {
     SearchArgsT *sa = &gSG.th[searcherWaitOne()].searchArgs;
-    *move = &sa->move;
+    *move = sa->move;
     memcpy(pv, &sa->pv,
            sizeof(PvT) + (sizeof(MoveT) * (sa->pv.depth + 1 - MAX_PV_DEPTH)));
     return sa->eval;

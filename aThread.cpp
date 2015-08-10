@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                       aThread.c - thread wrapper.
+//                       aThread.cpp - thread wrapper.
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com

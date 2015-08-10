@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                  transTable.c - Transposition table support.
+//                 transTable.cpp - Transposition table support.
 //                           -------------------
 //  copyright            : (C) 2012 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -179,7 +179,7 @@ static void resetEntries(void)
 
     memset(&newHashEntry, 0, sizeof(newHashEntry));
     newHashEntry.depth = HASH_NOENTRY;
-    newHashEntry.move = gMoveNone;
+    newHashEntry.move = MoveNone;
 
     for (i = 0; i < gHash.numEntries; i++)
     {
@@ -424,7 +424,7 @@ void TransTableConditionalUpdate(PositionEvalT eval, MoveT move, uint64 zobrist,
 
         vHp->zobrist = zobrist;
         vHp->eval = eval;
-        vHp->move = move; // may be gMoveNone
+        vHp->move = move; // may be MoveNone
 
         if (((volatile HashPositionT *)vHp)->basePly != basePly)
         {

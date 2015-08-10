@@ -50,6 +50,7 @@ Converted most files to .cpp and made buildable under clang++.  (~5% speedup)
 Refactored Pieces into their own class. (~1.2% slowdown)
 Bugfix: fixed futility check (potentialImprovement() looked at wrong player's
         pieces)
+Refactored MoveList (removed MLIST_MAX_MOVES limit) (7% slowdown).
 
 Version 10:
 Implemented depth-1 futility pruning.

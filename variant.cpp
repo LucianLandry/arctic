@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                 variant.c - (rudimentary) variant support
+//                variant.cpp - (rudimentary) variant support
 //                           -------------------
 //  copyright            : (C) 2013 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com

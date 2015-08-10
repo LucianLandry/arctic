@@ -47,11 +47,21 @@ Documentation is at http://www.cmake.org.
 -------------------------------------------------------------------------------
 
 PROFILING:
-Two options:
-1) go into CMakeLists.txt, set the profiling options, build+run, then run gprof
-   on the output.
-2) perf record -g ./arctic; perf report > (reportfile)
+Two options.
+1) Perf events.  This is preferred; you don't need particularly special compile
+    flags and it runs faster.  With 'perf report' you can drill down into
+    a function and match the offending assembly back to the original line of
+    source code, including inlined functions. (although I am not sure how
+    accurate that is.)
+   Specifying -fno-omit-frame-pointer might help to make finding callers more
+    accurate, and it's not that horrible of a performance penalty.
+   Example: perf record -g ./arctic -p=1 -h=0; perf report
 
+2) gprof.  Go into CMakeLists.txt, set the profiling options, build+run, then
+    run gprof on the output.  (the command takes awhile)
+   Example: gprof ./arctic gmon.out
+
+Not tried: valgrind/callgrind/etc.
 
 -------------------------------------------------------------------------------
 

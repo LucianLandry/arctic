@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                      log.h - debugging log support.
+//                     log.cpp - debugging log support.
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -21,9 +21,9 @@
 #include "log.h"
 #include "uiUtil.h"
 
-int gLogLevel = eLogNormal;
+LogLevelT gLogLevel = eLogNormal;
 static FILE *gLogFile = NULL;
-static const MoveStyleT gMoveStyleLog = { mnCAN, csK2, true};
+const MoveStyleT gMoveStyleLog = {mnCAN, csK2, true};
 
 void LogInit(void)
 {
@@ -34,7 +34,7 @@ void LogInit(void)
     // LogSetLevel(eLogDebug);
 }
 
-void LogSetLevel(int level)
+void LogSetLevel(LogLevelT level)
 {
     gLogLevel = level;
 }
@@ -44,7 +44,7 @@ void LogFlush(void)
     if (gLogFile) fflush(gLogFile);
 }
 
-int LogPrint(int level, const char *format, ...)
+int LogPrint(LogLevelT level, const char *format, ...)
 {
     va_list ap;
     int rv = 0;
@@ -60,25 +60,7 @@ int LogPrint(int level, const char *format, ...)
 }
 
 // debugging funcs.
-void LogMoveList(int level, MoveListT *mvlist)
-{
-    char tmpStr[MOVE_STRING_MAX];
-    int i;
-    if (level > gLogLevel)
-    {
-        return; /* no-op. */
-    }
-
-    LogPrint(level, "{mvlist lgh %d insrt %d co %d ",
-             mvlist->lgh, mvlist->insrt, mvlist->capOnly);
-    for (i = 0; i < mvlist->lgh; i++)
-    {
-        LogPrint(level, "%s ", MoveToString(tmpStr, mvlist->moves[i], &gMoveStyleLog, NULL));
-    }
-    LogPrint(level, "}\n");
-}
-
-void LogMove(int level, BoardT *board, MoveT *move)
+void LogMove(LogLevelT level, const BoardT *board, MoveT move)
 {
     int moveDepth;
     Piece capPiece;
@@ -96,7 +78,7 @@ void LogMove(int level, BoardT *board, MoveT *move)
 
     // optimization: do all initialization after gLogLevel check.
     myLevelstr = levelstr;
-    capPiece = board->coord[move->dst];
+    capPiece = board->coord[move.dst];
     capstr[0] = '\0';
     promostr[0] = '\0';
     chkstr[0] = '\0';
@@ -110,24 +92,24 @@ void LogMove(int level, BoardT *board, MoveT *move)
     {
         sprintf(capstr, "(x%c)", nativeToAscii(capPiece));
     }
-    if (move->promote != PieceType::Empty && move->promote != PieceType::Pawn)
+    if (move.promote != PieceType::Empty && move.promote != PieceType::Pawn)
     {
-        sprintf(promostr, "(->%c)", nativeToAscii(Piece(0, move->promote)));
+        sprintf(promostr, "(->%c)", nativeToAscii(Piece(0, move.promote)));
     }
-    if (move->chk != FLAG)
+    if (move.chk != FLAG)
     {
         sprintf(chkstr, "(chk-%c%c)",
-                AsciiFile(move->chk), AsciiRank(move->chk));
+                AsciiFile(move.chk), AsciiRank(move.chk));
     }
     LogPrint(level, "%s%s%s%s%s\n",
              levelstr,
-             MoveToString(tmpStr, *move, &gMoveStyleLog, NULL),
+             MoveToString(tmpStr, move, &gMoveStyleLog, NULL),
              capstr, promostr, chkstr);
 }
 
 
 // A very simple "log-this-board" routine.
-void LogBoard(int level, BoardT *board)
+void LogBoard(LogLevelT level, const BoardT *board)
 {
     int rank, file, chr;
 
@@ -149,12 +131,12 @@ void LogBoard(int level, BoardT *board)
 }
 
 
-void LogMoveShow(int level, BoardT *board, MoveT *move, const char *caption)
+void LogMoveShow(LogLevelT level, const BoardT *board, MoveT move, const char *caption)
 {
     int ascii, i, j;
     char tmpStr[MOVE_STRING_MAX];
 
-    LogPrint(level, "%s:\nMove was %s\n", caption, MoveToString(tmpStr, *move, &gMoveStyleLog, NULL));
+    LogPrint(level, "%s:\nMove was %s\n", caption, MoveToString(tmpStr, move, &gMoveStyleLog, NULL));
 
     for (i = 7; i >= 0; i--)
     {
@@ -170,7 +152,7 @@ void LogMoveShow(int level, BoardT *board, MoveT *move, const char *caption)
 
 // Only meant to be called in an emergency situation (program is fixing to
 //  bail).
-void LogPieceList(BoardT *board)
+void LogPieceList(const BoardT *board)
 {
     int i, j;
     for (i = 0; i < kMaxPieces; i++)

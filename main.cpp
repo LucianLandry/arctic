@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//               main.c - main initialization and runtime loop
+//              main.cpp - main initialization and runtime loop
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com

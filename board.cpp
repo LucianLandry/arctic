@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                  board.c - BoardT-related functionality.
+//                  board.cpp - BoardT-related functionality.
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -310,13 +310,13 @@ void BoardInit(BoardT *board)
 
 // Like BoardMoveMake(), but do not actually make the move, just calculate
 // a new zobrist.
-static uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
+static uint64 BoardZobristCalcFromMove(BoardT *board, MoveT move)
 {
     uint64 zobrist = board->zobrist;
-    bool enpass = move->promote == PieceType::Pawn; // en passant capture?
-    bool promote = !(move->promote == PieceType::Empty || enpass);
-    uint8 src = move->src;
-    uint8 dst = move->dst;
+    bool enpass = move.promote == PieceType::Pawn; // en passant capture?
+    bool promote = !(move.promote == PieceType::Empty || enpass);
+    uint8 src = move.src;
+    uint8 dst = move.dst;
     Piece *coord = board->coord; // shorthand
     Piece myPiece(coord[src]);
     Piece capPiece(coord[dst]);
@@ -330,7 +330,7 @@ static uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
         zobrist ^= gPreCalc.zobrist.ebyte[ebyte];
     }
 
-    if (MoveIsCastle(*move))
+    if (MoveIsCastle(move))
     {
         // Castling case, handle this specially (it can be relatively inefficient).
         uint8 turn = board->turn; // shorthand
@@ -339,7 +339,7 @@ static uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
         Piece rPiece(turn, PieceType::Rook);
 
         getCastleCoords(board,
-                        MoveIsCastleOO(*move),
+                        MoveIsCastleOO(move),
                         &kSrc, &kDst, &rSrc, &rDst);
 
         newcbyte = cbyteCalcFromCastle(cbyte, turn);
@@ -366,7 +366,7 @@ static uint64 BoardZobristCalcFromMove(BoardT *board, MoveT *move)
             gPreCalc.zobrist.coord[capPiece.ToIndex()] [dst] ^
             // ... with the new piece that is supposed to be there ...
             gPreCalc.zobrist.coord[
-                promote ? Piece(myPiece.Player(), move->promote).ToIndex() : myPiece.ToIndex()] [dst] ^
+                promote ? Piece(myPiece.Player(), move.promote).ToIndex() : myPiece.ToIndex()] [dst] ^
             // ... and remove the src piece from the source.
             gPreCalc.zobrist.coord[myPiece.ToIndex()] [src];
 
@@ -412,14 +412,14 @@ static void doCastleMove(BoardT *board,
 
 }
 
-void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
+void BoardMoveMake(BoardT *board, MoveT move, UnMakeT *unmake)
 {
-    bool enpass = move->promote == PieceType::Pawn;
-    bool promote = !(move->promote == PieceType::Empty || enpass);
-    uint8 src = move->src;
-    uint8 dst = move->dst;
+    bool enpass = move.promote == PieceType::Pawn;
+    bool promote = !(move.promote == PieceType::Empty || enpass);
+    uint8 src = move.src;
+    uint8 dst = move.dst;
     Piece *coord = board->coord;
-    bool isCastle = MoveIsCastle(*move);
+    bool isCastle = MoveIsCastle(move);
     Piece capPiece;
     uint8 newebyte, newcbyte;
 
@@ -449,7 +449,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
     if (unmake != NULL)
     {
         // Save off board information.
-        unmake->move = *move; // struct copy
+        unmake->move = move; // struct copy
         unmake->capPiece = capPiece;
         unmake->cbyte = board->cbyte;
         unmake->ebyte = board->ebyte;
@@ -467,7 +467,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
         repeatableMove = false;
         
         getCastleCoords(board,
-                        MoveIsCastleOO(*move),
+                        MoveIsCastleOO(move),
                         &kSrc, &kDst, &rSrc, &rDst);
 
         doCastleMove(board, kSrc, kDst, rSrc, rDst);
@@ -487,7 +487,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
         }
         else if (enpass)
         {
-            pieceRemove(board, board->ebyte, Piece(myPiece.Player() ^ 1, move->promote));
+            pieceRemove(board, board->ebyte, Piece(myPiece.Player() ^ 1, move.promote));
         }
         pieceMove(board, src, dst, myPiece);
 
@@ -496,7 +496,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
         if (promote)
         {
             pieceCapture(board, dst, myPiece);
-            pieceAdd(board, dst, Piece(myPiece.Player(), move->promote));
+            pieceAdd(board, dst, Piece(myPiece.Player(), move.promote));
         }
 
         if (myPiece.IsPawn())
@@ -515,7 +515,7 @@ void BoardMoveMake(BoardT *board, MoveT *move, UnMakeT *unmake)
     board->ebyte = newebyte;
     board->ply++;
     board->turn ^= 1;
-    board->ncheck[board->turn] = move->chk;
+    board->ncheck[board->turn] = move.chk;
 
     // Adjust ncpPlies appropriately.
     if (!repeatableMove)
@@ -691,7 +691,7 @@ int BoardSanityCheck(BoardT *board, int silent)
     }
 
     // Check: the side *not* on move must not be in check.
-    if (calcNCheck(board, board->turn ^ 1, "BoardSanityCheck") != FLAG)
+    if (calcNCheck(*board, board->turn ^ 1, "BoardSanityCheck") != FLAG)
     {
         return reportError(silent,
                            "Error: Side not on move (%d) is in check.",
@@ -907,7 +907,7 @@ void BoardSet(BoardT *board, Piece pieces[], int cbyte, int ebyte, int turn,
     // ncheck handling (assumes 1 K of each color).
     for (i = 0; i < NUM_PLAYERS; i++)
     {
-        calcNCheck(board, i, "BoardSet");
+        calcNCheck(*board, i, "BoardSet");
     }
 
     board->zobrist = BoardZobristCalc(board);
@@ -1034,21 +1034,21 @@ bool BoardDrawThreefoldRepetitionFull(BoardT *board, struct SaveGameS *sgame)
 }
 
 // Calculates (roughly) how 'valuable' a move is.
-int BoardCapWorthCalc(BoardT *board, MoveT *move)
+int BoardCapWorthCalc(const BoardT *board, MoveT move)
 {
     Piece capPiece;
     int capWorth;
-    CvT *cv;
+    const CvT *cv;
     int i;
     char result[MOVE_STRING_MAX];
     static const MoveStyleT msCwc = {mnDebug, csOO, false};
 
-    if (MoveIsCastle(*move))
+    if (MoveIsCastle(move))
     {
         return 0;
     }
 
-    capPiece = board->coord[move->dst];
+    capPiece = board->coord[move.dst];
     capWorth = capPiece.Worth();
 
     if (!capPiece.IsEmpty() && capWorth == EVAL_ROYAL)
@@ -1078,12 +1078,12 @@ int BoardCapWorthCalc(BoardT *board, MoveT *move)
         assert(0);
     }
 
-    if (move->promote != PieceType::Empty)
+    if (move.promote != PieceType::Empty)
     {
         // Add in extra value for promotion or en passant
         // (for en passant, there is no 'capPiece')
-        capWorth += Piece(0, move->promote).Worth();
-        if (move->promote != PieceType::Pawn)
+        capWorth += Piece(0, move.promote).Worth();
+        if (move.promote != PieceType::Pawn)
         {
             capWorth -= EVAL_PAWN;
         }
@@ -1119,7 +1119,7 @@ void BoardPieceSet(BoardT *board, int coord, Piece piece)
         pieceAddZ(board, i, piece);
     }
     BoardCbyteUpdate(board);
-    calcNCheck(board, board->turn, "BoardPieceSet");
+    calcNCheck(*board, board->turn, "BoardPieceSet");
 }
 
 void BoardCbyteSet(BoardT *board, int cbyte)
@@ -1152,6 +1152,6 @@ void BoardTurnSet(BoardT *board, int turn)
         board->zobrist ^= gPreCalc.zobrist.turn;
         // Because it cannot be valid, now
         BoardEbyteSet(board, FLAG);
-        calcNCheck(board, board->turn, "BoardTurnSet");
+        calcNCheck(*board, board->turn, "BoardTurnSet");
     }
 }
