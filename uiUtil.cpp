@@ -119,7 +119,7 @@ bool matchesNoCase(const char *str, const char *needle)
 
 // Direct a report to the user or the error log, whichever is more
 // appropriate.  Always returns -1 (as a convenience).
-int reportError(int silent, const char *errorFormatStr, ...)
+int reportError(bool silent, const char *errorFormatStr, ...)
 {
     char tmpBuf[160];
     va_list ap;
@@ -169,7 +169,7 @@ int fenToBoard(const char *fenString, BoardT *result)
     if (fenString == NULL)
     {
         return reportError
-            (0, "Error: fenToBoard: NULL fenString (missing arg?)");
+            (false, "Error: fenToBoard: NULL fenString (missing arg?)");
     }
 
     // Read in everything.  This is insensitive to whitespace between fields,
@@ -179,7 +179,7 @@ int fenToBoard(const char *fenString, BoardT *result)
                       &halfmove, &fullmove)) < 6)
     {
         return reportError
-            (0, "Error: fenToBoard: not enough arguments (%d)", res);
+            (false, "Error: fenToBoard: not enough arguments (%d)", res);
     }
 
     // Read in 'coord'.
@@ -193,7 +193,7 @@ int fenToBoard(const char *fenString, BoardT *result)
             if (file + spaces > 8)
             {
                 return reportError
-                    (0, "Error: fenToBoard: (%d,%d) too many spaces (%d)",
+                    (false, "Error: fenToBoard: (%d,%d) too many spaces (%d)",
                      rank, file, spaces);
             }
             file += spaces;
@@ -203,7 +203,7 @@ int fenToBoard(const char *fenString, BoardT *result)
             if (file < 8 || rank <= 0)
             {
                 return reportError
-                    (0, "Error: fenToBoard: (%d,%d) bad separator",
+                    (false, "Error: fenToBoard: (%d,%d) bad separator",
                      rank, file);
             }
             rank--;
@@ -214,7 +214,7 @@ int fenToBoard(const char *fenString, BoardT *result)
             if (file >= 8)
             {
                 return reportError
-                    (0, "Error: fenToBoard: (%d,%d) too many pieces",
+                    (false, "Error: fenToBoard: (%d,%d) too many pieces",
                      rank, file);
             }
             coord[toCoord(rank, file++)] = piece;
@@ -223,14 +223,14 @@ int fenToBoard(const char *fenString, BoardT *result)
         {
             // Unknown token.  Assume it's an unknown piece.
             return reportError
-                (0, "Error: fenToBoard: (%d,%d) unknown piece %c",
+                (false, "Error: fenToBoard: (%d,%d) unknown piece %c",
                  rank, file, chr);
         }
     }
     if (file != 8 || rank != 0)
     {
         return reportError
-            (0, "Error: fenToBoard: (%d,%d) bad terminator",
+            (false, "Error: fenToBoard: (%d,%d) bad terminator",
              rank, file);
     }
 
@@ -241,7 +241,8 @@ int fenToBoard(const char *fenString, BoardT *result)
     }
     else if (strcmp(turnStr, "w"))
     {
-        return reportError(0, "Error: fenToBoard: unknown turn %s", turnStr);
+        return reportError(false, "Error: fenToBoard: unknown turn %s",
+                           turnStr);
     }
 
     // Read in cbyte.
@@ -267,12 +268,13 @@ int fenToBoard(const char *fenString, BoardT *result)
                 break;
             default:
                 return reportError
-                    (0, "Error: fenToBoard: unknown cbyte token '%c'", chr);
+                    (false, "Error: fenToBoard: unknown cbyte token '%c'", chr);
             }
         }
         if (i == 4 && cbyteStr[i] != '\0')
         {
-            return reportError(0, "Error: fenToBoard: cbyteStr too long (%c)",
+            return reportError(false,
+                               "Error: fenToBoard: cbyteStr too long (%c)",
                                cbyteStr[i]);
         }
     }
@@ -282,11 +284,12 @@ int fenToBoard(const char *fenString, BoardT *result)
     {
         if ((ebyte = asciiToCoord(ebyteStr)) == FLAG)
         {
-            return reportError(0, "Error: fenToBoard: bad ebyte");
+            return reportError(false, "Error: fenToBoard: bad ebyte");
         }
         if (ebyteStr[2] != '\0')
         {
-            return reportError(0, "Error: fenToBoard: ebyteStr too long (%c)",
+            return reportError(false,
+                               "Error: fenToBoard: ebyteStr too long (%c)",
                                ebyteStr[2]);
         }
     }
@@ -523,20 +526,21 @@ char *getStdinLine(int maxLen, SwitcherContextT *sw)
     {
         if (maxLen > 0 && maxLen < bytesRead)
         {
-            reportError(0, "%s: maxLen exceeded, buffer was '%s'",
+            reportError(false, "%s: maxLen exceeded, buffer was '%s'",
                         __func__, buf);
             exit(0);
         }
         if (bytesRead >= bufLen - 1 &&
             (buf = (char *) realloc(buf, (bufLen += 100))) == NULL)
         {
-            reportError(0, "%s: could not alloc %d bytes\n",
+            reportError(false, "%s: could not alloc %d bytes\n",
                         __func__, bufLen + 100);
             exit(0);
         }
         if (myFgets(&buf[bytesRead], bufLen - bytesRead, stdin) == NULL)
         {
-            reportError(0, "%s: fgets error %d, bailing\n", __func__, errno);
+            reportError(false, "%s: fgets error %d, bailing\n",
+                        __func__, errno);
             exit(0);
         }
         bytesRead += strlen(&buf[bytesRead]);

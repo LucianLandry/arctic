@@ -60,7 +60,7 @@ int fenToBoard(const char *fenString, BoardT *result);
 
 // Direct a report to the user or the error log, whichever is more
 // appropriate.  Always returns -1 (as a convenience).
-int reportError(int silent, const char *errorFormatStr, ...)
+int reportError(bool silent, const char *errorFormatStr, ...)
     __attribute__ ((format (printf, 2, 3)));
 
 // Stop everything (including clocks) and wait for further input, basically.

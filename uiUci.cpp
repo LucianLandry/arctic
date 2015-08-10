@@ -288,7 +288,7 @@ static void finishMoves(GameT *game, BoardT *fenBoard, MoveT *move, char *pToken
         // As we find moves, play them on the board.
         if (!isLegalMove(pToken, &myMove, board))
         {
-            reportError(0, "%s: illegal move '%s', giving up",
+            reportError(false, "%s: illegal move '%s', giving up",
                         __func__, pToken);
             gUciState.bBadPosition = true;
             return;
@@ -309,7 +309,7 @@ static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
     if (gUciState.bSearching)
     {
         // See "Implementation Notes" for why we ignore this.
-        reportError(0, "%s: received 'position' while searching, IGNORING",
+        reportError(false, "%s: received 'position' while searching, IGNORING",
                     __func__);
         return;
     }
@@ -326,7 +326,7 @@ static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
     if (!bFen && !matches(pToken, "startpos"))
     {
         // got an unknown token where we should have seen "fen" or "startpos".
-        reportError(0, "%s: !fen and !startpos, giving up", __func__);
+        reportError(false, "%s: !fen and !startpos, giving up", __func__);
         gUciState.bBadPosition = true;
         return;
     }
@@ -335,7 +335,7 @@ static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
 
     if (fenToBoard(bFen ? pToken : FEN_STARTSTRING, &fenBoard) < 0)
     {
-        reportError(0, "%s: fenToBoard failed, cannot build position",
+        reportError(false, "%s: fenToBoard failed, cannot build position",
                     __func__);
         gUciState.bBadPosition = true;
         return;
@@ -354,8 +354,8 @@ static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
     // 'moves' token is okay, so we allow it.
     if (!matches(pToken, "moves") && pToken != NULL)
     {
-        reportError(0, "%s: got unknown token where should have seen 'moves', "
-                    "giving up", __func__);
+        reportError(false, "%s: got unknown token where should have seen "
+                    "'moves', giving up", __func__);
         gUciState.bBadPosition = true;
         return;
     }
@@ -379,7 +379,7 @@ static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
         // As we find moves, play them on the board.
         if (!isLegalMove(pToken, &myMove, &fenBoard))
         {
-            reportError(0, "%s: illegal move '%s', giving up",
+            reportError(false, "%s: illegal move '%s', giving up",
                         __func__, pToken);
             gUciState.bBadPosition = true;
             return;
@@ -415,7 +415,7 @@ static int convertNextInteger(char **pToken, int *result, int atLeast,
         sscanf(*pToken, "%d", result) < 1 ||
         (atLeast >= 0 && *result < atLeast))
     {
-        reportError(0, "%s: failed converting arg for %s",
+        reportError(false, "%s: failed converting arg for %s",
                     __func__, context);
         return 1;
     }
@@ -431,7 +431,7 @@ static int convertNextInteger64(char **pToken, int64 *result, int64 atLeast,
         sscanf(*pToken, "%" PRId64, result) < 1 ||
         (atLeast >= 0 && *result < atLeast))
     {
-        reportError(0, "%s: failed converting arg for %s",
+        reportError(false, "%s: failed converting arg for %s",
                     __func__, context);
         return 1;
     }
@@ -447,7 +447,7 @@ static void processSetOptionCommand(char *inputStr)
     {
         // The UCI spec says this command "will only be sent when the engine
         // is waiting".
-        reportError(0, "%s: received 'setoption' while searching, IGNORING",
+        reportError(false, "%s: received 'setoption' while searching, IGNORING",
                     __func__);
         return;
     }
@@ -513,12 +513,14 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
     if (gUciState.bSearching)
     {
         // See "Implementation Notes" for why we ignore this.
-        reportError(0, "%s: received 'go' while searching, IGNORING", __func__);
+        reportError(false, "%s: received 'go' while searching, IGNORING",
+                    __func__);
         return;
     }
     if (gUciState.bBadPosition)
     {
-        reportError(0, "%s: cannot search on bad position, IGNORING", __func__);
+        reportError(false, "%s: cannot search on bad position, IGNORING",
+                    __func__);
         return;
     }
 
@@ -619,7 +621,8 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
         }
         else
         {
-            reportError(0, "%s: unknown token sequence '%s'", __func__, pToken);
+            reportError(false, "%s: unknown token sequence '%s'",
+                        __func__, pToken);
             return;
         }
     }
@@ -787,7 +790,7 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
         if (gUciState.bSearching)
         {
             // See "Implementation Notes" for why we ignore this.
-            reportError(0, "%s: received 'ucinewgame' while searching, "
+            reportError(false, "%s: received 'ucinewgame' while searching, "
                         "IGNORING", __func__);
         }
         else

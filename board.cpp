@@ -661,7 +661,7 @@ static int BoardBadCbyte(BoardT *board)
 
 // This is (now) intended to be as thorough a consistency check as possible.
 // Returns -1 if there is a problem, 0 otherwise.
-int BoardSanityCheck(BoardT *board, int silent)
+int BoardSanityCheck(BoardT *board, bool silent)
 {
     int kcoord;
     int kcoord2;
@@ -916,7 +916,7 @@ void BoardSet(BoardT *board, Piece pieces[], int cbyte, int ebyte, int turn,
 
 // Could put in a check regarding the turn, but for the only user of this
 // function, that is actually not desirable.
-int BoardIsNormalStartingPosition(BoardT *board)
+bool BoardIsNormalStartingPosition(BoardT *board)
 {
     return board->cbyte == CASTLEALL && board->ebyte == FLAG &&
         board->ncpPlies == 0 &&

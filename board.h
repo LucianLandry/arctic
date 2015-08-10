@@ -147,11 +147,13 @@ void BoardInit(BoardT *board);
 // 'unmake' is filled in by BoardMakeMove() and used by BoardUnmakeMove().
 void BoardMoveMake(BoardT *board, MoveT move, UnMakeT *unmake);
 void BoardMoveUnmake(BoardT *board, UnMakeT *unmake);
-int BoardSanityCheck(BoardT *board, int silent);
+int BoardSanityCheck(BoardT *board, bool silent);
 int BoardConsistencyCheck(BoardT *board, const char *failString, int checkz);
 void BoardRandomize(BoardT *board);
 void BoardCopy(BoardT *dest, BoardT *src);
 void BoardSet(BoardT *board, Piece pieces[], int cbyte, int ebyte, int turn,
+              // These are usually 0, and are really used only for FEN (and
+              //  saved games deriving from FEN).
               int firstPly, int ncpPlies);
 // These routines are like BoardSet(), but only for one part.
 void BoardPieceSet(BoardT *board, int coord, Piece piece);
@@ -160,7 +162,7 @@ void BoardEbyteSet(BoardT *board, int ebyte);
 void BoardTurnSet(BoardT *board, int turn);
 
 
-int BoardIsNormalStartingPosition(BoardT *board);
+bool BoardIsNormalStartingPosition(BoardT *board);
 
 bool BoardDrawInsufficientMaterial(BoardT *board);
 // Threefold repetition and the fifty-move rule are both claimed draws, that
