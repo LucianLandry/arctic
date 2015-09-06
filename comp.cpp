@@ -599,7 +599,7 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
     }
 
 
-#if 0
+#if 1
     masterNode = (th == gThinker && // master node
                   searchDepth > 1); // not subject to futility pruning
 #else // disables move delegation.
@@ -613,7 +613,7 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
         improvement += potentialImprovement(board);
     }
 
-#if 0
+#if 1
     cookie = searchDepth > 3 /* adjust to taste */ &&
         /* Needed to avoid scenarios where we pick a crappy hashed move,
            and then run out of time before evaluating the good move we meant
