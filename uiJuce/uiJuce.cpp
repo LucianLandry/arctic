@@ -43,7 +43,7 @@ static void jucePlayerMove(ThinkContextT *th, GameT *game)
 {
 }
 
-static void juceBoardRefresh(const BoardT *board)
+static void jucePositionRefresh(const Position &position)
 {
 }
 
@@ -111,7 +111,7 @@ UIFuncTableT *uiJuceOps(void)
     static UIFuncTableT juceUIFuncTable;
     juceUIFuncTable.init = juceInit;
     juceUIFuncTable.playerMove = jucePlayerMove;
-    juceUIFuncTable.boardRefresh = juceBoardRefresh;
+    juceUIFuncTable.positionRefresh = jucePositionRefresh;
     juceUIFuncTable.exit = juceExit;
     juceUIFuncTable.statusDraw = juceStatusDraw;
     juceUIFuncTable.notifyTick = juceNotifyTick;

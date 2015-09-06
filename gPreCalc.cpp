@@ -20,7 +20,10 @@
 #include "aSystem.h"
 #include "gPreCalc.h"
 #include "gDynamic.h"
-#include "variant.h"
+#include "Variant.h"
+
+using arctic::File;
+using arctic::Rank;
 
 GPreCalcT gPreCalc;
 
@@ -358,7 +361,7 @@ static void diaginit(int d, int start, int finc, int sinc, uint8 *moves[] [NUM_S
 static void castleMaskInit(void)
 {
     int i;
-    CastleStartCoordsT *castleStart;
+    CastleStartCoordsT castleStart;
 
     for (i = 0; i < NUM_SQUARES; i++)
     {
@@ -366,10 +369,10 @@ static void castleMaskInit(void)
     }
     for (i = 0; i < NUM_PLAYERS; i++)
     {
-        castleStart = &gVariant->castling[i].start;
-        gPreCalc.castleMask[castleStart->king] &= ~(CASTLEBOTH << i);
-        gPreCalc.castleMask[castleStart->rookOO] &= ~(CASTLEOO << i);
-        gPreCalc.castleMask[castleStart->rookOOO] &= ~(CASTLEOOO << i);
+        castleStart = Variant::Current()->Castling(i).start;
+        gPreCalc.castleMask[castleStart.king] &= ~(CASTLEBOTH << i);
+        gPreCalc.castleMask[castleStart.rookOO] &= ~(CASTLEOO << i);
+        gPreCalc.castleMask[castleStart.rookOOO] &= ~(CASTLEOOO << i);
     }
 }
 

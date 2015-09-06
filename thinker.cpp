@@ -15,10 +15,11 @@
 //--------------------------------------------------------------------------
 
 #include <assert.h>
+#include <errno.h>
+#include <poll.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <errno.h>
 
 #include "gDynamic.h" // PvInit()
 #include "log.h"
@@ -57,8 +58,8 @@
 
 // An internal global resource.  Might be split later if we need sub-searchers.
 typedef struct {
-    ThinkContextT th[MAX_NUM_PROCS];
-    struct pollfd pfds[MAX_NUM_PROCS];
+    ThinkContextT *th;
+    struct pollfd *pfds;
     int count;        // number of valid searchers in the struct
     int numSearching; // number of currently searching searchers
 } SearcherGroupT;
@@ -68,8 +69,7 @@ static SearcherGroupT gSG;
 // Initialize a given SearchArgsT.
 void SearchArgsInit(SearchArgsT *sa)
 {
-    SaveGameInit(&sa->sgame);
-    BoardInit(&sa->localBoard);
+    // sa->localBoard inits itself.
     sa->alpha = EVAL_LOSS;
     sa->beta = EVAL_WIN;
     // mvlist has its own constructor.
@@ -93,6 +93,8 @@ void ThinkerInit(ThinkContextT *th)
     th->isPondering = false;
     th->isSearching = false;
     SearchArgsInit(&th->searchArgs);
+    th->maxDepth = 0;
+    th->depth = 0;
 }
 
 
@@ -231,30 +233,28 @@ void ThinkerCmdSearch(ThinkContextT *th, int alpha, int beta, MoveT move)
     compSendCmd(th, eCmdSearch);
 }
 
-void ThinkerCmdBoardSet(ThinkContextT *th, BoardT *board)
+void ThinkerCmdBoardSet(ThinkContextT *th, Board *board)
 {
     // If we were previously thinking, just start over.
     ThinkerCmdBail(th);
 
     if (board != NULL)
     {
-        BoardCopy(&th->searchArgs.localBoard, board);
+        th->searchArgs.localBoard = *board;
     }
 }
 
 
-static void doThink(ThinkContextT *th, eThinkMsgT cmd, BoardT *board,
-                    SaveGameT *sgame, MoveList *mvlist)
+static void doThink(ThinkContextT *th, eThinkMsgT cmd, Board *board,
+                    MoveList *mvlist)
 {
     // If we were previously thinking, just start over.
     ThinkerCmdBail(th);
 
     // Copy over search args.
     assert(board != NULL);
-    assert(sgame != NULL);
 
-    BoardCopy(&th->searchArgs.localBoard, board);
-    SaveGameCopy(&th->searchArgs.sgame, sgame);
+    th->searchArgs.localBoard = *board;
 
     if (mvlist != NULL)
         th->searchArgs.mvlist = *mvlist;
@@ -273,26 +273,24 @@ static void doThink(ThinkContextT *th, eThinkMsgT cmd, BoardT *board,
     compSendCmd(th, cmd);
 }
 
-void ThinkerCmdThinkEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
-                       MoveList *mvlist)
+void ThinkerCmdThinkEx(ThinkContextT *th, Board *board, MoveList *mvlist)
 {
-    return doThink(th, eCmdThink, board, sgame, mvlist);
+    return doThink(th, eCmdThink, board, mvlist);
 }
 
-void ThinkerCmdThink(ThinkContextT *th, BoardT *board, SaveGameT *sgame)
+void ThinkerCmdThink(ThinkContextT *th, Board *board)
 {
-    return doThink(th, eCmdThink, board, sgame, NULL);
+    return doThink(th, eCmdThink, board, NULL);
 }
 
-void ThinkerCmdPonderEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
-                        MoveList *mvlist)
+void ThinkerCmdPonderEx(ThinkContextT *th, Board *board, MoveList *mvlist)
 {
-    return doThink(th, eCmdPonder, board, sgame, mvlist);
+    return doThink(th, eCmdPonder, board, mvlist);
 }
 
-void ThinkerCmdPonder(ThinkContextT *th, BoardT *board, SaveGameT *sgame)
+void ThinkerCmdPonder(ThinkContextT *th, Board *board)
 {
-    return doThink(th, eCmdPonder, board, sgame, NULL);
+    return doThink(th, eCmdPonder, board, NULL);
 }
 
 
@@ -431,32 +429,28 @@ int ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT move)
 // The purpose of ThinkerSearchersMove(Un)[Mm]ake() is to keep all all
 // search threads' boards in lock-step with the 'masterNode's board.  All moves
 // but the PV are delegated to a searcher thread even on a uni-processor.
-void ThinkerSearchersMoveMake(MoveT move, UnMakeT *unmake, int mightDraw)
+void ThinkerSearchersMoveMake(MoveT move)
 {
     int i;
-    BoardT *localBoard;
+    Board *localBoard;
     for (i = 0; i < gSG.count; i++)
     {
         localBoard = &gSG.th[i].searchArgs.localBoard;
-        if (mightDraw)
-        {
-            BoardPositionSave(localBoard);
-        }
-        BoardMoveMake(localBoard, move, unmake);
-        localBoard->depth++;
+        localBoard->MakeMove(move);
+        gSG.th[i].depth++;
     }
 }
 
 
-void ThinkerSearchersMoveUnmake(UnMakeT *unmake)
+void ThinkerSearchersMoveUnmake()
 {
     int i;
-    BoardT *localBoard;
+    Board *localBoard;
     for (i = 0; i < gSG.count; i++)
     {
         localBoard = &gSG.th[i].searchArgs.localBoard;
-        localBoard->depth--;
-        BoardMoveUnmake(localBoard, unmake);
+        gSG.th[i].depth--;
+        localBoard->UnmakeMove();
     }
 }
 
@@ -517,7 +511,7 @@ int ThinkerSearchersSearching(void)
     return gSG.numSearching > 0;
 }
 
-void ThinkerSearchersBoardSet(BoardT *board)
+void ThinkerSearchersBoardSet(Board *board)
 {
     int i;
     for (i = 0; i < gSG.count; i++)
@@ -531,8 +525,8 @@ void ThinkerSearchersSetDepthAndLevel(int depth, int level)
     int i;
     for (i = 0; i < gSG.count; i++)
     {
-        gSG.th[i].searchArgs.localBoard.depth = depth;
-        gSG.th[i].searchArgs.localBoard.level = level;
+        gSG.th[i].depth = depth;
+        gSG.th[i].maxDepth = level;
     }
 }
 
@@ -541,9 +535,11 @@ void ThinkerSearchersCreate(int numThreads, THREAD_FUNC threadFunc)
     int i;
     SearcherArgsT sargs;
 
-    assert(numThreads <= MAX_NUM_PROCS);
-
     gSG.count = numThreads;
+
+    gSG.pfds = new struct pollfd[numThreads];
+    gSG.th = new ThinkContextT[numThreads];
+
     for (i = 0; i < gSG.count; i++)
     {
         sargs.th = &gSG.th[i];

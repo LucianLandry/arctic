@@ -18,7 +18,7 @@
 #define TRANSTABLE_H
 
 #include "aTypes.h"
-#include "position.h"
+#include "Position.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -18,7 +18,7 @@
 #define UI_H
 
 #include "aTypes.h"
-#include "board.h"
+#include "Board.h"
 #include "thinker.h"
 #include "game.h"
 #include "ref.h"
@@ -30,7 +30,7 @@ extern "C" {
 typedef struct {
     void (*init)(GameT *game);
     void (*playerMove)(ThinkContextT *th, GameT *game);
-    void (*boardRefresh)(const BoardT *board);
+    void (*positionRefresh)(const Position &position);
     void (*exit)(void);
     void (*statusDraw)(GameT *game);
     void (*notifyTick)(GameT *game);

@@ -17,13 +17,11 @@
 #ifndef SAVEGAME_H
 #define SAVEGAME_H
 
+#include <vector>
+
 #include "aTypes.h"
 #include "clock.h"
-#include "board.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "Board.h"
 
 typedef struct {
     MoveT move;
@@ -34,40 +32,31 @@ typedef struct {
 // Contains minimal game save + restore + undo + redo information.
 typedef struct SaveGameS {
     ClockT clocks[NUM_PLAYERS]; // starting time.
-    Piece coord[NUM_SQUARES];   // all the squares on the board.
-    uint8 cbyte;
-    uint8 ebyte;
-    uint8 turn;
-    int firstPly;          // initial ply.  Usually 0, but some FEN positions
-                           // w/incomplete information can be non-zero.
-    int ncpPlies;          // number of non-capture or pawn-push plies.
-                           // Usually 0, but some FEN positions w/... well, see
-                           // above.
 
-    int numAllocatedPlies; // pretty straightforward hopefully ...
-    int numPlies;          // Starts at 0, since the initial ply has no move.
-    int currentPly;        // Ply index to write the next move into.
-    GamePlyT *plies;
+    Position startPosition;
+
+    int currentPly;  // Current ply we are at.
+                     // currentPly - startPosition.Ply() == 'plies' index to
+                     //  write the next move into.
+    std::vector<GamePlyT> plies;
 } SaveGameT;
-
 
 void SaveGameInit(SaveGameT *game);
 
-// Assumes 'dst' is non-NULL and has been initialized w/SaveGameInit().
-// Clobbers 'dst', but in a safe fashion.
+// Assumes 'src' and 'dst' are both non-NULL, and have both been initialized
+//  w/SaveGameInit().  Clobbers 'dst', but in a safe fashion.
 void SaveGameCopy(SaveGameT *dst, SaveGameT *src);
 
 void SaveGameMoveCommit(SaveGameT *game, MoveT *move, bigtime_t myTime);
 int SaveGameSave(SaveGameT *game);
 
 // Assumes 'sgame' has been initialized (w/SaveGameInit())
-// Returns: 0, if save successful, otherwise -1.
+// Returns: 0, if restore successful, otherwise -1.
 // 'sgame' is guaranteed to be 'sane' after return, regardless of result.
 int SaveGameRestore(SaveGameT *sgame);
-int SaveGameRestore(SaveGameT *game);
-void SaveGamePositionSet(SaveGameT *game, BoardT *board);
+void SaveGamePositionSet(SaveGameT *game, Board *board);
 void SaveGameClocksSet(SaveGameT *sgame, ClockT *clocks[]);
-int SaveGameGotoPly(SaveGameT *game, int ply, BoardT *board, ClockT *clocks[]);
+int SaveGameGotoPly(SaveGameT *game, int ply, Board *board, ClockT *clocks[]);
 
 static inline int SaveGameCurrentPly(SaveGameT *sgame)
 {
@@ -75,15 +64,11 @@ static inline int SaveGameCurrentPly(SaveGameT *sgame)
 }
 static inline int SaveGameFirstPly(SaveGameT *sgame)
 {
-    return sgame->firstPly;
+    return sgame->startPosition.Ply();
 }
 static inline int SaveGameLastPly(SaveGameT *sgame)
 {
-    return sgame->numPlies + sgame->firstPly;
+    return sgame->startPosition.Ply() + sgame->plies.size();
 }
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // SAVEGAME_H

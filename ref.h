@@ -20,10 +20,6 @@
 
 #include "aTypes.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define VERSION_STRING_MAJOR "1"
 #define VERSION_STRING_MINOR "1"
 #define VERSION_STRING_PHASE "devel" // or beta, release
@@ -46,24 +42,6 @@ typedef uint8 cell_t;
 #define NUM_PLAYERS_MASK ((1 << NUM_PLAYERS_BITS) - 1)
 
 #define NUM_SQUARES     64
-
-// Boord coordinates start at the southwest corner of board (0), increments
-// by 1 as we move to the right, and increments by row-length (8) as we move
-// up.
-static inline int Rank(int i)
-{
-    return i >> 3;
-}
-static inline int File(int i)
-{
-    return i & 7;
-}
-
-// Given a rank (0-7) and file (0-7), generate the board coordinate.
-static inline int toCoord(int rank, int file)
-{
-    return (rank << 3) + file;
-}
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MAX3(a, b, c) (MAX((a), (MAX((b), (c)))))
@@ -113,8 +91,28 @@ typedef struct {
 // This is beyond the depth we can quiesce.
 #define HASH_NOENTRY -128
 
-#ifdef __cplusplus
+namespace arctic
+{
+
+// Boord coordinates start at the southwest corner of board (0), increments
+// by 1 as we move to the right, and increments by row-length (8) as we move
+// up.
+static inline int Rank(cell_t i)
+{
+    return i >> 3;
 }
-#endif
+static inline int File(cell_t i)
+{
+    return i & 7;
+}
+
+// Given a rank (0-7) and file (0-7), return our internal one-dimensional
+//  board coordinate.
+static inline cell_t ToCoord(int rank, int file)
+{
+    return (rank << 3) + file;
+}
+
+} // end namespace 'arctic'
 
 #endif // REF_H

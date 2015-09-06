@@ -21,10 +21,8 @@
 #include <unistd.h>       // sysconf(3)
 
 #include "aSystem.h"
-#include "gDynamic.h" // MAX_NUM_PROCS
 #include "log.h"
 #include "ref.h"
-
 
 void SystemEnableCoreFile(void)
 {
@@ -67,6 +65,5 @@ int64 SystemTotalMemory(void)
 
 int SystemTotalProcessors(void)
 {
-    int result = sysconf(_SC_NPROCESSORS_ONLN);
-    return MIN(result, MAX_NUM_PROCS);
+    return sysconf(_SC_NPROCESSORS_ONLN);
 }

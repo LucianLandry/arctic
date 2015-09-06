@@ -18,8 +18,11 @@
 #define LOG_H
 
 #include "aTypes.h"
-#include "board.h"
 #include "move.h"
+
+// Forward declaration of classes that depend on us.
+class Position;
+class Board;
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,10 +43,8 @@ void LogSetLevel(LogLevelT level);
 void LogFlush(void);
 int LogPrint(LogLevelT level, const char *format, ...)
     __attribute__ ((format (printf, 2, 3)));
-void LogMoveShow(LogLevelT level, const BoardT *board, MoveT move, const char *caption);
-void LogPieceList(const BoardT *board);
-void LogMove(LogLevelT level, const BoardT *board, MoveT move);
-void LogBoard(LogLevelT level, const BoardT *board);
+void LogMoveShow(LogLevelT level, const Board *board, MoveT move, const char *caption);
+void LogMove(LogLevelT level, const Board *board, MoveT move, int searchDepth);
 
 #define LOG_EMERG(format, ...) LogPrint(eLogEmerg, (format), ##__VA_ARGS__)
 
@@ -66,13 +67,13 @@ void LogBoard(LogLevelT level, const BoardT *board);
         } \
     while (0)
 
-#define LOGMOVE_DEBUG(board, move) \
-    LogMove(eLogDebug, (board), (move))
+#define LOGMOVE_DEBUG(board, move, searchDepth) \
+    LogMove(eLogDebug, (board), (move), (searchDepth))
 
 #else // !ENABLE_DEBUG_LOGGING
 
 #define LOG_DEBUG(format, ...)
-#define LOGMOVE_DEBUG(board, move)
+#define LOGMOVE_DEBUG(board, move, searchDepth)
 #define LOGMOVELIST_DEBUG(mvlist)
 
 #endif // ifdef ENABLE_DEBUG_LOGGING

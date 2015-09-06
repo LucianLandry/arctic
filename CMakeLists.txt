@@ -23,7 +23,7 @@ endif (JUCE_PATH)
 # set(CMAKE_C_FLAGS "-Wall -Werror -O2 -fomit-frame-pointer")
 # Fast debug flags.  In practice, this seems to be basically as fast as the
 # "normal" flags, so we actually normally use this.
-set(CMAKE_C_FLAGS "-Wall -Werror -g -O2")
+set(CMAKE_C_FLAGS "-Wall -Werror -g -O2 -fomit-frame-pointer")
 # Debug flags.
 # set(CMAKE_C_FLAGS "-Wall -Werror -g -DENABLE_DEBUG_LOGGING -fno-omit-frame-pointer")
 # Profiling flags.  NOTE: keep the program up (say) 4 seconds after the game
@@ -39,7 +39,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++11")
 
 add_subdirectory(uiJuce)
 
-add_executable(arctic aThread.cpp aSystem.cpp board.cpp clock.cpp comp.cpp conio.c game.cpp gDynamic.cpp gPreCalc.cpp list.cpp log.cpp main.cpp move.cpp MoveList.cpp Piece.cpp playloop.cpp position.cpp pv.cpp saveGame.cpp switcher.cpp thinker.cpp transTable.cpp uiNcurses.cpp uiUci.cpp uiUtil.cpp uiXboard.cpp variant.cpp)
+add_executable(arctic aThread.cpp aSystem.cpp Board.cpp BoardMoveGen.cpp clock.cpp comp.cpp conio.c game.cpp gDynamic.cpp gPreCalc.cpp list.cpp log.cpp main.cpp move.cpp MoveList.cpp Piece.cpp playloop.cpp Position.cpp pv.cpp saveGame.cpp switcher.cpp thinker.cpp transTable.cpp uiNcurses.cpp uiUci.cpp uiUtil.cpp uiXboard.cpp Variant.cpp)
 
 # ncursesw is necessary for a UTF-8 console cursor.
 target_link_libraries(arctic ncursesw pthread uiJuce ${EXTRA_LIBS})

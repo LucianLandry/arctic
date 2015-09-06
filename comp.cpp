@@ -14,20 +14,20 @@
 //
 //--------------------------------------------------------------------------
 
-#include <stddef.h>   // NULL
-#include <string.h>
 #include <assert.h>
 #include <errno.h>
-#include <stdlib.h>   // exit()
 #include <poll.h>     // poll(2)
+#include <stddef.h>   // NULL
+#include <stdlib.h>   // exit()
+#include <string.h>
 
 #include "aThread.h"
-#include "board.h"
+#include "Board.h"
 #include "comp.h"
 #include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
-#include "position.h"
+#include "Position.h"
 #include "ref.h"
 #include "thinker.h"
 #include "transTable.h"
@@ -92,17 +92,17 @@ CompStatsT gStats;
 #define HASH_HIT 0
 
 // Forward declarations.
-static PositionEvalT minimax(BoardT *board, int alpha, int beta,
+static PositionEvalT minimax(Board *board, int alpha, int beta,
                              PvT *goodPv, ThinkContextT *th, int *hashHitOnly);
 
 
 // Assumes neither side has any pawns.
-static int endGameEval(BoardT *board, int turn)
+static int endGameEval(Board *board, int turn)
 {
-    int ekcoord =
-        board->pieceList[Piece(turn ^ 1, PieceType::King).ToIndex()].coords[0];
-    int kcoord =
-        board->pieceList[Piece(turn, PieceType::King).ToIndex()].coords[0];
+    cell_t ekcoord =
+        board->PieceCoords(Piece(turn ^ 1, PieceType::King))[0];
+    cell_t kcoord =
+        board->PieceCoords(Piece(turn, PieceType::King))[0];
 
     return
         // enemy king needs to be as close to a corner as possible.
@@ -144,10 +144,10 @@ do { if (retVal.lowBound < (eval).lowBound) \
 do { return (PositionEvalT) {(low), (high)}; } while (0)
 
 
-void updatePv(BoardT *board, PvT *goodPv, PvT *childPv, MoveT move,
-              int eval)
+static void updatePv(ThinkContextT *th, PvT *goodPv, PvT *childPv, MoveT move,
+                     int eval)
 {
-    int depth = board->depth;
+    int depth = th->depth;
 
     if (depth < MAX_PV_DEPTH && move != MoveNone)
     {
@@ -170,7 +170,7 @@ void updatePv(BoardT *board, PvT *goodPv, PvT *childPv, MoveT move,
 
             // Searching at root level, so let user know the updated line.
             goodPv->eval = eval;
-            goodPv->level = board->level;
+            goodPv->level = th->maxDepth;
 
             memcpy(&pvArgs.stats, &gStats, sizeof(gStats));
             memcpy(&pvArgs.pv, goodPv, sizeof(PvT));
@@ -186,26 +186,16 @@ void updatePv(BoardT *board, PvT *goodPv, PvT *childPv, MoveT move,
     }
 }
 
-static PositionEvalT tryMove(BoardT *board, MoveT move,
+static PositionEvalT tryMove(Board *board, MoveT move,
                              int alpha, int beta, PvT *newPv,
                              ThinkContextT *th, int *hashHitOnly)
 {
-    UnMakeT unmake;
     PositionEvalT myEval;
-    CvT *cv = &board->cv;
 
-    LOGMOVE_DEBUG(board, move);
-    BoardMoveMake(board, move, &unmake); // switches sides
+    LOGMOVE_DEBUG(board, move, th->depth);
+    board->MakeMove(move); // switches sides
 
-    // It seems silly to do 2 checks for this and I should probably just
-    // assert(board->depth < MAX_CV_DEPTH) since under ordinary circumstances,
-    // this should never happen.  But I guess I'd rather have the extra check
-    // and not ever have to worry about a crash.
-    if (board->depth < MAX_CV_DEPTH)
-    {
-        cv->moves[board->depth] = move; // struct assign
-    }
-    board->depth++;
+    th->depth++;
 
     // massage alpha/beta for mate detection so that we can "un-massage" the
     // returned bounds later w/out violating our alpha/beta.
@@ -236,14 +226,10 @@ static PositionEvalT tryMove(BoardT *board, MoveT move,
     myEval = invertEval(minimax(board, -beta, -alpha,
                                 newPv, th, hashHitOnly));
 
-    board->depth--;
-    if (board->depth < MAX_CV_DEPTH)
-    {
-        cv->moves[board->depth] = MoveNone;
-    }
+    th->depth--;
 
     // restore the current board position.
-    BoardMoveUnmake(board, &unmake);
+    board->UnmakeMove();
 
     // Enable calculation of plies to win/loss by tweaking the eval.
     // Slightly hacky.
@@ -272,47 +258,37 @@ static PositionEvalT tryMove(BoardT *board, MoveT move,
     return myEval;
 }
 
-static int potentialImprovement(BoardT *board)
+static int potentialImprovement(Board *board)
 {
-    int turn = board->turn;
+    uint8 turn = board->Turn();
     int improvement = 0;
     int lowcoord, highcoord;
-    int i, x, len;
-    // traipse through the enemy pieceList.
-    CoordListT *pl =
-        &board->pieceList[Piece(turn ^ 1, PieceType::Queen).ToIndex()];
+    int i, x;
 
     do
     {
-        if (pl->lgh)
+        // Traipse through the enemy piece vectors.
+        if (board->PieceExists(Piece(turn ^ 1, PieceType::Queen)))
         {
             improvement = EVAL_QUEEN;
             break;
         }
-        pl += Piece(0, PieceType::Rook).ToIndex() -
-            Piece(0, PieceType::Queen).ToIndex();
-        if (pl->lgh)
+        if (board->PieceExists(Piece(turn ^ 1, PieceType::Rook)))
         {
             improvement = EVAL_ROOK;
             break;
         }
-        pl += Piece(0, PieceType::Bishop).ToIndex() -
-            Piece(0, PieceType::Rook).ToIndex();
-        if (pl->lgh)
+        if (board->PieceExists(Piece(turn ^ 1, PieceType::Bishop)))
         {
             improvement = EVAL_BISHOP;
             break;
         }
-        pl += Piece(0, PieceType::Knight).ToIndex() -
-            Piece(0, PieceType::Bishop).ToIndex();
-        if (pl->lgh)
+        if (board->PieceExists(Piece(turn ^ 1, PieceType::Knight)))
         {
             improvement = EVAL_KNIGHT;
             break;
         }
-        pl += Piece(0, PieceType::Pawn).ToIndex() -
-            Piece(0, PieceType::Knight).ToIndex();
-        if (pl->lgh)
+        if (board->PieceExists(Piece(turn ^ 1, PieceType::Pawn)))
         {
             improvement = EVAL_PAWN;
             break;
@@ -323,8 +299,10 @@ static int potentialImprovement(BoardT *board)
     // by promotion.  (We include 6th rank because this potentialImprovement()
     // routine is really lazy, and calculated before any depth-1 move, as
     // opposed to after each one).
-    pl = &board->pieceList[Piece(turn, PieceType::Pawn).ToIndex()];
-    len = pl->lgh;
+    const std::vector<cell_t> &pvec =
+        board->PieceCoords(Piece(turn, PieceType::Pawn));
+    int len = pvec.size();
+
     if (len)
     {
         if (turn)
@@ -339,7 +317,7 @@ static int potentialImprovement(BoardT *board)
         }
         for (i = 0; i < len; i++)
         {
-            x = pl->coords[i];
+            x = pvec[i];
             if (x >= lowcoord && x <= highcoord)
             {
                 improvement += EVAL_QUEEN - EVAL_PAWN;
@@ -356,7 +334,7 @@ static int potentialImprovement(BoardT *board)
 // Returns the evaluation of the found move
 // (if no move found, 'cookie' is set to -1).
 // Side effect: removes the move from the list.
-static PositionEvalT tryNextHashMove(BoardT *board, int alpha, int beta,
+static PositionEvalT tryNextHashMove(Board *board, int alpha, int beta,
                                      PvT *newPv, ThinkContextT *th,
                                      MoveList *mvlist, int *cookie,
                                      MoveT *hashMove)
@@ -415,7 +393,7 @@ static int biasDraw(int strgh, int depth)
 // will optimize for the multithread case.
 
 // Evaluates a given board position from {board->turn}'s point of view.
-static PositionEvalT minimax(BoardT *board, int alpha, int beta,
+static PositionEvalT minimax(Board *board, int alpha, int beta,
                              PvT *goodPv, ThinkContextT *th, int *hashHitOnly)
 {
     // Trying to order the declared variables by their struct size, to
@@ -424,7 +402,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     int searchDepth;
 
     uint8 turn;
-    cell_t ncheck;
+    bool inCheck;
     bool mightDraw; // Is it possible to hit a draw while evaluating from
                     //  this position.
     bool masterNode;  // multithread support.
@@ -438,16 +416,15 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     int cookie;
     PositionEvalT myEval;
     int newVal;
-    UnMakeT unmake;
     PvT newPv;
     int strgh;
-    uint16 basePly = board->ply - board->depth;
+    uint16 basePly = board->Ply() - th->depth;
 
     // I'm trying to use lazy initialization for this function.
     goodPv->depth = 0;
-    turn = board->turn;
-    strgh = board->playerStrength[turn] - board->playerStrength[turn ^ 1];
-    searchDepth = board->level - board->depth;
+    turn = board->Turn();
+    strgh = board->RelativeMaterialStrength();
+    searchDepth = th->maxDepth - th->depth;
 
     gStats.nodes++;
     if (!QUIESCING)
@@ -455,21 +432,21 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
         gStats.nonQNodes++;
     }
 
-    if (BoardDrawInsufficientMaterial(board) ||
-        BoardDrawFiftyMove(board) ||
-        BoardDrawThreefoldRepetition(board))
+    if (board->IsDrawInsufficientMaterial() ||
+        board->IsDrawFiftyMove() ||
+        board->IsDrawThreefoldRepetitionFast())
     {
         // Draw detected.
         // Skew the eval a bit: If we have equal or better material, try not to
         // draw.  Otherwise, try to draw.  (here, strgh is used as a tmp
         // variable)
-        strgh = biasDraw(strgh, board->depth);
+        strgh = biasDraw(strgh, th->depth);
         RETURN_BOUND(strgh, strgh);
     }
 
-    ncheck = board->ncheck[turn];
+    inCheck = board->IsInCheck();
 
-    if (board->repeatPly != -1)
+    if (board->RepeatPly() != -1)
     {
         // Detected repeated position.  Fudge things a bit and (again) try to
         // avoid this situation when we are winning or even.  This also may
@@ -480,7 +457,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
         // cuts down on the search tree, but this screws up the eval of losing
         // positions -- thanks to back-propagation, we could mistakenly
         // prefer the position over a move that won or kept material.
-        improvement = -biasDraw(strgh, board->depth);
+        improvement = -biasDraw(strgh, th->depth);
         strgh -= improvement;
     }
     else
@@ -488,20 +465,20 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
         improvement = 0;
     }
 
-    if (QUIESCING && ncheck == FLAG)
+    if (QUIESCING && !inCheck)
     {
         // Putting some endgame eval right here.  No strength change is
         // possible if opponent only has king (unless we have pawns), so movgen
         // is not needed.  Also, (currently) don't bother with hashing since
         // usually ncpPlies will be too high.
-        if (board->playerStrength[turn ^ 1] == 0 &&
-            board->pieceList[Piece(turn, PieceType::Pawn).ToIndex()].lgh == 0)
+        if (board->MaterialStrength(turn ^ 1) == 0 &&
+            !board->PieceExists(Piece(turn, PieceType::Pawn)))
         {
             strgh += endGameEval(board, turn); // (oh good.)
             RETURN_BOUND(strgh, strgh);
         }
 
-        // When quiescing (ncheck is a special case because we attempt to
+        // When quiescing (inCheck is a special case because we attempt to
         // detect checkmate even during quiesce) we assume that we can at least
         // preserve our current strgh, by picking some theoretical move that
         // wasn't generated.  This actually functions as our node-level
@@ -519,21 +496,20 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
        more?) quiesce depth might be a repeated position due to the way we
        handle check in quiesce, but I think that is not worth the computational
        cost of detecting. */
-    // mightDraw = (searchDepth >= 7 - board->ncpPlies); original.
     mightDraw =
-        board->repeatPly == -1 ? /* no repeats upto this position */
-        (searchDepth >= MAX(5, 7 - board->ncpPlies)) :
-        /* (7 - ncpPlies below would work, but this should be better:) */
-        (searchDepth >= 3 - (board->ply - board->repeatPly));
+        board->RepeatPly() == -1 ? // no repeats upto this position ?
+        (searchDepth >= MAX(5, 7 - board->NcpPlies())) :
+        // (7 - ncpPlies below would work, but this should be better:)
+        (searchDepth >= 3 - (board->Ply() - board->RepeatPly()));
 
     // Is there a suitable hit in the transposition table?
-    if ((!mightDraw || board->ncpPlies == 0) &&
-        TransTableQuickHitTest(board->zobrist) &&
-        TransTableHit(&hashEval, &hashMove, board->zobrist, searchDepth,
+    if ((!mightDraw || board->NcpPlies() == 0) &&
+        TransTableQuickHitTest(board->Zobrist()) &&
+        TransTableHit(&hashEval, &hashMove, board->Zobrist(), searchDepth,
                       basePly, alpha, beta))
     {
         // record the move (if there is one).
-        updatePv(board, goodPv, NULL, hashMove, hashEval.lowBound);
+        updatePv(th, goodPv, NULL, hashMove, hashEval.lowBound);
         return hashEval;
     }
     if (hashHitOnly != NULL)
@@ -547,9 +523,9 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 
     MoveList mvlist;
 
-    if (board->depth || !th->searchArgs.mvlist.NumMoves())
+    if (th->depth || !th->searchArgs.mvlist.NumMoves())
     {
-        mvlist.GenerateLegalMoves(*board, QUIESCING && ncheck == FLAG);
+        board->GenerateLegalMoves(mvlist, QUIESCING && !inCheck);
     }
     else
     {
@@ -561,8 +537,8 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     bestMove = MoveNone; // struct assign
 
     if (QUIESCING &&
-        board->pieceList[Piece(0, PieceType::Pawn).ToIndex()].lgh == 0 &&
-        board->pieceList[Piece(1, PieceType::Pawn).ToIndex()].lgh == 0)
+        !board->PieceExists(Piece(0, PieceType::Pawn)) &&
+        !board->PieceExists(Piece(1, PieceType::Pawn)))
     {
         // Endgame.  Add some intelligence to the eval.  This allows us to
         // win scenarios like KQ vs KN.
@@ -576,13 +552,13 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
         }
     }
 
-    /* Note:  ncheck for any side guaranteed to be correct *only* after
-       the other side has made its move. */
+    // Note:  ncheck for any side guaranteed to be correct *only* after
+    //  the other side has made its move.
     if (!mvlist.NumMoves())
     {
         strgh =
-            ncheck != FLAG ? EVAL_LOSS : // checkmate detected
-            !QUIESCING     ? 0 :         // stalemate detected
+            inCheck    ? EVAL_LOSS : // checkmate detected
+            !QUIESCING ? 0 :         // stalemate detected
             strgh;
         SET_BOUND(strgh, strgh);
         goto out;
@@ -590,7 +566,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
 
     if (QUIESCING)
     {
-        /* once we know we're not mated, alpha always >= strgh. */
+        // Once we know we're not mated, alpha always >= strgh.
         if (strgh >= beta)
         {
             SET_BOUND(strgh, EVAL_WIN);
@@ -609,20 +585,13 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     }
     else
     {
-        /* This doesn't work well, perhaps poor interaction w/history table. */
-        /* mlistSortByCap(&mvlist, board); */
-        if (board->depth <= gVars.pv.level &&
-            gVars.pv.moves[board->depth] != MoveNone)
+        // This doesn't work well, perhaps poor interaction w/history table:
+        // mvlist->SortByCapWorth(board);
+        if (th->depth <= gVars.pv.level &&
+            gVars.pv.moves[th->depth] != MoveNone)
         {
             // Try the principal variation move (if applicable) first.
-            mvlist.UseAsFirstMove(gVars.pv.moves[board->depth]);
-        }
-
-        // Save board position for later draw detection, if applicable.
-        // (It is never applicable when we are quiescing)
-        if (mightDraw)
-        {
-            BoardPositionSave(board);
+            mvlist.UseAsFirstMove(gVars.pv.moves[th->depth]);
         }
 
         // If we find no better moves ...
@@ -630,7 +599,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
     }
 
 
-#if 1
+#if 0
     masterNode = (th == gThinker && // master node
                   searchDepth > 1); // not subject to futility pruning
 #else // disables move delegation.
@@ -644,12 +613,12 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
         improvement += potentialImprovement(board);
     }
 
-#if 1
+#if 0
     cookie = searchDepth > 3 /* adjust to taste */ &&
         /* Needed to avoid scenarios where we pick a crappy hashed move,
            and then run out of time before evaluating the good move we meant
            to pick. */
-        board->depth != 0 &&
+        th->depth != 0 &&
         mvlist.NumMoves() > 1 ? 0 : -1;
 #else // disables trying hashed moves first.
     cookie = -1;
@@ -684,9 +653,9 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
                 // First move is special (for PV).  We process it (almost)
                 // normally.
                 move = mvlist.Moves(i);
-                ThinkerSearchersMoveMake(move, &unmake, mightDraw);
+                ThinkerSearchersMoveMake(move);
                 myEval = tryMove(board, move, alpha, beta, &newPv, th, NULL);
-                ThinkerSearchersMoveUnmake(&unmake);
+                ThinkerSearchersMoveUnmake();
             }
             else if (i < mvlist.NumMoves() &&  // have a move to search?
                      // have someone to delegate it to?
@@ -715,7 +684,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
             if ((QUIESCING || (searchDepth < 2 && !mightDraw)) &&
                 move.chk == FLAG &&
                 ((preEval =
-                  BoardCapWorthCalc(board, move) + strgh + improvement)
+                  board->CalcCapWorth(move) + strgh + improvement)
                  <= alpha))
             {
                 /* Last level + no possibility to draw, or quiescing;
@@ -755,8 +724,9 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
             myEval = tryMove(board, move, alpha, beta, &newPv, th, NULL);
         }
 
-        /* Note: If we need to move, we cannot trust (and should not hash)
-           'myEval'.  We must go with the best value/move we already had ... if any. */
+        // Note: If we need to move, we cannot trust (and should not hash)
+        //  'myEval'.  We must go with the best value/move we already had ...
+        //  if any.
         if (ThinkerCompNeedsToMove(gThinker) ||
             (gVars.maxNodes != NO_LIMIT && gStats.nodes >= gVars.maxNodes))
         {
@@ -786,7 +756,7 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
             bestMove = move; // struct assign
             alpha = newVal;
 
-            updatePv(board, goodPv, &newPv, bestMove, newVal);
+            updatePv(th, goodPv, &newPv, bestMove, newVal);
 
             if (newVal >= beta) // ie, will leave other side just as bad
                                 // off (if not worse)
@@ -820,19 +790,18 @@ static PositionEvalT minimax(BoardT *board, int alpha, int beta,
         }
     }
 
-
     if (!QUIESCING && alpha > secondBestVal &&
         // Do not add moves that will automatically be preferred -- picked this
         // up from a chess alg site.  It does seem to help our speed
         // (slightly).
         bestMove.promote == PieceType::Empty &&
         (MoveIsCastle(bestMove) || // castling is not currently preferred
-         board->coord[bestMove.dst].IsEmpty()))
+         board->PieceAt(bestMove.dst).IsEmpty()))
     {
         assert(bestMove != MoveNone);
         // move is at least one point better than others.
         gVars.hist[turn]
-            [bestMove.src] [bestMove.dst] = board->ply;
+            [bestMove.src] [bestMove.dst] = board->Ply();
     }
 
 out:
@@ -840,7 +809,7 @@ out:
     if (TransTableSize())
     {
         // Update the transposition table entry if needed.
-        TransTableConditionalUpdate(retVal, bestMove, board->zobrist,
+        TransTableConditionalUpdate(retVal, bestMove, board->Zobrist(),
                                     searchDepth, basePly);
     }
 
@@ -848,15 +817,15 @@ out:
 }
 
 // These draws are claimed, not automatic.  Other draws are automatic.
-static bool canClaimDraw(BoardT *board, SaveGameT *sgame)
+static bool canClaimDraw(Board *board)
 {
-    // Testing only.  The whole point of BDTRF() is that it might properly
-    // catch (or not catch) draws that BDTR() won't.
-    // assert(BoardDrawThreefoldRepetition(board) ==
-    //        BoardDrawThreefoldRepetitionFull(board, sgame));
+    // Testing only.  The whole point of b->IDTR() is that it might properly
+    // catch (or not catch) draws that b->IDTRF() won't.
+    // assert(board->IsDrawThreefoldRepetition() ==
+    //        board->IsDrawThreefoldRepetitionFast());
     return
-        BoardDrawFiftyMove(board) ||
-        BoardDrawThreefoldRepetitionFull(board, sgame);
+        board->IsDrawFiftyMove() ||
+        board->IsDrawThreefoldRepetition();
 }
 
 // This (currently hard-coded) routine tries to find a balance between trying
@@ -867,7 +836,7 @@ static bool canClaimDraw(BoardT *board, SaveGameT *sgame)
 // or something to avoid mate as long as possible, only to turn around and
 // resign on the next move.
 // Assumes the 'board' passed in is set to our turn.
-static bool shouldResign(BoardT *board, PositionEvalT myEval, bool bPonder)
+static bool shouldResign(Board *board, PositionEvalT myEval, bool bPonder)
 {
     return
         // do not resign while pondering; let opponent make move
@@ -876,11 +845,10 @@ static bool shouldResign(BoardT *board, PositionEvalT myEval, bool bPonder)
         // opponent has a clear mating strategy
         myEval.highBound <= EVAL_LOSS_THRESHOLD &&
         // We are down by at least a rook's worth of material
-        (board->playerStrength[board->turn ^ 1] -
-         board->playerStrength[board->turn] >= EVAL_ROOK) &&
+        board->RelativeMaterialStrength() <= -EVAL_ROOK &&
         // We do not have a queen (the theory being that things could quickly
         // turn around if the opponent makes a mistake)
-        board->pieceList[Piece(board->turn, PieceType::Queen).ToIndex()].lgh == 0;
+        !board->PieceExists(Piece(board->Turn(), PieceType::Queen));
 }
 
 
@@ -888,10 +856,9 @@ static void computermove(ThinkContextT *th, bool bPonder)
 {
     PositionEvalT myEval;
     PvT pv;
-    BoardT *board = &th->searchArgs.localBoard;
+    Board *board = &th->searchArgs.localBoard;
     int resigned = 0;
     MoveList mvlist;
-    UnMakeT unmake;
     MoveT move = MoveNone;
     bool bWillDraw = false;
 
@@ -902,13 +869,13 @@ static void computermove(ThinkContextT *th, bool bPonder)
     int maxSearchDepth = gVars.maxLevel == NO_LIMIT ? 100 : gVars.maxLevel;
 
     pv.moves[0] = MoveNone;
-    board->depth = 0;   // start search from root depth.
+    th->depth = 0;   // start search from root depth.
 
     // Clear stats.
     memset(&gStats, 0, sizeof(gStats));
 
     // If we can claim a draw, do so w/out thinking.
-    if (canClaimDraw(board, &th->searchArgs.sgame))
+    if (canClaimDraw(board))
     {
         ThinkerRspDraw(th, move);
         return;
@@ -916,10 +883,10 @@ static void computermove(ThinkContextT *th, bool bPonder)
 
     if (gVars.randomMoves)
     {
-        BoardRandomize(board);
+        board->Randomize();
     }
 
-    mvlist.GenerateLegalMoves(*board, false);
+    board->GenerateLegalMoves(mvlist, false);
     
     if (!bPonder &&
 
@@ -928,7 +895,7 @@ static void computermove(ThinkContextT *th, bool bPonder)
 
          // Special case optimization (normal game, 1st move).
          // The move is not worth thinking about any further.
-         BoardIsNormalStartingPosition(board)))
+         board->IsNormalStartingPosition()))
     {
         move = mvlist.Moves(0); // struct assign
     }
@@ -941,7 +908,7 @@ static void computermove(ThinkContextT *th, bool bPonder)
         // setup known search parameters across the slaves.
         ThinkerSearchersBoardSet(board);
 
-        for (board->level =
+        for (th->maxDepth =
              // Always try to find the shortest mate if we have stumbled
              // onto one.  But normally we start at a deeper level just to
              // save the cycles.
@@ -955,26 +922,27 @@ static void computermove(ThinkContextT *th, bool bPonder)
              (gVars.pv.level && gVars.pv.depth == PV_COMPLETED_SEARCH ?
               1 : 0);
 
-             board->level <= maxSearchDepth;
-             board->level++)
+             th->maxDepth <= maxSearchDepth;
+             th->maxDepth++)
         {
             /* setup known search parameters across the slaves. */
-            ThinkerSearchersSetDepthAndLevel(board->depth, board->level);
+            ThinkerSearchersSetDepthAndLevel(th->depth, th->maxDepth);
 
-            LOG_DEBUG("ply %d searching level %d\n", board->ply, board->level);
+            LOG_DEBUG("ply %d searching level %d\n",
+                      board->Ply(), th->maxDepth);
             myEval = minimax(board,
                              // Could use EVAL_LOSS_THRESHOLD here w/a
                              // different resign strategy, but right now we
                              // prefer the most accurate score possible.
-                             EVAL_LOSS + board->level,
+                             EVAL_LOSS + th->maxDepth,
                              // Try to find the shortest mates possible.
-                             EVAL_WIN - (board->level + 1),
+                             EVAL_WIN - (th->maxDepth + 1),
                              &pv, th, NULL);
             LOG_DEBUG("top-level eval: %d %d %d %d\n",
-                      EVAL_LOSS + (board->level + 2),
+                      EVAL_LOSS + (th->maxDepth + 2),
                       myEval.lowBound,
                       myEval.highBound,
-                      EVAL_WIN - (board->level + 1));
+                      EVAL_WIN - (th->maxDepth + 1));
 
             if (ThinkerCompNeedsToMove(th))
             {
@@ -1001,7 +969,7 @@ static void computermove(ThinkContextT *th, bool bPonder)
             }
         }
 
-        board->level = 0; /* reset board->level */
+        th->maxDepth = 0; /* reset th->maxDepth */
         move = pv.moves[0];
     }
 
@@ -1022,10 +990,10 @@ static void computermove(ThinkContextT *th, bool bPonder)
         move = mvlist.Moves(0); // struct assign
     }
 
-    /* If we can draw after this move, do so. */
-    BoardMoveMake(board, move, &unmake);
-    bWillDraw = canClaimDraw(board, &th->searchArgs.sgame);
-    BoardMoveUnmake(board, &unmake);
+    // If we can draw after this move, do so.
+    board->MakeMove(move);
+    bWillDraw = canClaimDraw(board);
+    board->UnmakeMove();
 
     if (bWillDraw)
     {
@@ -1040,7 +1008,7 @@ static void computermove(ThinkContextT *th, bool bPonder)
 
 static void *searcherThread(SearcherArgsT *args)
 {
-    BoardT *board;
+    Board *board;
     ThinkContextT *th = args->th;
 
     ThreadNotifyCreated("searcherThread", (ThreadArgsT *) args);
@@ -1099,18 +1067,10 @@ static void *compThread(CompArgsT *args)
     return NULL; // never get here.
 }
 
-
-CvT *CompMainCv(void)
-{
-    return &gThinker->searchArgs.localBoard.cv;
-}
-
-
 int CompCurrentLevel(void)
 {
-    return gThinker->searchArgs.localBoard.level;
+    return gThinker->maxDepth;
 }
-
 
 void CompThreadInit(ThinkContextT *th)
 {

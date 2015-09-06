@@ -35,7 +35,10 @@
 #include "transTable.h"
 #include "ui.h"
 #include "uiUtil.h"
-#include "variant.h"
+#include "Variant.h"
+
+using arctic::File;
+using arctic::Rank;
 
 #define SYSTEMCOL       GREEN
 #define TICKCOL         BLUE
@@ -57,21 +60,21 @@ static struct {
 } gBoardIf;
 
 
-static void UIPrintBoardStatus(BoardT *board)
+static void UIPrintPositionStatus(const Position &position)
 {
     // all shorthand.
-    int ncheck = board->ncheck[board->turn];
-    int ebyte = board->ebyte;
+    cell_t ncheck = position.CheckingCoord();
+    cell_t ebyte = position.EnPassantCoord();
 
     textcolor(LIGHTGRAY);
 
     // print castle status.
     gotoxy(OPTIONS_X, 14);
     cprintf("castle QKqk: %c%c%c%c",
-            BoardCanCastleOOO(board, 0) ? 'y' : 'n',
-            BoardCanCastleOO(board, 0)  ? 'y' : 'n',
-            BoardCanCastleOOO(board, 1) ? 'y' : 'n',
-            BoardCanCastleOO(board, 1)  ? 'y' : 'n');
+            position.CanCastleOOO(0) ? 'y' : 'n',
+            position.CanCastleOO(0)  ? 'y' : 'n',
+            position.CanCastleOOO(1) ? 'y' : 'n',
+            position.CanCastleOO(1)  ? 'y' : 'n');
 
     // print en passant status.
     gotoxy(OPTIONS_X, 15);
@@ -144,22 +147,22 @@ static void UINotifyTick(GameT *game)
 static void UIStatusDraw(GameT *game)
 {
     bigtime_t timeTaken;
-    BoardT *board = &game->savedBoard; // shorthand.
-    int turn = board->turn;
+    Board *board = &game->savedBoard; // shorthand.
+    int turn = board->Turn();
 
-    UIPrintBoardStatus(board);
+    UIPrintPositionStatus(board->Position());
     UINotifyTick(game);
 
     gotoxy(OPTIONS_X, 20);
     timeTaken = ClockTimeTaken(game->clocks[turn ^ 1]);
     cprintf("move: %d (%.2f sec)     ",
-            (board->ply >> 1) + 1,
+            (board->Ply() >> 1) + 1,
             ((double) timeTaken) / 1000000);
     gotoxy(OPTIONS_X, 21);
     textcolor(SYSTEMCOL);
     cprintf("%s\'s turn", turn ? "black" : "white");
     gotoxy(OPTIONS_X, 22);
-    cprintf(board->ncheck[turn] == FLAG ? "       " : "<check>");
+    cprintf(board->IsInCheck() ? "<check>" : "       ");
 }
 
 
@@ -175,7 +178,7 @@ static void UINotifyPV(GameT *game, PvRspArgsT *pvArgs)
 
     // Get a suitable string of moves to print.
     if (PvBuildMoveString(pv, mySanString, sizeof(mySanString), &pvStyle,
-                          &game->savedBoard) < 1)
+                          game->savedBoard) < 1)
     {
         return;
     }
@@ -419,11 +422,10 @@ static void UICursorMove(int key, int *coord)
 }
 
 
-static void UIBoardRefresh(const BoardT *board)
+static void UIPositionRefresh(const Position &position)
 {
     int x, y;
     int i = 0;
-    const Piece *bcoord = board->coord;
 
     for (y = 0; y < 8; y++)
     {
@@ -436,16 +438,17 @@ static void UIBoardRefresh(const BoardT *board)
             gotoxy((gBoardIf.flipped ? 7 - x : x) * SQUARE_WIDTH +
                    SQUARE_WIDTH / 2 + 1,
                    2 + (gBoardIf.flipped ? y : 7 - y) * 3);
-            /* note if we flip board, we switch the '7-' stuff... */
 
-            if (!bcoord[i].IsEmpty())
+            Piece piece(position.PieceAt(i));
+            
+            if (!piece.IsEmpty())
             {
                 // Use the appropriate color to draw white/black pieces.
-                textcolor(gBoardIf.col[bcoord[i].Player()]);
+                textcolor(gBoardIf.col[piece.Player()]);
             }
 
             // Draw a piece (or lack thereof).
-            putch(nativeToBoardAscii(bcoord[i]));
+            putch(nativeToBoardAscii(piece));
         }
     }
     textbackground(BLACK);
@@ -589,28 +592,25 @@ static void UINotifyError(char *reason)
 }
 
 
-/* Edits a board. */
-static void UIEditPosition(BoardT *board)
+// Edits a board.
+static void UIEditPosition(Position &position)
 {   
     int c, i;
     int *coord = &gBoardIf.cursCoord; // shorthand.
     char validChars[] = "WwEeCcDdSs PpRrNnBbQqKk";
 
-    int cbyte; // tmpvars
-    Piece piece;
-    
     UIEditOptionsDraw();
     UICursorDraw(*coord, CURSOR_BLINK);
 
-    board->ply = 0;
-    board->ncpPlies = 0;
+    position.SetPly(0);
+    position.SetNcpPlies(0);
 
     while (1)
     {
-        UIPrintBoardStatus(board);
+        UIPrintPositionStatus(position);
         gotoxy(OPTIONS_X, 21);
         textcolor(SYSTEMCOL);
-        cprintf("%s\'s turn", board->turn ? "black" : "white");
+        cprintf("%s\'s turn", position.Turn() ? "black" : "white");
         // I do this here just so the cursor ends up in an aesthetically
         //  pleasing spot.
         gotoxy(OPTIONS_X, 24);
@@ -624,39 +624,42 @@ static void UIEditPosition(BoardT *board)
             {
             case 'W':
             case 'w':
-                // Wipe board.
+                // Wipe position.
                 for (i = 0; i < NUM_SQUARES; i++)
-                {
-                    BoardPieceSet(board, i, Piece());
-                }
-                UIBoardRefresh(board);
+                    position.SetPiece(i, Piece());
+                UIPositionRefresh(position);
                 break;
 
             case 'E':
             case 'e':
                 // (possibly) set an enpassant square.
-                BoardEbyteSet(board, *coord);
+                position.SetEnPassantCoord(*coord);
+                position.Sanitize();
                 break;
 
             case 'C':
             case 'c':
-                cbyte = board->cbyte;
-                // (possibly) set cbyte.
-                if (~gPreCalc.castleMask[*coord] & 0xff)
+                // (possibly) set castling.
+                for (i = 0; i < NUM_PLAYERS; i++)
                 {
-                    cbyte |= ~gPreCalc.castleMask[*coord];
+                    CastleStartCoordsT start =
+                        Variant::Current()->Castling(i).start;
+                    if (*coord == start.king)
+                        position.EnableCastling(i);
+                    else if (*coord == start.rookOO) 
+                        position.EnableCastlingOO(i);
+                    else if (*coord == start.rookOOO) 
+                        position.EnableCastlingOOO(i);
+                    else
+                        position.ClearCastling();
                 }
-                else
-                {
-                    cbyte = 0;
-                }
-                BoardCbyteSet(board, cbyte);
+                position.Sanitize();
                 break;
 
             case 'S':
             case 's':
                 // Switch turn.
-                BoardTurnSet(board, board->turn ^ 1);
+                position.SetTurn(position.Turn() ^ 1);
                 break;
 
             case 'D':
@@ -666,15 +669,11 @@ static void UIEditPosition(BoardT *board)
 
             default:
                 // At this point, it must be a piece, or nothing.
-                piece = asciiToNative(c);
-                // disallow pawns on first or eighth ranks.
-                if (piece.IsPawn() && (*coord < 8 || *coord >= 56))
-                {
-                    break;
-                }
+                Piece piece(asciiToNative(c));
 
-                BoardPieceSet(board, *coord, piece);
-                UIBoardRefresh(board);
+                position.SetPiece(*coord, piece);
+                position.Sanitize();
+                UIPositionRefresh(position);
                 break;
             }
         }
@@ -822,7 +821,7 @@ static void UIGetCommand(uint8 command[], GameT *game)
     int c;
     int gettingsrc = 1;
     int *coord = &gBoardIf.cursCoord; // shorthand.
-    BoardT *board = &game->savedBoard; // shorthand
+    Board *board = &game->savedBoard; // shorthand
     char validChars[] = "NSRLWBFQHCMEGATUOP"
 #ifdef ENABLE_DEBUG_LOGGING
         "D"
@@ -851,7 +850,7 @@ static void UIGetCommand(uint8 command[], GameT *game)
         if (c == ENTER && gettingsrc)
         {
             // (ignore attempts to set a blank src)
-            if (!board->coord[*coord].IsEmpty())
+            if (!board->PieceAt(*coord).IsEmpty())
             {
                 command[0] = *coord;
                 UICursorDraw(*coord, CURSOR_NOBLINK);
@@ -913,12 +912,12 @@ static void UIBoardDraw(void)
 }
 
 
-static void UIBoardFlip(BoardT *board)
+static void UIBoardFlip(Board *board)
 {
     UICursorDraw(gBoardIf.cursCoord, CURSOR_HIDE); // hide old cursor
     gBoardIf.flipped ^= 1;
     UITicksDraw();   // update ticks
-    UIBoardRefresh(board); // update player positions
+    UIPositionRefresh(board->Position()); // update player positions
     UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
 }
 
@@ -1007,7 +1006,7 @@ static void UINotifyResign(int turn)
 }
 
 
-static void UIMovelistShow(MoveList *mvlist, BoardT *board)
+static void UIMovelistShow(MoveList *mvlist, Board *board)
 {
     int i;
     char result[MOVE_STRING_MAX];
@@ -1057,150 +1056,160 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     int player;
     char myStr[3];
 
-    BoardT *board = &game->savedBoard; // shorthand
+    Board *board = &game->savedBoard; // shorthand
 
     UIGetCommand(comstr, game);
     
     switch(comstr[0])
     {
-    case 'Q':    /* bail */
-        ThinkerCmdBail(th);
-        UIExit();
-        printf("bye.\n");
-        exit(0);
-        break;
-    case 'N':     /* new game */
-        gVars.gameCount++;
-        ThinkerCmdBail(th);
-        GameNew(game, th);
-        return;
-    case 'L':     /* switch computer level */
-        do
-        {
-            UIBarfString(myStr, 3, "0123456789", "Set level to? >");
-        } while (sscanf(myStr, "%d", &myLevel) < 1);
+        case 'Q':    /* bail */
+            ThinkerCmdBail(th);
+            UIExit();
+            printf("bye.\n");
+            exit(0);
+            break;
+        case 'N':     /* new game */
+            gVars.gameCount++;
+            ThinkerCmdBail(th);
+            GameNew(game, th);
+            return;
+        case 'L':     /* switch computer level */
+            do
+            {
+                UIBarfString(myStr, 3, "0123456789", "Set level to? >");
+            } while (sscanf(myStr, "%d", &myLevel) < 1);
 
-        if (CompCurrentLevel() > (gVars.maxLevel = myLevel))
-        {
+            if (CompCurrentLevel() > (gVars.maxLevel = myLevel))
+            {
+                ThinkerCmdMoveNow(th);
+            }
+            UIOptionsDraw(game);
+            return;
+        case 'H':     /* change history window */
+            while ((myHiswin = UIBarf("Set to x moves (0-9)? >") - '0') < 0 ||
+                   myHiswin > 9)
+                ;   /* do nothing */
+            gVars.hiswin = myHiswin << 1;   /* convert moves to plies. */
+            UIOptionsDraw(game);
+            return;
+        case 'W':     /* toggle computer control */
+        case 'B':
+            player = (comstr[0] == 'B');
+            game->control[player] ^= 1;
+
+            GameCompRefresh(game, th);
+            UIOptionsDraw(game);
+            return;
+        case 'P': // toggle pondering.
+            gVars.ponder = !gVars.ponder;
+
+            GameCompRefresh(game, th);
+            UIOptionsDraw(game);
+            return;
+        case 'M':
             ThinkerCmdMoveNow(th);
-        }
-        UIOptionsDraw(game);
-        return;
-    case 'H':     /* change history window */
-        while ((myHiswin = UIBarf("Set to x moves (0-9)? >") - '0') < 0 ||
-               myHiswin > 9)
-            ;   /* do nothing */
-        gVars.hiswin = myHiswin << 1;   /* convert moves to plies. */
-        UIOptionsDraw(game);
-        return;
-    case 'W':     /* toggle computer control */
-    case 'B':
-        player = (comstr[0] == 'B');
-        game->control[player] ^= 1;
-
-        GameCompRefresh(game, th);
-        UIOptionsDraw(game);
-        return;
-    case 'P': // toggle pondering.
-        gVars.ponder ^= 1;
-
-        GameCompRefresh(game, th);
-        UIOptionsDraw(game);
-        return;
-    case 'M':
-        ThinkerCmdMoveNow(th);
-        return;
-    case 'C':     /* change w/b colors */
-        UIPlayerColorChange();
-        UIBoardRefresh(board);
-        return;
-    case 'F':     /* flip board. */
-        UIBoardFlip(board);
-        return;
-    case 'D':     /* change debug logging level. */
-        UISetDebugLoggingLevel();
-        return;
-    case 'S':
-        UIBarf(SaveGameSave(&game->sgame) < 0 ?
-               "Game save failed." :
-               "Game save succeeded.");
-        return;
-    case 'R':
-        if (SaveGameRestore(&game->sgame) < 0)
-        {
-            UIBarf("Game restore failed.");
-        }
-        else
+            return;
+        case 'C':     /* change w/b colors */
+            UIPlayerColorChange();
+            UIPositionRefresh(board->Position());
+            return;
+        case 'F':     /* flip board. */
+            UIBoardFlip(board);
+            return;
+        case 'D':     /* change debug logging level. */
+            UISetDebugLoggingLevel();
+            return;
+        case 'S':
+            UIBarf(SaveGameSave(&game->sgame) < 0 ?
+                   "Game save failed." :
+                   "Game save succeeded.");
+            return;
+        case 'R':
+            if (SaveGameRestore(&game->sgame) < 0)
+            {
+                UIBarf("Game restore failed.");
+            }
+            else
+            {
+                ThinkerCmdBail(th);
+                UIBarf("Game restore succeeded.");
+                TransTableReset();
+                gHistInit();
+                // Could goto current ply instead of numPlies.  I'm assuming
+                // here the user is absent-minded and might forget (or might not
+                // know) the current ply is persistent.
+                GameGotoPly(game, GameLastPly(game), th);
+            }
+            return;
+        case 'U':
+            if (GameRewind(game, 1, th) < 0)
+            {
+                UIBarf("Start of game.");
+            }
+            return;
+        case 'O':
+            if (GameFastForward(game, 1, th) < 0)
+            {
+                UIBarf("End of redo information.");
+            }
+            return;
+        case 'E':
         {
             ThinkerCmdBail(th);
-            UIBarf("Game restore succeeded.");
-            TransTableReset();
-            gHistInit();
-            // Could goto current ply instead of numPlies.  I'm assuming
-            // here the user is absent-minded and might forget (or might not
-            // know) the current ply is persistent.
-            GameGotoPly(game, GameLastPly(game), th);
-        }
-        return;
-    case 'U':
-        if (GameRewind(game, 1, th) < 0)
-        {
-            UIBarf("Start of game.");
-        }
-        return;
-    case 'O':
-        if (GameFastForward(game, 1, th) < 0)
-        {
-            UIBarf("End of redo information.");
-        }
-        return;
-    case 'E':
-        ThinkerCmdBail(th);
-        ClocksStop(game);
-        do {
-            UIEditPosition(board);
-        } while (BoardSanityCheck(board, 0));
-        UIOptionsDraw(game);
+            ClocksStop(game);
 
-        GameNewEx(game, th, board, 0, 1);
-        return;
-    case 'A': /* toggle randomize moves. */
-        gVars.randomMoves ^= 1;
-        UIOptionsDraw(game);
-        return;
-    case 'T':
-        // I'm pretty sure I want the computer to stop thinking, if I'm swiping
-        // the time out from under it.
-        ThinkerCmdBail(th);
-        ClocksStop(game);
-        UITimeMenu(game);
-        UIOptionsDraw(game);
-        UINotifyReady();
-        GameMoveCommit(game, NULL, th, 0);
-        return;
-    default:
-        break;
+            Position position = board->Position();
+            std::string errString;
+            do {
+                UIEditPosition(position);
+                if (!position.IsLegal(errString))
+                {
+                    reportError(false, "Error: %s", errString.c_str());
+                }
+            } while (!board->SetPosition(position));
+
+            UIOptionsDraw(game);
+
+            GameNewEx(game, th, board, 0, 1);
+            return;
+        }
+        case 'A': /* toggle randomize moves. */
+            gVars.randomMoves = !gVars.randomMoves;
+            UIOptionsDraw(game);
+            return;
+        case 'T':
+            // I'm pretty sure I want the computer to stop thinking, if I'm
+            //  swiping the time out from under it.
+            ThinkerCmdBail(th);
+            ClocksStop(game);
+            UITimeMenu(game);
+            UIOptionsDraw(game);
+            UINotifyReady();
+            GameMoveCommit(game, NULL, th, 0);
+            return;
+        default:
+            break;
     }
 
-    /* at this point must be a move or request for moves. */
-    /* get valid moves. */
-    movelist.GenerateLegalMoves(*board, false);
-    if (comstr[0] == 'G')       /* display moves */
+    // At this point, must be a move or request for moves, so get valid moves.
+    board->GenerateLegalMoves(movelist, false);
+
+    if (comstr[0] == 'G')       // display moves
     {
         UIMovelistShow(&movelist, board);
         UIBoardDraw();
         UITicksDraw();
         UIOptionsDraw(game);
-        UIBoardRefresh(board);
+        UIPositionRefresh(board->Position());
         UIStatusDraw(game);
         UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
         return;
     }
 
-    /* Suppose we have a valid move.  Can we find it in the movelist? */
+    // Suppose we have a valid move.  Can we find it in the movelist?
     myMove.src = comstr[0];
     myMove.dst = comstr[1];
-    MoveUnmangleCastle(&myMove, board);
+    MoveUnmangleCastle(&myMove, *board);
 
     /* search movelist for comstr */
     if ((foundMove = movelist.SearchSrcDst(myMove)) == NULL)
@@ -1214,7 +1223,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     ThinkerCmdBail(th);
 
     /* Do we need to promote? */
-    if (MoveIsPromote(myMove, board))
+    if (MoveIsPromote(myMove, *board))
     {
         while ((chr = UIBarf("Promote piece to (q, r, b, n)? >")) != 'q' &&
                chr != 'r' && chr != 'b' && chr != 'n')
@@ -1246,7 +1255,7 @@ static UIFuncTableT myUIFuncTable =
 {
     .init = UIInit,
     .playerMove = UIPlayerMove,
-    .boardRefresh = UIBoardRefresh,
+    .positionRefresh = UIPositionRefresh,
     .exit = UIExit,
     .statusDraw = UIStatusDraw,
     .notifyTick = UINotifyTick,

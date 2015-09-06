@@ -23,7 +23,7 @@
 #include <sys/types.h> // stat(2)
 #include <unistd.h>
 
-#include "board.h"
+#include "Board.h"
 #include "log.h"
 #include "MoveList.h"
 #include "saveGame.h"
@@ -32,48 +32,28 @@
 
 void SaveGameMoveCommit(SaveGameT *sgame, MoveT *move, bigtime_t myTime)
 {
-    GamePlyT *newSpace;
-    int newPlies;
-    GamePlyT *ply;
-    int plyOffset = sgame->currentPly - sgame->firstPly;
+    GamePlyT ply;
+    int plyOffset = sgame->currentPly++ - sgame->startPosition.Ply();
 
-    if (plyOffset == sgame->numAllocatedPlies)
-    {
-        // Get more space to store moves.
-        if ((newSpace = (GamePlyT *)
-             realloc(sgame->plies,
-                     (newPlies = sgame->numAllocatedPlies + 100) *
-                     sizeof(GamePlyT))) == NULL &&
-            (newSpace = (GamePlyT *)
-             realloc(sgame->plies,
-                     (newPlies = sgame->numAllocatedPlies + 1) *
-                     sizeof(GamePlyT))) == NULL)
-        {
-            LOG_EMERG("could not allocate space for more moves.\n");
-            assert(0);
-        }
+    ply.move = *move; // struct assign
+    ply.myTime = myTime;
 
-        sgame->plies = newSpace;
-        sgame->numAllocatedPlies = newPlies;
-    }
+    // Dump any redo information.
+    sgame->plies.resize(plyOffset);
 
-    ply = &sgame->plies[plyOffset];
-    ply->move = *move; // struct assign
-    ply->myTime = myTime;
-
-    /* Lose all redo information. */
-    sgame->numPlies = ++sgame->currentPly;
+    sgame->plies.push_back(ply);
 }
 
 
-/* returns: 0, if save successful, otherwise -1. */
+// returns: 0, if save successful, otherwise -1.
 int SaveGameSave(SaveGameT *sgame)
 {
     FILE *myFile;
     int retVal = 0;
-    int elementsLeft = sgame->numPlies;
+    int elementsLeft = sgame->plies.size();
     int elementsWritten = 0;
-
+    int saveGameElemSize = offsetof(SaveGameT, plies);
+    
     if ((myFile = fopen(SAVEFILE, "w")) == NULL)
     {
         LOG_DEBUG("SaveGameSave(): Could not open file.\n");
@@ -82,7 +62,7 @@ int SaveGameSave(SaveGameT *sgame)
 
     do
     {
-        if (fwrite(sgame, sizeof(SaveGameT), 1, myFile) < 1)
+        if (fwrite(sgame, saveGameElemSize, 1, myFile) < 1)
         {
             LOG_DEBUG("SaveGameSave(): could not write SaveGameT.\n");
             retVal = -1;
@@ -92,7 +72,7 @@ int SaveGameSave(SaveGameT *sgame)
         while (elementsLeft > 0)
         {
             if ((elementsWritten =
-                 fwrite(&sgame->plies[sgame->numPlies - elementsLeft],
+                 fwrite(&sgame->plies[sgame->plies.size() - elementsLeft],
                         sizeof(GamePlyT), elementsLeft, myFile)) == 0)
             {
                 LOG_DEBUG("SaveGameSave(): could not write GamePlyT.\n");
@@ -114,29 +94,21 @@ int SaveGameSave(SaveGameT *sgame)
 
 void SaveGameInit(SaveGameT *sgame)
 {
-    int i;
-
-    memset(sgame, 0, sizeof(SaveGameT));
-    for (i = 0; i < NUM_PLAYERS; i++)
+    for (int i = 0; i < NUM_PLAYERS; i++)
     {
         ClockInit(&sgame->clocks[i]);
     }
-}
 
+    sgame->currentPly = 0;
+}
 
 // Reset a position (w/out adjusting clocks)
-void SaveGamePositionSet(SaveGameT *sgame, BoardT *board)
+void SaveGamePositionSet(SaveGameT *sgame, Board *board)
 {
-    memcpy(sgame->coord, board->coord, NUM_SQUARES);
-    sgame->cbyte = board->cbyte;
-    sgame->ebyte = board->ebyte;
-    sgame->turn = board->turn;
-
-    sgame->numPlies = board->ncpPlies;
-    sgame->firstPly = board->ply;
-    sgame->currentPly = sgame->firstPly;
+    sgame->startPosition = board->Position();
+    sgame->currentPly = sgame->startPosition.Ply();
+    sgame->plies.resize(0);
 }
-
 
 void SaveGameClocksSet(SaveGameT *sgame, ClockT *clocks[])
 {
@@ -163,15 +135,16 @@ void SaveGameClocksSet(SaveGameT *sgame, ClockT *clocks[])
 //
 // Notice 'clocks' is an array of ptrs!  This is for better coordination
 // w/GameT.
-int SaveGameGotoPly(SaveGameT *sgame, int ply, BoardT *board, ClockT *clocks[])
+int SaveGameGotoPly(SaveGameT *sgame, int ply, Board *board, ClockT *clocks[])
 {
     int i, plyOffset;
     MoveList moveList;
     MoveT move;
-
-    BoardT myBoard;     // temp variables.
+    
+    Board myBoard;     // temp variables.
     ClockT myClocks[2];
 
+    
     if (ply < SaveGameFirstPly(sgame) || ply > SaveGameLastPly(sgame))
     {
         LOG_DEBUG("SaveGameGotoPly(): ply %d out of range (%d, %d)\n",
@@ -184,9 +157,7 @@ int SaveGameGotoPly(SaveGameT *sgame, int ply, BoardT *board, ClockT *clocks[])
     myClocks[1] = sgame->clocks[1];
 
     // Sanity check: SaveGameT structure.
-    BoardSet(&myBoard, sgame->coord, sgame->cbyte, sgame->ebyte, sgame->turn,
-             sgame->firstPly, sgame->ncpPlies);
-    if (BoardSanityCheck(&myBoard, 1) == -1)
+    if (!myBoard.SetPosition(sgame->startPosition))
     {
         LOG_DEBUG("SaveGameGotoPly(): bad board.\n");
         return -1;
@@ -197,11 +168,11 @@ int SaveGameGotoPly(SaveGameT *sgame, int ply, BoardT *board, ClockT *clocks[])
     // -- it would be difficult
     // -- it is possible somebody gave us more time in the middle of the
     // savegame.
-    plyOffset = ply - sgame->firstPly;
+    plyOffset = ply - sgame->startPosition.Ply();
     for (i = 0; i < plyOffset; i++)
     {
         move = sgame->plies[i].move;
-        moveList.GenerateLegalMoves(myBoard, false);
+        myBoard.GenerateLegalMoves(moveList, false);
         if (moveList.Search(move) == NULL)
         {
             LOG_DEBUG("SaveGameGotoPly(): bad move %d\n", i);
@@ -209,8 +180,7 @@ int SaveGameGotoPly(SaveGameT *sgame, int ply, BoardT *board, ClockT *clocks[])
         }
         
         ClockSetTime(&myClocks[i & 1], sgame->plies[i].myTime);
-        BoardPositionSave(&myBoard);
-        BoardMoveMake(&myBoard, move, NULL);
+        myBoard.MakeMove(move);
     }
 
     sgame->currentPly = ply;
@@ -225,7 +195,7 @@ int SaveGameGotoPly(SaveGameT *sgame, int ply, BoardT *board, ClockT *clocks[])
 
     if (board != NULL)
     {
-        BoardCopy(board, &myBoard);
+        *board = myBoard;
     }
 
     return 0;
@@ -233,7 +203,7 @@ int SaveGameGotoPly(SaveGameT *sgame, int ply, BoardT *board, ClockT *clocks[])
 
 
 // Assumes 'sgame' has been initialized (w/SaveGameInit())
-// Returns: 0, if save successful, otherwise -1.
+// Returns: 0, if restore successful, otherwise -1.
 // 'sgame' is guaranteed to be 'sane' after return, regardless of result.
 int SaveGameRestore(SaveGameT *sgame)
 {
@@ -245,7 +215,11 @@ int SaveGameRestore(SaveGameT *sgame)
     struct stat buf;
     SaveGameT mySGame;
 
-    memset(&mySGame, 0, sizeof(SaveGameT));
+    // We read in the entire savegame -- except the 'plies' vector -- in one
+    //  chunk.  Rather hacky.
+    int saveGameElemSize = offsetof(SaveGameT, plies);
+    
+    SaveGameInit(&mySGame);
 
     while ((retVal = stat(SAVEFILE, &buf)) < 0 && errno == EINTR)
         ;
@@ -254,7 +228,7 @@ int SaveGameRestore(SaveGameT *sgame)
         LOG_DEBUG("SaveGameRestore(): stat() failed\n");
         return -1;
     }
-    elementsLeft = (buf.st_size - sizeof(SaveGameT)) / sizeof(GamePlyT);
+    elementsLeft = (buf.st_size - saveGameElemSize) / sizeof(GamePlyT);
 
     if ((myFile = fopen(SAVEFILE, "r")) == NULL)
     {
@@ -263,54 +237,43 @@ int SaveGameRestore(SaveGameT *sgame)
     }
 
     do {
-        /* Read in SaveGameT. */
-        if (fread(&mySGame, sizeof(SaveGameT), 1, myFile) < 1)
+        // Read in SaveGameT.  (except for the 'plies' vector)
+        if (fread(&mySGame, saveGameElemSize, 1, myFile) < 1)
         {
             LOG_DEBUG("SaveGameRestore(): could not read SaveGameT.\n");
-            mySGame.plies = NULL;
             retVal = -1;
             break;
         }
-        mySGame.plies = NULL;
 
-        /* Sanity check: number of GamePlyTs. */
-        if (mySGame.numPlies != elementsLeft)
+        // Sanity check: we should have read a legal position.
+        //  (SaveGameGotoPly would also catch this below; we just want to be
+        //   obvious about it.)
+        std::string errString;
+        if (!mySGame.startPosition.IsLegal(errString))
         {
-            LOG_DEBUG("SaveGameRestore(): GamePlyT count mismatch.\n");
+            LOG_DEBUG("SaveGameRestore(): illegal position read: %s\n",
+                      errString.c_str());
             retVal = -1;
             break;
         }
-
+        
         // Sanity check: firstPly.  Upper limit is arbitrary, we just want
         // to prevent wraparound.
-        if (mySGame.firstPly < 0 || mySGame.firstPly > 1000000)
+        if (mySGame.startPosition.Ply() > 1000000)
         {
             LOG_DEBUG("SaveGameRestore(): bad firstPly (%d)\n",
-                      mySGame.firstPly);
+                      mySGame.startPosition.Ply());
             retVal = -1;
             break;
         }
 
-        // Allocate space for GamePlyTs.
-        mySGame.numAllocatedPlies =
-            MIN(mySGame.numAllocatedPlies, mySGame.numPlies + 100);
-
-        if ((mySGame.plies = (GamePlyT *)
-             malloc(mySGame.numAllocatedPlies * sizeof(GamePlyT))) == NULL &&
-            (mySGame.plies = (GamePlyT *)
-             malloc((mySGame.numAllocatedPlies = mySGame.numPlies)
-                    * sizeof(GamePlyT))) == NULL)
-        {
-            LOG_DEBUG("SaveGameRestore(): Cannot allocate GamePlyT space.\n");
-            retVal = -1;
-            break;
-        }
-
-        /* Read in GamePlyTs. */
+        mySGame.plies.resize(elementsLeft);
+        
+        // Read in GamePlyTs.
         while (elementsLeft > 0)
         {
             if ((elementsRead =
-                 fread(&mySGame.plies[mySGame.numPlies - elementsLeft],
+                 fread(&mySGame.plies[mySGame.plies.size() - elementsLeft],
                        sizeof(GamePlyT), elementsLeft, myFile)) == 0)
             {
                 LOG_DEBUG("SaveGameRestore(): could not read GamePlyT.\n");
@@ -322,7 +285,7 @@ int SaveGameRestore(SaveGameT *sgame)
 
         savedCurrentPly = mySGame.currentPly;
 
-        /* Sanity check: SaveGameT and GamePlyT structures. */
+        // Sanity check: SaveGameT and GamePlyT structures.
         if (SaveGameGotoPly(&mySGame, SaveGameLastPly(&mySGame), NULL,
                             NULL) < 0 ||
             // (going back to, and validating 'currentPly' at the same time)
@@ -339,41 +302,26 @@ int SaveGameRestore(SaveGameT *sgame)
         LOG_DEBUG("SaveGameRestore(): could not close file.\n");
         retVal = -1;
     }
-    if (retVal == -1 && mySGame.plies != NULL)
-    {
-        free(mySGame.plies);
-    }
 
     if (retVal != -1)
     {
-        /* Everything checks out.  Overwrite 'sgame'. */
-        if (sgame->plies != NULL)
-            free(sgame->plies); // assumes 'sgame' is initialized.
-        memcpy(sgame, &mySGame, sizeof(SaveGameT));
+        // Everything checks out.  Overwrite 'sgame'.
+        SaveGameCopy(sgame, &mySGame);
     }
 
     return retVal;
 }
 
-// Assumes 'dst' is non-NULL and has been initialized w/SaveGameInit().
-// Clobbers 'dst', but in a safe fashion.
+// Assumes 'src' and 'dst' are both non-NULL, and have both been initialized
+//  w/SaveGameInit().  Clobbers 'dst', but in a safe fashion.
 void SaveGameCopy(SaveGameT *dst, SaveGameT *src)
 {
-    int savedNumAllocatedPlies = dst->numAllocatedPlies;
-    GamePlyT *savedPlies = dst->plies;
-
-    if (src->numPlies > dst->numAllocatedPlies)
+    // Basically we just do a memberwise copy here.
+    for (int i = 0; i < NUM_PLAYERS; i++)
     {
-        if ((savedPlies = (GamePlyT *)
-             realloc(dst->plies, src->numPlies * sizeof(GamePlyT))) == NULL)
-        {
-            LOG_EMERG("SaveGameCopy: could not allocate space for moves.\n");
-            assert(0);
-        }
-        savedNumAllocatedPlies = src->numPlies;
+        dst->clocks[i] = src->clocks[i];
     }
-    *dst = *src; // struct copy
-    dst->numAllocatedPlies = savedNumAllocatedPlies;
-    dst->plies = savedPlies;
-    memcpy(dst->plies, src->plies, dst->numPlies * sizeof(GamePlyT));
+    dst->startPosition = src->startPosition;
+    dst->currentPly = src->currentPly;
+    dst->plies = src->plies;
 }

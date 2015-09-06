@@ -17,19 +17,16 @@
 #ifndef GDYNAMIC_H
 #define GDYNAMIC_H
 
-#include <poll.h>     // struct pollfd
 #include "ref.h"
-#include "thinker.h"
-#include "board.h"
-#include "position.h"
 #include "pv.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define MAX_NUM_PROCS 8 // maximum number of processors we can take advantage
-                        // of.
+#define MAX_NUM_PROCS 1024 // Just use something 'reasonable'.  This is really
+                           //  only for user input validation now, not static
+                           //  allocation of arrays.
 
 #define NO_LIMIT (-1)
 
@@ -42,8 +39,8 @@ typedef struct {
                              // NO_LIMIT indicates no (external) depth limit.
     int maxNodes;            // max nodes we are authorized to search.
                              // NO_LIMIT indicates no node limit.
-    int randomMoves;         // bool: randomize moves? (default 0)
-    int ponder;              // bool: allow computer to ponder? (default 0)
+    bool randomMoves;        // randomize moves? (default: false)
+    bool ponder;             // allow computer to ponder? (default: false)
     bool canResign;          // true iff engine is allowed to resign
 
     PvT pv; // Attempts to keep track of principal variation.

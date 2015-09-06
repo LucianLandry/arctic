@@ -21,6 +21,8 @@
 #include "log.h"
 #include "uiUtil.h"
 
+using arctic::ToCoord;
+
 LogLevelT gLogLevel = eLogNormal;
 static FILE *gLogFile = NULL;
 const MoveStyleT gMoveStyleLog = {mnCAN, csK2, true};
@@ -56,11 +58,16 @@ int LogPrint(LogLevelT level, const char *format, ...)
         va_end(ap);
     }
 
+    // Not sure if it is 'proper' to do this or not, but it sure seems
+    //  convenient.
+    if (level == eLogEmerg)
+        LogFlush();
+        
     return rv;
 }
 
 // debugging funcs.
-void LogMove(LogLevelT level, const BoardT *board, MoveT move)
+void LogMove(LogLevelT level, const Board *board, MoveT move, int searchDepth)
 {
     int moveDepth;
     Piece capPiece;
@@ -78,13 +85,13 @@ void LogMove(LogLevelT level, const BoardT *board, MoveT move)
 
     // optimization: do all initialization after gLogLevel check.
     myLevelstr = levelstr;
-    capPiece = board->coord[move.dst];
+    capPiece = board->PieceAt(move.dst);
     capstr[0] = '\0';
     promostr[0] = '\0';
     chkstr[0] = '\0';
 
-    myLevelstr += sprintf(myLevelstr, "D%02d", board->depth);
-    for (moveDepth = MIN(board->depth, 20); moveDepth > 0; moveDepth--)
+    myLevelstr += sprintf(myLevelstr, "D%02d", searchDepth);
+    for (moveDepth = MIN(searchDepth, 20); moveDepth > 0; moveDepth--)
     {
         myLevelstr += sprintf(myLevelstr, "    ");
     }
@@ -107,31 +114,7 @@ void LogMove(LogLevelT level, const BoardT *board, MoveT move)
              capstr, promostr, chkstr);
 }
 
-
-// A very simple "log-this-board" routine.
-void LogBoard(LogLevelT level, const BoardT *board)
-{
-    int rank, file, chr;
-
-    if (level > gLogLevel)
-    {
-        return; // no-op
-    }
-
-    LogPrint(level, "LogBoard:\n");
-    for (rank = 7; rank >= 0; rank--)
-    {
-        for (file = 0; file < 8; file++)
-        {
-            chr = nativeToAscii(board->coord[toCoord(rank, file)]);
-            LogPrint(level, "%c", chr == ' ' ? '.' : chr);
-        }
-        LogPrint(level, "\n");
-    }
-}
-
-
-void LogMoveShow(LogLevelT level, const BoardT *board, MoveT move, const char *caption)
+void LogMoveShow(LogLevelT level, const Board *board, MoveT move, const char *caption)
 {
     int ascii, i, j;
     char tmpStr[MOVE_STRING_MAX];
@@ -142,32 +125,9 @@ void LogMoveShow(LogLevelT level, const BoardT *board, MoveT move, const char *c
     {
         for (j = 0; j < 8; j++)
         {
-            ascii = nativeToAscii(board->coord[(i * 8) + j]);
+            ascii = nativeToAscii(board->PieceAt(ToCoord(i, j)));
             LogPrint(level, "%c", ascii == ' ' ? '.' : ascii);
         }
         LogPrint(level, "\n");
     }
-}
-
-
-// Only meant to be called in an emergency situation (program is fixing to
-//  bail).
-void LogPieceList(const BoardT *board)
-{
-    int i, j;
-    for (i = 0; i < kMaxPieces; i++)
-    {
-        if (board->pieceList[i].lgh)
-        {
-            LOG_EMERG("%d:", i);
-            for (j = 0; j < board->pieceList[i].lgh; j++)
-            {
-                LOG_EMERG("%c%c",
-                          AsciiFile(board->pieceList[i].coords[j]),
-                          AsciiRank(board->pieceList[i].coords[j]));
-            }
-            LOG_EMERG(".\n");
-        }
-    }
-    LOG_EMERG("pieceList results.\n");
 }

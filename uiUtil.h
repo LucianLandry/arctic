@@ -18,7 +18,7 @@
 #define UIUTIL_H
 
 #include "aTypes.h"
-#include "board.h"
+#include "Board.h"
 #include "game.h"
 #include "Piece.h"
 #include "ref.h"       // Rank(), File()
@@ -36,12 +36,12 @@ extern "C" {
 
 static inline char AsciiFile(cell_t coord)
 {
-    return File(coord) + 'a';
+    return arctic::File(coord) + 'a';
 }
 
 static inline char AsciiRank(cell_t coord)
 {
-    return Rank(coord) + '1';
+    return arctic::Rank(coord) + '1';
 }
 
 // Given input like 'a1', returns something like '0'
@@ -56,7 +56,7 @@ int asciiToCoord(char *inputStr);
 // 0 otherwise.
 //
 // We only accept standard FEN for an 8x8 board at this point.
-int fenToBoard(const char *fenString, BoardT *result);
+int fenToBoard(const char *fenString, Board *result);
 
 // Direct a report to the user or the error log, whichever is more
 // appropriate.  Always returns -1 (as a convenience).
@@ -75,13 +75,13 @@ char *findNextWhiteSpaceOrNull(char *pStr);
 // NULL "inputStr"s are not moves.
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation.
-bool isMove(char *inputStr, MoveT *resultMove, BoardT *board);
+bool isMove(char *inputStr, MoveT *resultMove, Board *board);
 
 // Return whether or not 'inputStr' looks like a legal move.
 // NULL "inputStr"s are not legal moves.
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation.
-bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board);
+bool isLegalMove(char *inputStr, MoveT *resultMove, Board *board);
 
 // Pattern matchers for tokens embedded at the start of a larger string.
 bool matches(const char *str, const char *needle);

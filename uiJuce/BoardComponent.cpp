@@ -15,11 +15,13 @@
 //--------------------------------------------------------------------------
 
 #include "aTypes.h"
-#include "gPreCalc.h"
+#include "Variant.h"
 
 #include "BoardComponent.h"
 
-using namespace juce;
+using arctic::File;
+using arctic::Rank;
+using juce::Colour;
 
 BoardComponent::BoardComponent()
 {
@@ -37,10 +39,7 @@ BoardComponent::BoardComponent()
     }
 
     // Give the squares pieces.
-    BoardT myBoard;
-    BoardSet(&myBoard, gPreCalc.normalStartingPieces, CASTLEALL, FLAG, 0, 0,
-             0);
-    refresh(&myBoard);
+    refresh(Variant::Current()->StartingPosition());
 };
 
 BoardComponent::~BoardComponent()
@@ -59,20 +58,10 @@ void BoardComponent::resized()
     }    
 }
 
-int BoardComponent::Rank(int i)
-{
-    return i >> 3;
-}
-
-int BoardComponent::File(int i)
-{
-    return (i & 7);
-}
-
-void BoardComponent::refresh(BoardT *board)
+void BoardComponent::refresh(const Position &position)
 {
     for (int i = 0; i < NUM_SQUARES; i++)
     {
-        squares[i].SetPiece(board->coord[i]);
+        squares[i].SetPiece(position.PieceAt(i));
     }
 }

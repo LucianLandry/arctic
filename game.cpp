@@ -19,18 +19,18 @@
 #include "clockUtil.h"
 #include "game.h"
 #include "gDynamic.h" // gPvDecrement()
-#include "gPreCalc.h"
 #include "log.h"
 #include "MoveList.h"
 #include "switcher.h"
 #include "transTable.h"
 #include "ui.h"
+#include "Variant.h"
 
 // Helper function.
 // Assume a change in thinking is necessary.
 static void compRefresh(GameT *game, ThinkContextT *th)
 {
-    int turn = game->savedBoard.turn; // shorthand
+    uint8 turn = game->savedBoard.Turn(); // shorthand
 
     // Stop anything going on.
     // ThinkerCmd(Think,Ponder) do this for us, but I guess this lets us
@@ -42,14 +42,14 @@ static void compRefresh(GameT *game, ThinkContextT *th)
         // Computer needs to make next move; let it do so.
         GoaltimeCalc(game);
         gUI->notifyThinking();
-        ThinkerCmdThink(th, &game->savedBoard, &game->sgame);
+        ThinkerCmdThink(th, &game->savedBoard);
     }
     else if (!game->bDone && game->control[turn ^ 1] && gVars.ponder)
     {
         // Computer is playing other side (only) and is allowed to ponder.
         // Do so.
         gUI->notifyPonder();
-        ThinkerCmdPonder(th, &game->savedBoard, &game->sgame);
+        ThinkerCmdPonder(th, &game->savedBoard);
     }
     else
     {
@@ -63,7 +63,8 @@ void GameInit(GameT *game)
 {
     int i;
 
-    memset(game, 0, sizeof(GameT));
+    game->bDone = false;
+    game->icsClocks = false;
 
     SaveGameInit(&game->sgame);
     SwitcherInit(&game->sw);
@@ -71,19 +72,21 @@ void GameInit(GameT *game)
 
     for (i = 0; i < NUM_PLAYERS; i++)
     {
-        game->goalTime[i] = CLOCK_TIME_INFINITE;
-        game->clocks[i] = &game->actualClocks[i];
+        game->control[i] = 0;
         ClockInit(&game->origClocks[i]);
+        ClockInit(&game->actualClocks[i]);
+        game->clocks[i] = &game->actualClocks[i];
+        game->goalTime[i] = CLOCK_TIME_INFINITE;
     }
     ClocksReset(game);
-    BoardInit(&game->savedBoard);
+    // game->savedBoard is automatically constructed.
 }
 
 
 // Handle a change in computer control or pondering.
 void GameCompRefresh(GameT *game, ThinkContextT *th)
 {
-    int turn = game->savedBoard.turn; // shorthand
+    uint8 turn = game->savedBoard.Turn(); // shorthand
 
     if ((!game->bDone && ThinkerCompIsThinking(th) && game->control[turn]) ||
         (!game->bDone && ThinkerCompIsPondering(th) && gVars.ponder &&
@@ -99,9 +102,9 @@ void GameCompRefresh(GameT *game, ThinkContextT *th)
 
 void GameMoveMake(GameT *game, MoveT *move)
 {
-    BoardT *board = &game->savedBoard; // shorthand.
+    Board *board = &game->savedBoard; // shorthand.
     ClockT *myClock;
-    int turn = board->turn;
+    uint8 turn = board->Turn();
 
     // Give computer a chance to re-evaluate the position, if we insist
     // on changing the board.
@@ -112,28 +115,27 @@ void GameMoveMake(GameT *game, MoveT *move)
 
     if (move != NULL)
     {
-        BoardPositionSave(board);
         LOG_DEBUG("making move (%d %d): ",
-                  board->ply >> 1, turn);
-        LogMove(eLogDebug, board, *move);
+                  board->Ply() >> 1, turn);
+        LogMove(eLogDebug, board, *move, 0);
 
         if (ClocksICS(game)) // have to check this before we make the move
         {
-            BoardMoveMake(board, *move, NULL);
+            board->MakeMove(*move);
             // normally would expect this to trigger on plies 1 and 2.
             ClockReset(myClock); // pretend like nothing happened to the clock
         }
         else
         {
-            BoardMoveMake(board, *move, NULL);
-            ClockApplyIncrement(myClock, board->ply);
+            board->MakeMove(*move);
+            ClockApplyIncrement(myClock, board->Ply());
         }
         SaveGameMoveCommit(&game->sgame, move, ClockGetTime(myClock));
         
         // switched sides to another player.
         gPvDecrement(move);
     }
-    BoardConsistencyCheck(board, "GameMoveMake", 1);
+    board->ConsistencyCheck("GameMoveMake");
 }
 
 
@@ -141,21 +143,21 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
                     int declaredDraw)
 {
     MoveList mvlist;
-    BoardT *board = &game->savedBoard; // shorthand.
+    Board *board = &game->savedBoard; // shorthand.
     int turn;
 
     GameMoveMake(game, move);
 
 #if 0 // bldbg: here is a way to turn on logging for one ply only.
-    if (board->ply == 29)
+    if (board->Ply() == 29)
         LogSetLevel(eLogDebug);
-    if (board->ply == 30)
+    if (board->Ply() == 30)
         LogSetLevel(eLogNormal);
 #endif
 
-    turn = board->turn; // needs reset.
+    turn = board->Turn(); // needs reset.
 
-    gUI->boardRefresh(board);
+    gUI->positionRefresh(board->Position());
 
     // I do not particularly like starting the clock before status is drawn
     // (as opposed to afterwards), but the user should know his clock is
@@ -165,9 +167,9 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
     ClockStart(game->clocks[turn]);
     gUI->statusDraw(game);
 
-    mvlist.GenerateLegalMoves(*board, false);
+    board->GenerateLegalMoves(mvlist, false);
     
-    if (BoardDrawInsufficientMaterial(board))
+    if (board->IsDrawInsufficientMaterial())
     {
         ClocksStop(game);
         gUI->notifyDraw("insufficient material", NULL);
@@ -176,7 +178,7 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
     else if (!mvlist.NumMoves())
     {
         ClocksStop(game);
-        if (board->ncheck[turn] == FLAG)
+        if (!board->IsInCheck())
         {
             gUI->notifyDraw("stalemate", NULL);
         }
@@ -199,11 +201,11 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
 }
 
 
-void GameNewEx(GameT *game, ThinkContextT *th, BoardT *board, int resetClocks,
+void GameNewEx(GameT *game, ThinkContextT *th, Board *board, int resetClocks,
                int resetHash)
 {
-    assert(BoardSanityCheck(board, 1) == 0);
-    BoardCopy(&game->savedBoard, board);
+    assert(board->Position().IsLegal());
+    game->savedBoard = *board;
     SaveGamePositionSet(&game->sgame, board);
     if (resetClocks)
     {
@@ -227,9 +229,7 @@ void GameNewEx(GameT *game, ThinkContextT *th, BoardT *board, int resetClocks,
 
 void GameNew(GameT *game, ThinkContextT *th)
 {
-    BoardT myBoard;
-    BoardSet(&myBoard, gPreCalc.normalStartingPieces, CASTLEALL, FLAG, 0, 0,
-             0);
+    Board myBoard;
     GameNewEx(game, th, &myBoard, 1, 1);
 }
 

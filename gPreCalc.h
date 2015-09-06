@@ -40,7 +40,7 @@ typedef struct {
     // 7 - west
     // 8 - knight move.
     // 9 - knight move (special, used only for calculating black night moves.
-    //     This is so forward night-moves are always tried first.)
+    //     This is so forward knight-moves are always tried first.)
     // 10 - white pawn move (not a valid direction)
     // 11 - black pawn move (not a valid direction)
     // Each 'list' is terminated with a FLAG.

@@ -14,15 +14,16 @@
 //
 //--------------------------------------------------------------------------
 
-#include <stdio.h>     // sprintf()
-#include <ctype.h>     // isdigit()
 #include <assert.h>
+#include <ctype.h>     // isdigit()
+#include <stdio.h>     // sprintf()
+#include <stdlib.h>    // abs()
 #include <sys/time.h>  // gettimeofday()
 #include <time.h>
-#include <stdlib.h>    // abs()
-#include "ref.h"
+
 #include "clock.h"
 #include "clockUtil.h"
+#include "ref.h"
 #include "uiUtil.h"
 
 #define CLOCK_TIME_INFINITE_STR "inf"
@@ -359,7 +360,7 @@ void ClocksPrint(GameT *game, char *context)
 // Syntactic sugar.
 bool ClocksICS(GameT *game)
 {
-    return game->icsClocks && game->savedBoard.ply < 2;
+    return game->icsClocks && game->savedBoard.Ply() < 2;
 }
 
 // Expected number of moves in a game.  Actually a little lower, as this is
@@ -377,8 +378,8 @@ bool ClocksICS(GameT *game)
 #define ICS_FIRSTMOVE_LIMIT 5000000
 void GoaltimeCalc(GameT *game)
 {
-    int turn = game->savedBoard.turn;
-    int ply = game->savedBoard.ply;
+    uint8 turn = game->savedBoard.Turn();
+    int ply = game->savedBoard.Ply();
     ClockT *myClock = game->clocks[turn];
     bigtime_t myTime, calcTime, altCalcTime, myInc, safeTime,
         myPerMoveLimit, safeMoveLimit;

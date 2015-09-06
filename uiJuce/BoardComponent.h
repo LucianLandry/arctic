@@ -20,7 +20,7 @@
 #include "../AppConfig.h"
 #include "juce_gui_basics/juce_gui_basics.h" // juce::Component
 
-#include "board.h"
+#include "Position.h"
 #include "ref.h" // NUM_SQUARES
 
 #include "SquareComponent.h"
@@ -30,13 +30,12 @@ class BoardComponent : public juce::Component
 public:
     BoardComponent();
     ~BoardComponent();
-    void resized(); // override
-    void refresh(BoardT *board); // re-draw the component using the contents
-                                 // of 'Board'
+    void resized() override;
+
+    // re-draw the component using the contents of 'position'.
+    void refresh(const Position &position);
 private:
     SquareComponent squares[NUM_SQUARES];
-    int Rank(int i);
-    int File(int i);
 };
 
 #endif // BOARD_COMPONENT_H

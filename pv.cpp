@@ -19,7 +19,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "board.h"
+#include "Board.h"
 #include "gDynamic.h"
 #include "log.h"
 #include "pv.h"
@@ -119,18 +119,16 @@ void CvInit(CvT *cv)
 // Writes out a sequence of moves in the PV using style 'moveStyle'.
 // Returns the number of moves successfully converted.
 int PvBuildMoveString(PvT *pv, char *dstStr, int dstLen,
-                      const MoveStyleT *moveStyle, struct BoardS *board)
+                      const MoveStyleT *moveStyle, const Board &board)
 {
     char sanStr[MOVE_STRING_MAX];
     char myStrSpace[MAX_PV_DEPTH * MOVE_STRING_MAX + 1] = "";
     char *myStr = myStrSpace;
-    BoardT myBoard;
+    Board myBoard(board);
     int i;
     MoveT *moves;
     int lastLen = 0, myStrLen;
     int movesWritten = 0;
-
-    BoardCopy(&myBoard, board);
 
     for (i = 0, moves = pv->moves;
          i < pv->depth + 1;
@@ -140,18 +138,18 @@ int PvBuildMoveString(PvT *pv, char *dstStr, int dstLen,
         if (sanStr[0])
         {
             // Move was legal, advance to next move so we can check it.
-            BoardMoveMake(&myBoard, *moves, NULL);
+            myBoard.MakeMove(*moves);
         }
         else
         {
-            // Illegal move found, probably a blasted hash.  This can happen
-            // but not very often.
+            // Illegal move found, probably a zobrist collision.  This can
+            //  happen, but not very often.
             LogPrint(eLogNormal, "%s: game %d: illegal move %d.%d.%d.%d "
-                     "baseply %d depth %d maxDepth %d (probably overwritten "
-                     "hash), ignoring\n",
+                     "baseply %d depth %d maxDepth %d (probably zobrist "
+                     "collision), ignoring\n",
                      __func__, gVars.gameCount,
                      moves->src, moves->dst, int(moves->promote), moves->chk,
-                     board->ply, i, pv->depth);
+                     board.Ply(), i, pv->depth);
             break;
         }
 

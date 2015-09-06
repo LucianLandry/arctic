@@ -29,18 +29,7 @@
 #define MOVELIST_LOGDEBUG(mvlist)
 #endif // ENABLE_DEBUG_LOGGING
 
-// force-update 'board's ncheck[] value for an assumed king-coord 'i'.
-// Slow; should only be used for setup.
-// Returns: the 'ncheck' value we updated to.
-// I should probably move this elsewhere. ?
-cell_t calcNCheck(BoardT &board, uint8 myTurn, const char *context);
-
-// stores pin info.  Only move-generation code should use this union.
-typedef union
-{
-    uint8  c[NUM_SQUARES];
-    uint64 ll[8]; // hardcoding '8' is rather brittle.
-} PinsT;
+class Board; // Forward-declare this
 
 class MoveList
 {
@@ -57,11 +46,7 @@ public:
     // return a reference.
     inline MoveT Moves(int idx);
     
-    // Generate all legal moves for 'board'.  (Iff 'generateCapturesOnly' ==
-    //  true, then of course generate capture moves only.)
-    void GenerateLegalMoves(const BoardT &board, bool generateCapturesOnly);
-
-    void SortByCapWorth(const BoardT &board);
+    void SortByCapWorth(const Board &board);
     
     // Use 'move' as the first move (if it is currently in our movelist,
     //  otherwise no-op).
@@ -80,8 +65,11 @@ public:
     //  set of moves.  Note: *all* fields in 'move' must be valid (because check
     //  and discovered-check are not recalculated), and dups are not checked
     //  for.
-    void AddMove(const BoardT &board, MoveT move);
-
+    void AddMove(MoveT move, const Board &board);
+    // A fast version of the above that does not take promotion, en passant,
+    //  or castling into account.
+    void AddMoveFast(MoveT move, const Board &board);
+    
     // Delete the move at index 'idx'.
     // Must be fast, so 'idx' is not sanity-checked.
     void DeleteMove(int idx);
@@ -100,15 +88,11 @@ public:
 protected:
     int insrt; // index of spot to insert 'preferred' move.
 
-    // temp var for GenerateLegalMoves(), here for performance reasons.
-    cell_t ekcoord;
-    // temp var for GenerateLegalMoves(), here (in 'int' form) for performance
-    //  reasons.
-    int capOnly;
-
     // Let the number of possible moves grow indefinitely (for compatibility
     //  with variants with large numbers of moves).  We reuse the vectors to
-    //  cut down on the number of allocations.
+    //  cut down on the number of dynamic allocations.
+    // We could use a separate vector for preferred moves, but I'm not sure how
+    //  that would be a win.
     std::vector<MoveT> &moves;
 };
 

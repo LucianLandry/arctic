@@ -29,6 +29,8 @@
 #include "ui.h"
 #include "uiUtil.h"
 
+using arctic::ToCoord;
+
 UIFuncTableT *gUI;
 
 struct PieceAsciiMap
@@ -150,20 +152,19 @@ static int fenFullmoveToPly(int fullmove, int turn)
 // 0 otherwise.
 //
 // We only accept standard FEN for an 8x8 board at this point.
-int fenToBoard(const char *fenString, BoardT *result)
+int fenToBoard(const char *fenString, Board *result)
 {
     int i, rank = 7, file = 0; // counters.
     int chr, spaces, res;
     Piece piece;
-    BoardT tmpBoard;
-
-    Piece coord[NUM_SQUARES]; // initialize to empty board.
+    Position tmpPosition;
 
     // Setting some defaults:
     // -- no one can castle
     // -- no en passant
     // -- white's turn
-    int cbyte = 0, ebyte = FLAG, turn = 0, halfmove, fullmove;
+    cell_t epCoord = FLAG;
+    int halfmove, fullmove;
     char coordStr[80], turnStr[6], cbyteStr[6], ebyteStr[6];
 
     if (fenString == NULL)
@@ -182,7 +183,7 @@ int fenToBoard(const char *fenString, BoardT *result)
             (false, "Error: fenToBoard: not enough arguments (%d)", res);
     }
 
-    // Read in 'coord'.
+    // Handle the board pieces.
     for (i = 0;
          (chr = coordStr[i]) != '\0';
          i++)
@@ -217,7 +218,7 @@ int fenToBoard(const char *fenString, BoardT *result)
                     (false, "Error: fenToBoard: (%d,%d) too many pieces",
                      rank, file);
             }
-            coord[toCoord(rank, file++)] = piece;
+            tmpPosition.SetPiece(ToCoord(rank, file++), piece);
         }
         else
         {
@@ -237,7 +238,7 @@ int fenToBoard(const char *fenString, BoardT *result)
     // Read in turn.
     if (!strcmp(turnStr, "b"))
     {
-        turn = 1;
+        tmpPosition.SetTurn(1);
     }
     else if (strcmp(turnStr, "w"))
     {
@@ -245,7 +246,7 @@ int fenToBoard(const char *fenString, BoardT *result)
                            turnStr);
     }
 
-    // Read in cbyte.
+    // Read in castling.
     if (strcmp(cbyteStr, "-")) // do nothing, if nothing to castle.
     {
         for (i = 0;
@@ -254,21 +255,21 @@ int fenToBoard(const char *fenString, BoardT *result)
         {
             switch (chr)
             {
-            case 'K':
-                cbyte |= CASTLEOO;
-                break;
-            case 'Q':
-                cbyte |= CASTLEOOO;
-                break;
-            case 'k':
-                cbyte |= CASTLEOO << 1;
-                break;
-            case 'q':
-                cbyte |= CASTLEOOO << 1;
-                break;
-            default:
-                return reportError
-                    (false, "Error: fenToBoard: unknown cbyte token '%c'", chr);
+                case 'K':
+                    tmpPosition.EnableCastlingOO(0);
+                    break;
+                case 'Q':
+                    tmpPosition.EnableCastlingOOO(0);
+                    break;
+                case 'k':
+                    tmpPosition.EnableCastlingOO(1);
+                    break;
+                case 'q':
+                    tmpPosition.EnableCastlingOOO(1);
+                    break;
+                default:
+                    return reportError
+                        (false, "Error: fenToBoard: unknown cbyte token '%c'", chr);
             }
         }
         if (i == 4 && cbyteStr[i] != '\0')
@@ -282,10 +283,11 @@ int fenToBoard(const char *fenString, BoardT *result)
     // Read in ebyte.
     if (strcmp(ebyteStr, "-"))
     {
-        if ((ebyte = asciiToCoord(ebyteStr)) == FLAG)
+        if ((epCoord = asciiToCoord(ebyteStr)) == FLAG)
         {
             return reportError(false, "Error: fenToBoard: bad ebyte");
         }
+        tmpPosition.SetEnPassantCoord(epCoord);
         if (ebyteStr[2] != '\0')
         {
             return reportError(false,
@@ -294,19 +296,27 @@ int fenToBoard(const char *fenString, BoardT *result)
         }
     }
 
-    // (halfmove and fullmove are already read in.)
-    // At this point we think we have something worth checking.
-    BoardSet(&tmpBoard, coord, cbyte, ebyte, turn,
-             fenFullmoveToPly(fullmove, turn), halfmove);
-
-    if (BoardSanityCheck(&tmpBoard, 0) < 0)
+    // Set fullmove and halfmove clock.
+    if (!tmpPosition.SetPly(fenFullmoveToPly(fullmove, tmpPosition.Turn())) ||
+        !tmpPosition.SetNcpPlies(halfmove))
     {
-        return -1;
+        return reportError(false,
+                           "Error: fenToBoard: bad fullmove/halfmove %d/%d",
+                           fullmove, halfmove);
     }
 
-    BoardCopy(result, &tmpBoard);
+    std::string errString;
+    if (!tmpPosition.IsLegal(errString))
+    {
+        return reportError(false,
+                           "Error: fenToBoard: illegal position: %s",
+                           errString.c_str());
+    }
 
-    // LogBoard(eLogEmerg, result);
+    // At this point we should have something good.
+    result->SetPosition(tmpPosition);
+    
+    // result->ToPosition().Log(eLogEmerg);
     return 0;
 }
 
@@ -385,7 +395,7 @@ static char *copyToken(char *dst, int dstLen, char *src)
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation (and also O-O-style
 //  castling).
-bool isMove(char *inputStr, MoveT *resultMove, BoardT *board)
+bool isMove(char *inputStr, MoveT *resultMove, Board *board)
 {
     char moveStr[MOVE_STRING_MAX];
 
@@ -398,19 +408,19 @@ bool isMove(char *inputStr, MoveT *resultMove, BoardT *board)
 
     if (!strcasecmp(moveStr, "O-O") || !strcasecmp(moveStr, "0-0"))
     {
-        MoveCreateFromCastle(resultMove, true, board->turn);
+        MoveCreateFromCastle(resultMove, true, board->Turn());
         return true;
     }
     if (!strcasecmp(moveStr, "O-O-O") || !strcasecmp(moveStr, "0-0-0"))
     {
-        MoveCreateFromCastle(resultMove, false, board->turn);
+        MoveCreateFromCastle(resultMove, false, board->Turn());
         return true;
     }
     else if (asciiToCoord(moveStr) != FLAG && asciiToCoord(&moveStr[2]) != FLAG)
     {
         resultMove->src = asciiToCoord(moveStr);
         resultMove->dst = asciiToCoord(&moveStr[2]);
-        MoveUnmangleCastle(resultMove, board);
+        MoveUnmangleCastle(resultMove, *board);
         return true;
     }
     return false;
@@ -421,7 +431,7 @@ bool isMove(char *inputStr, MoveT *resultMove, BoardT *board)
 // NULL "inputStr"s are not legal moves.
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation.
-bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
+bool isLegalMove(char *inputStr, MoveT *resultMove, Board *board)
 {
     MoveList moveList;
     MoveT *foundMove;
@@ -432,7 +442,7 @@ bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
         return false;
     }
 
-    moveList.GenerateLegalMoves(*board, false);
+    board->GenerateLegalMoves(moveList, false);
 
     // Search moveList for move.
     if ((foundMove = moveList.SearchSrcDst(*resultMove)) == NULL)
@@ -441,7 +451,7 @@ bool isLegalMove(char *inputStr, MoveT *resultMove, BoardT *board)
     }
 
     // Do we need to promote?
-    if (MoveIsPromote(*resultMove, board))
+    if (MoveIsPromote(*resultMove, *board))
     {
         chr = inputStr[4];
         if (chr != 'q' && chr != 'r' && chr != 'n' && chr != 'b')

@@ -18,11 +18,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "board.h"
+#include "Board.h"
 #include "move.h"
 #include "MoveList.h"
 #include "uiUtil.h"
-#include "variant.h"
+#include "Variant.h"
+
+using arctic::File;
+using arctic::Rank;
 
 // Pull information about whose turn it is from this move.
 // It only works for castling moves!
@@ -95,13 +98,13 @@ static int moveToStringMnCAN(char *result, MoveT move)
                    promoString);
 }
 
-static bool canUseK2Notation(CastleStartCoordsT *start, cell_t dst)
+static bool canUseK2Notation(CastleStartCoordsT start, cell_t dst)
 {
     cell_t rookOO, rookOOO, king;
 
-    rookOO = start->rookOO;
-    rookOOO = start->rookOOO;
-    king = start->king;
+    rookOO = start.rookOO;
+    rookOOO = start.rookOOO;
+    king = start.king;
 
     if (rookOO != rookOOO &&
         ((rookOO <= king && rookOOO <= king) ||
@@ -122,15 +125,15 @@ static bool canUseK2Notation(CastleStartCoordsT *start, cell_t dst)
 
 // Attempt to transmute our normal castle style to a king-moves-2 style
 // for printing.  Returns 'false' (and modifies nothing) if this is impossible.
-static bool moveMangleCsK2(MoveT *move)
+static bool moveMangleCsK2(MoveT &move)
 {
-    CastleStartCoordsT *start;
-    bool castleOO = MoveIsCastleOO(*move);
+    CastleStartCoordsT start;
+    bool castleOO = MoveIsCastleOO(move);
     cell_t rook, king, dst;
 
-    start = &gVariant->castling[moveCastleToTurn(*move)].start;
-    king = start->king;
-    rook = castleOO ? start->rookOO : start->rookOOO;
+    start = Variant::Current()->Castling(moveCastleToTurn(move)).start;
+    king = start.king;
+    rook = castleOO ? start.rookOO : start.rookOOO;
     dst = king + (rook > king ? 2 : -2);
 
     if (!canUseK2Notation(start, dst))
@@ -138,43 +141,42 @@ static bool moveMangleCsK2(MoveT *move)
         return false;
     }
 
-    move->src = king;
-    move->dst = dst;
+    move.src = king;
+    move.dst = dst;
     return true;
 }
 
 // Attempt to transmute our normal castle style to a king-capture-rook style
-// for printing.  Returns 'false' (and modifies nothing) if this is impossible.
-static void moveMangleCsKxR(MoveT *move)
+// for printing.
+static void moveMangleCsKxR(MoveT &move)
 {
-    CastleStartCoordsT *start;
-    bool castleOO = MoveIsCastleOO(*move);
+    CastleStartCoordsT start;
+    bool castleOO = MoveIsCastleOO(move);
     cell_t king, dst;
 
-    start = &gVariant->castling[moveCastleToTurn(*move)].start;
-    dst = castleOO ? start->rookOO : start->rookOOO;
-    king = start->king;
+    start = Variant::Current()->Castling(moveCastleToTurn(move)).start;
+    dst = castleOO ? start.rookOO : start.rookOOO;
+    king = start.king;
 
-    move->src = king;
-    move->dst = dst;
+    move.src = king;
+    move.dst = dst;
 }
 
 // Assumes castling is handled separately, when castleStyle is
 //  csOO || csFIDE.  At this point we treat a king castle like
 //  any other move even though it will not be technically legal.
-static int moveToStringMnSAN(char *result, MoveT move, BoardT *board)
+static int moveToStringMnSAN(char *result, MoveT move, const Board &board)
 {
     // See the 'algebraic notation (chess)' article on Wikipedia for details
     //  about SAN.
-    Piece *coord = board->coord;
     uint8 src = move.src;
     uint8 dst = move.dst;
-    Piece myPiece = coord[src];
+    Piece myPiece = board.PieceAt(src);
     char *sanStr = result;
     int i;
     bool isCastle = src == dst;
     bool isCapture = !isCastle &&
-        (!coord[dst].IsEmpty() || move.promote == PieceType::Pawn);
+        (!board.PieceAt(dst).IsEmpty() || move.promote == PieceType::Pawn);
     bool isPromote =
         move.promote != PieceType::Empty && move.promote != PieceType::Pawn;
     bool sameFile = true, sameRank = true;
@@ -187,7 +189,7 @@ static int moveToStringMnSAN(char *result, MoveT move, BoardT *board)
         // Need to spew the file we are capturing from.
         sanStr += sprintf(sanStr, "%c", AsciiFile(src));
 
-    mvlist.GenerateLegalMoves(*board, false);
+    board.GenerateLegalMoves(mvlist, false);
 
     // Is there ambiguity about which piece will be moved?
     for (i = 0; i < mvlist.NumMoves(); i++)
@@ -195,7 +197,7 @@ static int moveToStringMnSAN(char *result, MoveT move, BoardT *board)
         if (!myPiece.IsPawn() && // already taken care of, above
             mvlist.Moves(i).src != src &&
             mvlist.Moves(i).dst == dst &&
-            coord[mvlist.Moves(i).src] == myPiece)
+            board.PieceAt(mvlist.Moves(i).src) == myPiece)
         {
             // Yes.  Note: both conditions could easily be true.
             if (sameFile)
@@ -227,11 +229,11 @@ static int moveToStringMnSAN(char *result, MoveT move, BoardT *board)
     return sanStr - result; // return number of non-NULL bytes written
 }
 
-static bool moveIsLegal(MoveT move, BoardT *board)
+static bool moveIsLegal(MoveT move, const Board &board)
 {
     MoveList moveList;
 
-    moveList.GenerateLegalMoves(*board, false);
+    board.GenerateLegalMoves(moveList, false);
     return moveList.Search(move) != NULL;
 }
 
@@ -239,8 +241,7 @@ char *MoveToString(char *result,
                    MoveT move,
                    const MoveStyleT *style,
                    // Used for disambiguation and legality checks, when !NULL.
-                   // Not mangled, but may be altered (to test checkmate).
-                   struct BoardS *board)
+                   const Board *board)
 {
     // These shorthand copies may be modified.
     MoveNotationT notation = style->notation;
@@ -257,7 +258,7 @@ char *MoveToString(char *result,
         //  whatever).
         return moveToStringInsane(result, move);
     }
-    if (board != NULL && !moveIsLegal(move, board))
+    if (board != NULL && !moveIsLegal(move, *board))
     {
         result[0] = '\0';
         return result;
@@ -272,9 +273,9 @@ char *MoveToString(char *result,
         //  our default.
         if (castleStyle == csKxR)
         {
-            moveMangleCsKxR(&move);
+            moveMangleCsKxR(move);
         }
-        else if (castleStyle == csK2 && !moveMangleCsK2(&move))
+        else if (castleStyle == csK2 && !moveMangleCsK2(move))
         {
             castleStyle = csOO;
         }
@@ -299,22 +300,22 @@ char *MoveToString(char *result,
     }
 
     moveStr +=
-        notation == mnSAN ? moveToStringMnSAN(result, move, board) :
+        notation == mnSAN ? moveToStringMnSAN(result, move, *board) :
         // Assume mnCAN at this point.
         moveToStringMnCAN(result, move);
 
     if (showCheck && move.chk != FLAG)
     {
         bool isMate = false;
-        MoveList mvlist;
-        UnMakeT unmake;
 
         if (board != NULL)
         {
+            Board tmpBoard(*board);
+            MoveList mvlist;
+
             // Piece in check.  Is this checkmate?
-            BoardMoveMake(board, move, &unmake);
-            mvlist.GenerateLegalMoves(*board, false);
-            BoardMoveUnmake(board, &unmake);
+            tmpBoard.MakeMove(move);
+            tmpBoard.GenerateLegalMoves(mvlist, false);
             isMate = (mvlist.NumMoves() == 0);
         }
 
@@ -335,11 +336,11 @@ void MoveStyleSet(MoveStyleT *style,
     style->showCheck = showCheck;
 }
 
-bool MoveIsPromote(MoveT move, struct BoardS *board)
+bool MoveIsPromote(MoveT move, const Board &board)
 {
     return
         !MoveIsCastle(move) &&
-        board->coord[move.src].IsPawn() &&
+        board.PieceAt(move.src).IsPawn() &&
         (move.dst > 55 || move.dst < 8);
 }
 
@@ -360,29 +361,29 @@ void MoveCreateFromCastle(MoveT *move, bool castleOO, int turn)
 //  king capturing its own rook one space to the right could be confused with
 //  just moving the king one space to the right.
 // Assumes we are 'unmangling' a move from the players whose turn it is.
-void MoveUnmangleCastle(MoveT *move, struct BoardS *board)
+void MoveUnmangleCastle(MoveT *move, const Board &board)
 {
-    CastleStartCoordsT *start; // shorthand
+    CastleStartCoordsT start; // shorthand
     cell_t dst = move->dst, src = move->src, rookOO;
     bool isCastleOO;
-    int turn = board->turn;
+    int turn = board.Turn();
 
     if (MoveIsCastle(*move))
     {
         return; // do not unmangle if this move is already a castle request
     }
 
-    start = &gVariant->castling[turn].start;
-    rookOO = start->rookOO;
+    start = Variant::Current()->Castling(turn).start;
+    rookOO = start.rookOO;
 
-    if (src != start->king ||
-        !BoardCanCastle(board, turn))
+    if (src != start.king ||
+        !board.CanCastle(turn))
     {
         return;
     }
 
     // We know now we're at least trying to move a 'king' that can castle.
-    if (dst == rookOO || dst == start->rookOOO)
+    if (dst == rookOO || dst == start.rookOOO)
     {
         // Attempting KxR.
         isCastleOO = (dst == rookOO);
@@ -403,8 +404,8 @@ void MoveUnmangleCastle(MoveT *move, struct BoardS *board)
         return; // King not moving 2, and not capturing own rook
     }
 
-    if ((isCastleOO && BoardCanCastleOO(board, turn)) ||
-        (!isCastleOO && BoardCanCastleOOO(board, turn)))
+    if ((isCastleOO && board.CanCastleOO(turn)) ||
+        (!isCastleOO && board.CanCastleOOO(turn)))
     {
         MoveCreateFromCastle(move, isCastleOO, turn);
     }

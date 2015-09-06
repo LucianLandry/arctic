@@ -34,7 +34,7 @@
 //  and the notation is portable across chess variants.  We mask in 'turn'
 //  because it becomes easier to convert back to other notations.
 
-struct MoveT
+struct /* alignas(uint32) makes things slower */ MoveT
 {
     cell_t src;    // For a null/invalid move, src = FLAG (and the contents
                    //  of the other fields are undefined.)
@@ -46,9 +46,9 @@ struct MoveT
                        //  PieceType::Pawn.
     
     cell_t chk;    // Is this a checking move.  Set to:
-                   // FLAG if not a checking move.
+                   // FLAG, if not a checking move.
                    // Coordinate of checking piece, if single check
-                   // DOUBLE_CHECK otherwise.
+                   // DOUBLE_CHECK, otherwise.
                    // (this is the same convention as BoardT->ncheck[])
     inline bool operator==(const MoveT &other) const
     {
@@ -70,7 +70,7 @@ static_assert(sizeof(uint32) == sizeof(MoveT),
               "MoveT.operator== is broken");
     
 // "No" move (fails moveIsSane(), so do not try to print it)
-const MoveT MoveNone = {FLAG, 0, PieceType::Empty, 0};
+const MoveT MoveNone = {FLAG, 0, PieceType::Empty, FLAG};
     
 // Any stringified-move (including null terminator) is guaranteed to fit into
 // a char[MOVE_STRING_MAX].
@@ -109,7 +109,7 @@ typedef struct {
     bool showCheck; // Append '+' and '#' (when known) to moves?
 } MoveStyleT;
 
-struct BoardS; // forward declaration
+class Board; // forward declaration
 
 // Syntactic sugar.
 void MoveStyleSet(MoveStyleT *style,
@@ -121,15 +121,14 @@ char *MoveToString(char *result,
                    MoveT move,
                    const MoveStyleT *style,
                    // Used for disambiguation and legality checks, when !NULL.
-                   // Not mangled, but may be altered (to test checkmate).
-                   struct BoardS *board);
+                   const Board *board);
 
 static inline bool MoveIsCastle(MoveT move)
 {
     return move.src == move.dst;
 }
 
-bool MoveIsPromote(MoveT move, struct BoardS *board);
+bool MoveIsPromote(MoveT move, const Board &board);
 
 static inline bool MoveIsCastleOO(MoveT move)
 {
@@ -152,6 +151,18 @@ void MoveCreateFromCastle(MoveT *move, bool castleOO, int turn);
 //  king capturing its own rook one space to the right could be confused with
 //  just moving the king one space to the right.
 // Assumes we are 'unmangling' a move from the players whose turn it is.
-void MoveUnmangleCastle(MoveT *move, struct BoardS *board);
+void MoveUnmangleCastle(MoveT *move, const Board &board);
+
+inline MoveT ToMove(cell_t from, cell_t to, PieceType promote, cell_t chk)
+{
+    MoveT result;
+
+    result.src = from;
+    result.dst = to;
+    result.promote = promote;
+    result.chk = chk;
+
+    return result;
+}
 
 #endif // MOVE_H

@@ -51,11 +51,11 @@ void PvDecrement(PvT *pv, MoveT *move);
 void PvRewind(PvT *pv, int numPlies);
 void PvFastForward(PvT *pv, int numPlies);
 
-struct BoardS;
+class Board;
 // Writes out a sequence of moves in the PV using style 'moveStyle'.
 // Returns the number of moves successfully converted.
 int PvBuildMoveString(PvT *pv, char *dstStr, int dstLen,
-                      const MoveStyleT *moveStyle, struct BoardS *board);
+                      const MoveStyleT *moveStyle, const Board &board);
 
 void CvInit(CvT *cv);
 

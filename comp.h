@@ -24,8 +24,6 @@ extern "C" {
 #endif
 
 void CompThreadInit(ThinkContextT *th);
-// Returns current variation for main board. 
-CvT *CompMainCv(void);
 // Returns current search level for main board.
 int CompCurrentLevel(void);
 

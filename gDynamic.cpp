@@ -15,7 +15,9 @@
 //--------------------------------------------------------------------------
 
 #include <stdlib.h> /* malloc(3) */
+#include <string.h>
 #include <assert.h>
+
 #include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"

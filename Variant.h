@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                 variant.h - (rudimentary) variant support
+//                 Variant.h - (rudimentary) variant support
 //                           -------------------
 //  copyright            : (C) 2013 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -17,11 +17,8 @@
 #ifndef VARIANT_H
 #define VARIANT_H
 
+#include "Position.h"
 #include "ref.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 // queen-side and king-side rooks should be mapped to what (PGN-style) "O-O"
 // and "O-O-O" do, not whether the move is traditionally a "queen-side" or
@@ -29,11 +26,11 @@ extern "C" {
 // makes no difference, but for example in a variant like FICS wild 0, "O-O"
 // would denote short-side castling even for black.
 typedef struct {
-    uint8 king, rookOO, rookOOO;
+    cell_t king, rookOO, rookOOO;
 } CastleStartCoordsT;
 
 typedef struct {
-    uint8 king, rook; // end position of the castled king + rook
+    cell_t king, rook; // end position of the castled king + rook
 } CastleEndCoordsT;
 
 typedef struct {
@@ -41,15 +38,44 @@ typedef struct {
     CastleEndCoordsT endOO, endOOO;
 } CastleCoordsT;
 
-typedef struct {
+enum class VariantType
+{
+    // We only support normal chess for now.
+    Chess
+};
+
+class Variant
+{
+public:
+    Variant();
+
+    // Returns a struct containing castling information for this variant.
+    inline const CastleCoordsT &Castling(uint8 turn) const;
+    // Returns starting position of a normal game.  If there is no such position
+    //  (for instance, chess960) then a nominal legal position is returned.
+    inline const Position &StartingPosition() const;
+    bool IsLegalPiece(Piece piece) const;
+    static inline const Variant *Current();
+private:    
     // obviously this only applies to chess
     CastleCoordsT castling[NUM_PLAYERS];
-} VariantT;
+    Position startingPosition;
+    static Variant *current;
+};
 
-extern VariantT *gVariant;
-
-#ifdef __cplusplus
+inline const CastleCoordsT &Variant::Castling(uint8 turn) const
+{
+    return castling[turn];
 }
-#endif
-    
+
+inline const Position &Variant::StartingPosition() const
+{
+    return startingPosition;
+}
+
+inline const Variant *Variant::Current()
+{
+    return current;
+}
+
 #endif // VARIANT_H

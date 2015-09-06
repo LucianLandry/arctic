@@ -36,10 +36,10 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
     } rspBuf;
 
     int turn;
-    BoardT *board = &game->savedBoard; // shorthand.
+    Board *board = &game->savedBoard; // shorthand.
     eThinkMsgT rsp = ThinkerRecvRsp(th, &rspBuf, sizeof(rspBuf));
 
-    if (!gVars.ponder && !game->control[board->turn])
+    if (!gVars.ponder && !game->control[board->Turn()])
     {
         LOG_EMERG("bad rsp %d\n", rsp);
         assert(0);
@@ -54,7 +54,7 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
         gUI->notifyPV(game, &rspBuf.pvArgs);
         break;
     case eRspDraw:
-        if (!game->control[board->turn])
+        if (!game->control[board->Turn()])
         {
             // Decided or forced to draw while pondering.  Ignore and let the
             // player make their move.
@@ -73,11 +73,11 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
         game->bDone = true;
         gUI->notifyReady();
 
-        if (BoardDrawFiftyMove(board))
+        if (board->IsDrawFiftyMove())
         {
             gUI->notifyDraw("fifty-move rule", &rspBuf.move);
         }
-        else if (BoardDrawThreefoldRepetition(board))
+        else if (board->IsDrawThreefoldRepetition())
         {
             gUI->notifyDraw("threefold repetition", &rspBuf.move);
         }
@@ -87,7 +87,7 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
         }
         break;
     case eRspMove:
-        if (!game->control[board->turn])
+        if (!game->control[board->Turn()])
         {
             // Decided or forced to move while pondering.  Ignore and let the
             // player make their move.
@@ -105,9 +105,9 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
     case eRspResign:
         turn =
             // Computer resigned its position while pondering?
-            !game->control[board->turn] ?
-            board->turn ^ 1 : // (yes)
-            board->turn;      // (no)
+            !game->control[board->Turn()] ?
+            board->Turn() ^ 1 : // (yes)
+            board->Turn();      // (no)
 
         ClocksStop(game);
         game->bDone = true;
@@ -167,7 +167,7 @@ void PlayloopRun(GameT *game, ThinkContextT *th)
         tickTimeout = -1;
         moveNowTimeout = -1;
         pollTimeout = -1;
-        turn = game->savedBoard.turn;
+        turn = game->savedBoard.Turn();
         moveNowOnTimeout = false;
         myTime = ClockGetTime(game->clocks[turn]);
         myPerMoveTime = ClockGetPerMoveTime(game->clocks[turn]);

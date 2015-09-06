@@ -19,7 +19,7 @@
 
 #include "aThread.h"
 #include "aTypes.h"
-#include "board.h"
+#include "Board.h"
 #include "MoveList.h"
 #include "ref.h"
 #include "saveGame.h"
@@ -30,8 +30,7 @@ extern "C" {
 
 typedef struct {
     // passed-in args.
-    SaveGameT sgame;    // (eCmdThink, eCmdPonder)
-    BoardT localBoard;  // (eCmdThink, eCmdPonder, eCmdSearch)
+    Board localBoard;   // (eCmdThink, eCmdPonder, eCmdSearch)
     int alpha;          // (eCmdSearch)
     int beta;           // (eCmdSearch)
     MoveList mvlist;    // (eCmdThink, eCmdPonder)
@@ -54,6 +53,12 @@ typedef struct {
     bool isSearching;
 
     SearchArgsT searchArgs;
+
+    int maxDepth; // Depth we are authorized to search at (can break this
+                  //  w/quiescing).  "maxDepth == 0" implies that we can make
+                  //  one half-move/ply, and then we must evaluate (or quiesce).
+    int depth;    // Depth we are currently searching at (searching from root
+                  //  == 0).
 } ThinkContextT;
 
 typedef enum {
@@ -82,12 +87,10 @@ eThinkMsgT ThinkerRecvRsp(ThinkContextT *th, void *buffer, int bufLen);
 void ThinkerCmdSearch(ThinkContextT *th, int alpha, int beta, MoveT move);
 
 // 'board' is (optional) position to set before thinking.
-void ThinkerCmdThinkEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
-                       MoveList *mvlist);
-void ThinkerCmdThink(ThinkContextT *th, BoardT *board, SaveGameT *sgame);
-void ThinkerCmdPonderEx(ThinkContextT *th, BoardT *board, SaveGameT *sgame,
-                        MoveList *mvlist);
-void ThinkerCmdPonder(ThinkContextT *th, BoardT *board, SaveGameT *sgame);
+void ThinkerCmdThinkEx(ThinkContextT *th, Board *board, MoveList *mvlist);
+void ThinkerCmdThink(ThinkContextT *th, Board *board);
+void ThinkerCmdPonderEx(ThinkContextT *th, Board *board, MoveList *mvlist);
+void ThinkerCmdPonder(ThinkContextT *th, Board *board);
 void ThinkerCmdMoveNow(ThinkContextT *th);
 void ThinkerCmdBail(ThinkContextT *th);
 
@@ -128,10 +131,10 @@ int ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT move);
 PositionEvalT ThinkerSearchersWaitOne(MoveT *move, PvT *pv);
 void ThinkerSearchersBail(void);
 
-void ThinkerSearchersMoveMake(MoveT move, UnMakeT *unmake, int mightDraw);
-void ThinkerSearchersMoveUnmake(UnMakeT *unmake);
+void ThinkerSearchersMoveMake(MoveT move);
+void ThinkerSearchersMoveUnmake();
 int ThinkerSearchersSearching(void);
-void ThinkerSearchersBoardSet(BoardT *board);
+void ThinkerSearchersBoardSet(Board *board);
 void ThinkerSearchersSetDepthAndLevel(int depth, int level);
 
 // Passed as an arg to 'threadFunc'.

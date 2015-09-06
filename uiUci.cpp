@@ -185,8 +185,8 @@ static void uciInit(GameT *ignore)
     gUciState.ponderMove = MoveNone;
 
 #if 1 // bldbg: goes out for debugging
-    // use random moves.
-    gVars.randomMoves = 1;
+    // Use random moves by default.
+    gVars.randomMoves = true;
 #endif
     // There is no standard way I am aware of for a UCI engine to resign
     // so until I figure out how Polyglot might interpret it, we have to
@@ -234,11 +234,11 @@ void processUciCommand(void)
 // started to diverge from the game proper.
 // 'move', if !NULL, was the move that diverged.  Otherwise, the original
 // position changed and we should probably blow away everything.
-static void finishMoves(GameT *game, BoardT *fenBoard, MoveT *move, char *pToken, ThinkContextT *th)
+static void finishMoves(GameT *game, Board *fenBoard, MoveT *move, char *pToken, ThinkContextT *th)
 {
     int lastPly, lastCommonPly;
     MoveT myMove;
-    BoardT *board = &game->savedBoard;
+    Board *board = &game->savedBoard;
     char tmpStr[MOVE_STRING_MAX];
 
     printf("info string %s: diverged move was: %s\n",
@@ -249,7 +249,7 @@ static void finishMoves(GameT *game, BoardT *fenBoard, MoveT *move, char *pToken
     if (move != NULL)
     {
         lastPly = GameLastPly(game);
-        lastCommonPly = fenBoard->ply - 1;
+        lastCommonPly = fenBoard->Ply() - 1;
         assert(lastCommonPly >= 0);
 
         // I cannot GameNew(Ex)() because it would blow away the savegame.
@@ -300,11 +300,11 @@ static void finishMoves(GameT *game, BoardT *fenBoard, MoveT *move, char *pToken
 
 static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
 {
-    BoardT fenBoard;
+    Board fenBoard;
     bool bFen;
     int i;
     MoveT myMove;
-    BoardT *board = &game->savedBoard; // shorthand.
+    Board *board = &game->savedBoard; // shorthand.
 
     if (gUciState.bSearching)
     {
@@ -317,7 +317,7 @@ static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
     // Turn off computer control of all players so that we do not start
     // automatically thinking when we make moves.
     setForceMode(th, game);
-    gVars.ponder = 0;
+    gVars.ponder = false;
 
     gUciState.bBadPosition = false; // assume the best case
     gUciState.ponderMove = MoveNone;
@@ -365,8 +365,8 @@ static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
 
     // If the boards do not match at this ply or the current board does
     // not go back to this ply, blow everything away.
-    if (SaveGameGotoPly(&game->sgame, fenBoard.ply, board, NULL) < 0 ||
-        !BoardPositionsSame(board, &fenBoard))
+    if (SaveGameGotoPly(&game->sgame, fenBoard.Ply(), board, NULL) < 0 ||
+        board->Position() != fenBoard.Position())
     {
         finishMoves(game, &fenBoard, NULL, pToken, th);
         return;
@@ -385,9 +385,9 @@ static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
             return;
         }
         gUciState.ponderMove = myMove; // struct copy
-        BoardMoveMake(&fenBoard, myMove, NULL);
-        if (SaveGameGotoPly(&game->sgame, fenBoard.ply, board, NULL) < 0 ||
-            !BoardPositionsSame(board, &fenBoard))
+        fenBoard.MakeMove(myMove);
+        if (SaveGameGotoPly(&game->sgame, fenBoard.Ply(), board, NULL) < 0 ||
+            board->Position() != fenBoard.Position())
         {
             // Positions diverged.
             finishMoves(game, &fenBoard, &myMove, findNextToken(pToken), th);
@@ -491,7 +491,7 @@ static void processSetOptionCommand(char *inputStr)
 static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
 {
     MoveT myMove;
-    BoardT *board = &game->savedBoard; // shorthand.
+    Board *board = &game->savedBoard; // shorthand.
     MoveList searchList;
     int i;
 
@@ -537,7 +537,7 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
                  isLegalMove(findNextToken(pToken), &myMove, board);
                  pToken = findNextToken(pToken))
             {
-                searchList.AddMove(*board, myMove);
+                searchList.AddMove(myMove, *board);
             }
         }
         else if (matches(pToken, "ponder"))
@@ -723,17 +723,17 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
 
     if (bPonder)
     {
-        gVars.ponder = 1;
-        game->control[board->turn ^ 1] = 1;
-        ClockStart(game->clocks[board->turn ^ 1]);
-        ThinkerCmdPonderEx(th, board, &game->sgame, &searchList);
+        gVars.ponder = true;
+        game->control[board->Turn() ^ 1] = 1;
+        ClockStart(game->clocks[board->Turn() ^ 1]);
+        ThinkerCmdPonderEx(th, board, &searchList);
     }
     else
     {
-        game->control[board->turn] = 1;
-        ClockStart(game->clocks[board->turn]);
+        game->control[board->Turn()] = 1;
+        ClockStart(game->clocks[board->Turn()]);
         GoaltimeCalc(game);
-        ThinkerCmdThinkEx(th, board, &game->sgame, &searchList);
+        ThinkerCmdThinkEx(th, board, &searchList);
     }
 
     gUciState.bSearching = true;
@@ -748,7 +748,7 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
 static void uciPlayerMove(ThinkContextT *th, GameT *game)
 {
     char *inputStr;
-    BoardT *board = &game->savedBoard; // shorthand.
+    Board *board = &game->savedBoard; // shorthand.
 
     // Skip past any unrecognized stuff.
     inputStr =
@@ -825,9 +825,9 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
         {
             GameMoveMake(game, &gUciState.ponderMove);
         }
-        ClockStart(game->clocks[board->turn]);
+        ClockStart(game->clocks[board->Turn()]);
         GoaltimeCalc(game);
-        ThinkerCmdThinkEx(th, board, &game->sgame, &gUciState.searchList);
+        ThinkerCmdThinkEx(th, board, &gUciState.searchList);
     }
     else if (matches(inputStr, "stop") && gUciState.bSearching)
     {
@@ -902,7 +902,8 @@ static char *buildStatsString(char *result, GameT *game, CompStatsT *stats)
 {
     int nodes = stats->nodes;
     // (Convert bigtime to milliseconds)
-    int timeTaken = ClockTimeTaken(game->clocks[game->savedBoard.turn]) / 1000;
+    int timeTaken =
+        ClockTimeTaken(game->clocks[game->savedBoard.Turn()]) / 1000;
     int nps = (int) (((uint64) nodes) * 1000 / (timeTaken ? timeTaken : 1));
     int charsWritten;
 
@@ -963,7 +964,7 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
     }
 
     moveCount = PvBuildMoveString(pv, lanString, sizeof(lanString), &gMoveStyleUCI,
-                                  &game->savedBoard);
+                                  game->savedBoard);
     if (chopFirst && chopFirstMove(lanString))
     {
         moveCount--;
@@ -1004,7 +1005,7 @@ static bool uciShouldNotCommitMoves(void)
     return false;
 }
 
-static void uciBoardRefresh(const BoardT *board) { }
+static void uciPositionRefresh(const Position &position) { }
 static void uciNoop(void) { }
 static void uciStatusDraw(GameT *game) { }
 static void uciNotifyTick(GameT *game) { }
@@ -1016,7 +1017,7 @@ UIFuncTableT *uiUciOps(void)
     {
         .init = uciInit,
         .playerMove = uciPlayerMove,
-        .boardRefresh = uciBoardRefresh,
+        .positionRefresh = uciPositionRefresh,
         .exit = uciNoop,
         .statusDraw = uciStatusDraw,
         .notifyTick = uciNotifyTick,

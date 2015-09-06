@@ -46,10 +46,10 @@
 #define MAXBUFLEN 160
 
 static struct {
-    int post;        // controls display of PV
-    int badPosition; // can be triggered by editing a bad position
-    int newgame;     // turned on every "new", turned off every "go"
-    int ponder;
+    bool post;        // controls display of PV
+    bool badPosition; // can be triggered by editing a bad position
+    bool newgame;     // turned on every "new", turned off every "go"
+    bool ponder;
 } gXboardState;
 
 #define OPPONENT_CLOCK (&game->actualClocks[0])
@@ -72,7 +72,7 @@ static void xboardNotifyError(char *reason)
 }
 
 
-static void xboardEditPosition(BoardT *board, SwitcherContextT *sw)
+static void xboardEditPosition(Position &position, SwitcherContextT *sw)
 {
     char *inputStr;
 
@@ -81,9 +81,9 @@ static void xboardEditPosition(BoardT *board, SwitcherContextT *sw)
     int coord;
     Piece piece;
 
-    BoardEbyteSet(board, FLAG); // assumed, for 'edit' command.
-    board->ply = 0;
-    board->ncpPlies = 0;
+    position.SetEnPassantCoord(FLAG); // assumed, for 'edit' command.
+    position.SetPly(0);
+    position.SetNcpPlies(0);
 
     while(1)
     {
@@ -94,7 +94,7 @@ static void xboardEditPosition(BoardT *board, SwitcherContextT *sw)
             // Wipe board.
             for (i = 0; i < NUM_SQUARES; i++)
             {
-                BoardPieceSet(board, i, Piece());
+                position.SetPiece(i, Piece());
             }
         }
 
@@ -108,7 +108,8 @@ static void xboardEditPosition(BoardT *board, SwitcherContextT *sw)
         {
             // Leave edit mode.
             // (edit mode is optimistic about castling.)
-            BoardCbyteSet(board, CASTLEALL);
+            position.EnableCastling();
+            position.Sanitize();
             return;
         }
 
@@ -134,7 +135,7 @@ static void xboardEditPosition(BoardT *board, SwitcherContextT *sw)
             {
                 piece = Piece(turn, piece.Type());
             }
-            BoardPieceSet(board, coord, piece);
+            position.SetPiece(coord, piece);
             break;
         default:
             printf("Error (edit: unknown command): %s", inputStr);
@@ -187,8 +188,8 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
     int protoVersion, myLevel, turn;
     int i, err;
     int64 i64;
-    BoardT *board = &game->savedBoard; // shorthand.
-    BoardT tmpBoard;
+    Board *board = &game->savedBoard; // shorthand.
+    Board tmpBoard;
 
     // Move-related stuff.
     MoveT myMove;
@@ -267,21 +268,21 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
         gVars.gameCount++;
 
         // New game, computer is Black.
-        gXboardState.badPosition = 0; // hope for the best.
+        gXboardState.badPosition = false; // hope for the best.
         setForceMode(th, game);
 
         // associate clocks correctly.
         game->clocks[0] = OPPONENT_CLOCK;
         game->clocks[1] = ENGINE_CLOCK;
 
-        gVars.ponder = 0; // disable pondering on first ply.
+        gVars.ponder = false; // disable pondering on first ply.
         gVars.maxLevel = NO_LIMIT;
         game->control[1] = 1;
 
         GameNew(game, th);
 
-        gVars.randomMoves = 0;
-        gXboardState.newgame = 1;
+        gVars.randomMoves = false;
+        gXboardState.newgame = true;
     }
 
     else if (matches(inputStr, "quit"))
@@ -293,7 +294,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
     else if (matches(inputStr, "random"))
     {
 #if 1 // bldbg: goes out for debugging
-        gVars.randomMoves ^= 1; // toggle random moves.
+        gVars.randomMoves = !gVars.randomMoves; // toggle random moves.
 #endif
     }
 
@@ -435,12 +436,12 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 
     else if (matches(inputStr, "setboard"))
     {
-        gXboardState.badPosition = 0; /* hope for the best. */
+        gXboardState.badPosition = false; // hope for the best.
         ThinkerCmdBail(th);
 
         if (fenToBoard(inputStr + strlen("setboard "), &tmpBoard) < 0)
         {
-            gXboardState.badPosition = 1;
+            gXboardState.badPosition = true;
         }
         else
         {
@@ -453,20 +454,23 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 
     else if (matches(inputStr, "edit"))
     {
-        gXboardState.badPosition = 0; /* hope for the best. */
+        gXboardState.badPosition = false; // hope for the best.
         ThinkerCmdBail(th);
 
-        BoardCopy(&tmpBoard, board);
-        xboardEditPosition(&tmpBoard, &game->sw);
-        if (BoardSanityCheck(&tmpBoard, 0) == 0)
+        Position tmpPosition = board->Position();
+        std::string errString;
+        xboardEditPosition(tmpPosition, &game->sw);
+
+        if (tmpPosition.IsLegal(errString))
         {
+            tmpBoard.SetPosition(tmpPosition);
             GameNewEx(game, th, &tmpBoard, 0, 1);
         }
         else
         {
-            /* (BoardSanityCheck() notifies xboard of the details of the
-               bad position all by itself.) */
-            gXboardState.badPosition = 1;
+            reportError(false, "Error: illegal position: %s",
+                        errString.c_str());
+            gXboardState.badPosition = true;
         }
     }
 
@@ -489,30 +493,30 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 
     else if (matches(inputStr, "hard"))
     {
-        gXboardState.ponder = 1;
+        gXboardState.ponder = true;
         if (!gXboardState.newgame)
         {
             // Activate pondering, if necessary.
-            gVars.ponder = 1;
+            gVars.ponder = true;
             GameCompRefresh(game, th);
         }
     }
 
     else if (matches(inputStr, "easy"))
     {
-        gXboardState.ponder = 0;
-        gVars.ponder = 0;
+        gXboardState.ponder = false;
+        gVars.ponder = false;
         GameCompRefresh(game, th);
     }
 
     else if (matches(inputStr, "post"))
     {
-        gXboardState.post = 1;
+        gXboardState.post = true;
     }
 
     else if (matches(inputStr, "nopost"))
     {
-        gXboardState.post = 0;
+        gXboardState.post = false;
     }
 
     else if (sscanf(inputStr, "rating %d %d", &ourRating, &oppRating) == 2)
@@ -561,18 +565,18 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
     else if (matches(inputStr, "go"))
     {
         // Play the color on move, and start thinking.
-        gXboardState.newgame = 0;
+        gXboardState.newgame = false;
         gVars.ponder = gXboardState.ponder;
         setForceMode(th, game); // Just in case.
 
-        turn = board->turn;
+        turn = board->Turn();
         game->control[turn] = 1;
         game->clocks[turn] = ENGINE_CLOCK;
         game->clocks[turn ^ 1] = OPPONENT_CLOCK;
         ClockStart(ENGINE_CLOCK);
         // ClocksPrint(game, "go");
         GoaltimeCalc(game);
-        ThinkerCmdThink(th, board, &game->sgame);
+        ThinkerCmdThink(th, board);
     }
 
     else if (isMove(inputStr, &myMove, board))
@@ -586,7 +590,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
         // At this point, we must have a valid move.
         ThinkerCmdBail(th);
 
-        gXboardState.newgame = 0;
+        gXboardState.newgame = false;
         gVars.ponder = gXboardState.ponder;
 #if 0 // I think GameMoveCommit takes care of this, and in any case,
       // would override it.
@@ -654,7 +658,7 @@ static void xboardNotifyPV(GameT *game, PvRspArgsT *pvArgs)
 {
     char mySanString[65];
     PvT *pv = &pvArgs->pv; // shorthand
-    BoardT *board = &game->savedBoard; // shorthand
+    Board &board = game->savedBoard; // shorthand
     MoveStyleT pvStyle = {mnSAN, csOO, true};
 
     if (!gXboardState.post ||
@@ -667,7 +671,7 @@ static void xboardNotifyPV(GameT *game, PvRspArgsT *pvArgs)
     printf("%d %d %u %d %s.\n",
            pv->level, pv->eval,
            // (Convert bigtime to centiseconds)
-           (uint32) (ClockTimeTaken(game->clocks[board->turn]) / 10000),
+           (uint32) (ClockTimeTaken(game->clocks[board.Turn()]) / 10000),
            pvArgs->stats.nodes, mySanString);
 }
 
@@ -677,7 +681,7 @@ static bool xboardShouldCommitMoves(void)
 }
 
 static void xboardNotifyComputerStats(GameT *game, CompStatsT *stats) { }
-static void xboardBoardRefresh(const BoardT *board) { }
+static void xboardPositionRefresh(const Position &position) { }
 static void xboardNoop(void) { }
 static void xboardStatusDraw(GameT *game) { }
 static void xboardNotifyTick(GameT *game) { }
@@ -688,7 +692,7 @@ UIFuncTableT *uiXboardOps(void)
     {
         .init = xboardInit,
         .playerMove = xboardPlayerMove,
-        .boardRefresh = xboardBoardRefresh,
+        .positionRefresh = xboardPositionRefresh,
         .exit = xboardNoop,
         .statusDraw = xboardStatusDraw,
         .notifyTick = xboardNotifyTick,

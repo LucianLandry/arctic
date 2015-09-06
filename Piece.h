@@ -89,6 +89,7 @@ public:
 
     inline PieceRelationship Relationship(int player) const;
     inline bool IsEnemy(int player) const;
+    inline bool IsSelf(int player) const;
     
     // Generally, only code that deals with variants should call these routines.
     static void SetWorth(PieceType type, int materialWorth);
@@ -225,6 +226,11 @@ inline PieceRelationship Piece::Relationship(int player) const
 inline bool Piece::IsEnemy(int player) const
 {
     return Relationship(player) == PieceRelationship::Enemy;
+}
+
+inline bool Piece::IsSelf(int player) const
+{
+    return Relationship(player) == PieceRelationship::Self;
 }
 
 #endif // PIECE_H
