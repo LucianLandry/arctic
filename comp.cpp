@@ -790,8 +790,8 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
         }
     }
 
-    if (searchDepth > 5 && // The empirical testing is fuzzy, but this appears
-                           //  to work decently.
+    if (searchDepth > 5 && // The empirical testing results were fuzzy, but
+                           //  this appears to work decently.
         alpha > secondBestVal &&
         // Do not add moves that will automatically be preferred -- picked this
         // up from a chess alg site.  It does seem to help our speed

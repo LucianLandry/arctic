@@ -24,10 +24,6 @@
 extern "C" {
 #endif
 
-#define MAX_NUM_PROCS 1024 // Just use something 'reasonable'.  This is really
-                           //  only for user input validation now, not static
-                           //  allocation of arrays.
-
 #define NO_LIMIT (-1)
 
 typedef struct {

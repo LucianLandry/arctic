@@ -27,7 +27,6 @@ Fractional ply extension. (+ 1/numMoves)
 Shrink search window (not null necessarily, but do shrink it)
 Better thread utilization: keep all threads busy through end of minimax compute
 	(including last move).
-Remove MAX_NUM_PROCS limitation.
 More search time if first move's eval goes down.  Finish the level. ... at
      least try to find a move that doesn't go down.  Especially if first move
      evals to -checkmate.
@@ -52,6 +51,7 @@ Bugfix: fixed futility check (potentialImprovement() looked at wrong player's
         pieces)
 Refactored MoveList (and removed MLIST_MAX_MOVES limit) (7% slowdown).
 Refactored Board and Position (~3% slowdown, but fixed a minor biasDraw issue).
+Removed MAX_NUM_PROCS limitation (except for basic user input validation).
 
 Version 10:
 Implemented depth-1 futility pruning.

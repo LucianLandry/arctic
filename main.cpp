@@ -14,7 +14,6 @@
 //
 //--------------------------------------------------------------------------
 
-
 #include <assert.h>
 #include <ctype.h>        // isdigit(3)
 #include <stdio.h>
@@ -35,6 +34,9 @@
 #include "ui.h"
 #include "uiUtil.h"
 
+#define MAX_NUM_PROCS 1024 // Just use something 'reasonable'.  This is only
+                           //  for user input validation now, not static
+                           //  allocation of arrays.
 
 static void usage(char *programName)
 {
