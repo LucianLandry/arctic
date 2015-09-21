@@ -19,7 +19,7 @@
 
 #include "aTypes.h"
 #include "Board.h"
-#include "clock.h"
+#include "Clock.h"
 #include "saveGame.h"
 #include "switcher.h"
 #include "thinker.h"
@@ -39,15 +39,15 @@ typedef struct {
 
     int control[NUM_PLAYERS]; // 0 if player controls; 1 if computer
 
-    ClockT origClocks[NUM_PLAYERS]; // Clocks are reset to these values at
+    Clock origClocks[NUM_PLAYERS]; // Clocks are reset to these values at
                                     // beginning of new game.  This can be set
                                     // w/out affecting saveGame's start clocks.
     
     // Actual allocated space for below.  Most code should access this through
     // the 'clocks' reference.  In xboard, the 1st clock is the opponent's
     // clock, and the 2nd clock is the engine clock.
-    ClockT actualClocks[NUM_PLAYERS]; 
-    ClockT *clocks[NUM_PLAYERS];    // Time control for both sides.
+    Clock actualClocks[NUM_PLAYERS]; 
+    Clock *clocks[NUM_PLAYERS];    // Time control for both sides.
 
     // Computer only: time we want to move at.  For instance if == 30000000,
     // we want to move when there is 30 seconds left on our clock.

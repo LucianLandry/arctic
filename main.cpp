@@ -206,7 +206,7 @@ int main(int argc, char *argv[])
 
     GameNew(&game, &th);
     gUI->notifyReady();
-    ClockStart(game.clocks[0]);
+    game.clocks[0]->Start();
 
     // Enter main play loop.
     PlayloopRun(&game, &th);

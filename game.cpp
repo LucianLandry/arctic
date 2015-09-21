@@ -63,6 +63,8 @@ void GameInit(GameT *game)
 {
     int i;
 
+    // origClocks[], actualClocks[], and savedBoard are automatically
+    //  constructed.
     game->bDone = false;
     game->icsClocks = false;
 
@@ -73,13 +75,10 @@ void GameInit(GameT *game)
     for (i = 0; i < NUM_PLAYERS; i++)
     {
         game->control[i] = 0;
-        ClockInit(&game->origClocks[i]);
-        ClockInit(&game->actualClocks[i]);
         game->clocks[i] = &game->actualClocks[i];
         game->goalTime[i] = CLOCK_TIME_INFINITE;
     }
     ClocksReset(game);
-    // game->savedBoard is automatically constructed.
 }
 
 
@@ -103,7 +102,7 @@ void GameCompRefresh(GameT *game, ThinkContextT *th)
 void GameMoveMake(GameT *game, MoveT *move)
 {
     Board *board = &game->savedBoard; // shorthand.
-    ClockT *myClock;
+    Clock *myClock;
     uint8 turn = board->Turn();
 
     // Give computer a chance to re-evaluate the position, if we insist
@@ -111,7 +110,7 @@ void GameMoveMake(GameT *game, MoveT *move)
     game->bDone = false;
 
     myClock = game->clocks[turn];
-    ClockStop(myClock);
+    myClock->Stop();
 
     if (move != NULL)
     {
@@ -123,14 +122,14 @@ void GameMoveMake(GameT *game, MoveT *move)
         {
             board->MakeMove(*move);
             // normally would expect this to trigger on plies 1 and 2.
-            ClockReset(myClock); // pretend like nothing happened to the clock
+            myClock->Reset(); // pretend like nothing happened to the clock
         }
         else
         {
             board->MakeMove(*move);
-            ClockApplyIncrement(myClock, board->Ply());
+            myClock->ApplyIncrement(board->Ply());
         }
-        SaveGameMoveCommit(&game->sgame, move, ClockGetTime(myClock));
+        SaveGameMoveCommit(&game->sgame, move, myClock->Time());
         
         // switched sides to another player.
         gPvDecrement(move);
@@ -164,7 +163,7 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
     // running ASAP instead of one tick later (or, if the clock has infinite
     // time, we would never update the status correctly).
     // statusDraw() should be quick enough that it is still fair.
-    ClockStart(game->clocks[turn]);
+    game->clocks[turn]->Start();
     gUI->statusDraw(game);
 
     board->GenerateLegalMoves(mvlist, false);

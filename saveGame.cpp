@@ -94,11 +94,7 @@ int SaveGameSave(SaveGameT *sgame)
 
 void SaveGameInit(SaveGameT *sgame)
 {
-    for (int i = 0; i < NUM_PLAYERS; i++)
-    {
-        ClockInit(&sgame->clocks[i]);
-    }
-
+    // Everything besides this should be automatically constructed.
     sgame->currentPly = 0;
 }
 
@@ -110,7 +106,7 @@ void SaveGamePositionSet(SaveGameT *sgame, Board *board)
     sgame->plies.resize(0);
 }
 
-void SaveGameClocksSet(SaveGameT *sgame, ClockT *clocks[])
+void SaveGameClocksSet(SaveGameT *sgame, Clock *clocks[])
 {
     int i;
 
@@ -118,7 +114,7 @@ void SaveGameClocksSet(SaveGameT *sgame, ClockT *clocks[])
     {
         // Trying to successfully xfer a running clock seems difficult, and
         // we do not have to support it, so ...
-        assert(!ClockIsRunning(clocks[i]));
+        assert(!clocks[i]->IsRunning());
 
         sgame->clocks[i] = *clocks[i];  // struct copy
     }
@@ -135,15 +131,14 @@ void SaveGameClocksSet(SaveGameT *sgame, ClockT *clocks[])
 //
 // Notice 'clocks' is an array of ptrs!  This is for better coordination
 // w/GameT.
-int SaveGameGotoPly(SaveGameT *sgame, int ply, Board *board, ClockT *clocks[])
+int SaveGameGotoPly(SaveGameT *sgame, int ply, Board *board, Clock *clocks[])
 {
     int i, plyOffset;
     MoveList moveList;
     MoveT move;
     
     Board myBoard;     // temp variables.
-    ClockT myClocks[2];
-
+    Clock myClocks[2];
     
     if (ply < SaveGameFirstPly(sgame) || ply > SaveGameLastPly(sgame))
     {
@@ -179,7 +174,7 @@ int SaveGameGotoPly(SaveGameT *sgame, int ply, Board *board, ClockT *clocks[])
             return -1;
         }
         
-        ClockSetTime(&myClocks[i & 1], sgame->plies[i].myTime);
+        myClocks[i & 1].SetTime(sgame->plies[i].myTime);
         myBoard.MakeMove(move);
     }
 
@@ -318,9 +313,8 @@ void SaveGameCopy(SaveGameT *dst, SaveGameT *src)
 {
     // Basically we just do a memberwise copy here.
     for (int i = 0; i < NUM_PLAYERS; i++)
-    {
         dst->clocks[i] = src->clocks[i];
-    }
+
     dst->startPosition = src->startPosition;
     dst->currentPly = src->currentPly;
     dst->plies = src->plies;

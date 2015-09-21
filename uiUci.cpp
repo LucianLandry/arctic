@@ -645,14 +645,12 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
 
     // Setup the clocks.
     for (i = 0; i < NUM_PLAYERS; i++)
-    {
-        ClockInit(game->clocks[i]);
-    }
+        game->clocks[i]->ReInit();
 
     if (wtime != INT_MAX)
     {
         // (* 1000: msec -> usec)
-        ClockSetTime(game->clocks[0], ((bigtime_t) wtime) * 1000);
+        game->clocks[0]->SetTime(bigtime_t(wtime) * 1000);
         if (gUciState.bGotUciNewGame && gUciState.initialTime[0] == 0)
         {
             gUciState.initialTime[0] = wtime;
@@ -660,20 +658,18 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
     }
     if (btime != INT_MAX)
     {
-        ClockSetTime(game->clocks[1], ((bigtime_t) btime) * 1000);
+        game->clocks[1]->SetTime(bigtime_t(btime) * 1000);
         if (gUciState.bGotUciNewGame && gUciState.initialTime[1] == 0)
         {
             gUciState.initialTime[1] = btime;
         }       
     }
+
     if (winc > 0)
-    {
-        ClockSetInc(game->clocks[0], ((bigtime_t) winc) * 1000);
-    }
+        game->clocks[0]->SetIncrement(bigtime_t(winc) * 1000);
     if (binc > 0)
-    {
-        ClockSetInc(game->clocks[1], ((bigtime_t) binc) * 1000);
-    }
+        game->clocks[1]->SetIncrement(bigtime_t(binc) * 1000);
+
     if (movestogo > 0)
     {
         // "movestogo" is tricky (and kind of dumb) since there is not
@@ -689,11 +685,11 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
         // ... Well, we only bump timecontrol after *our* move.
         for (i = 0; i < NUM_PLAYERS; i++)
         {
-            ClockSetStartTime(game->clocks[i],
-                              gUciState.initialTime[i] ?
-                              ((bigtime_t) gUciState.initialTime) * 1000 :
-                              ((bigtime_t) 60) * 60 * 1000000);
-            ClockSetNumMovesToNextTimeControl(game->clocks[i], movestogo);
+            game->clocks[i]->
+                SetStartTime(gUciState.initialTime[i] ?
+                             ((bigtime_t) gUciState.initialTime) * 1000 :
+                             ((bigtime_t) 60) * 60 * 1000000)
+                .SetNumMovesToNextTimeControl(movestogo);
         }
     }
 
@@ -716,8 +712,7 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
     {
         for (i = 0; i < NUM_PLAYERS; i++)
         {
-            ClockSetPerMoveLimit(game->clocks[i],
-                                 ((bigtime_t) movetime) * 1000);
+            game->clocks[i]->SetPerMoveLimit(bigtime_t(movetime) * 1000);
         }
     }
 
@@ -725,13 +720,13 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
     {
         gVars.ponder = true;
         game->control[board->Turn() ^ 1] = 1;
-        ClockStart(game->clocks[board->Turn() ^ 1]);
+        game->clocks[board->Turn() ^ 1]->Start();
         ThinkerCmdPonderEx(th, board, &searchList);
     }
     else
     {
         game->control[board->Turn()] = 1;
-        ClockStart(game->clocks[board->Turn()]);
+        game->clocks[board->Turn()]->Start();
         GoaltimeCalc(game);
         ThinkerCmdThinkEx(th, board, &searchList);
     }
@@ -825,7 +820,7 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
         {
             GameMoveMake(game, &gUciState.ponderMove);
         }
-        ClockStart(game->clocks[board->Turn()]);
+        game->clocks[board->Turn()]->Start();
         GoaltimeCalc(game);
         ThinkerCmdThinkEx(th, board, &gUciState.searchList);
     }
@@ -901,9 +896,9 @@ static void uciNotifyResign(int turn)
 static char *buildStatsString(char *result, GameT *game, CompStatsT *stats)
 {
     int nodes = stats->nodes;
-    // (Convert bigtime to milliseconds)
+    // (Convert bigtime_t to milliseconds)
     int timeTaken =
-        ClockTimeTaken(game->clocks[game->savedBoard.Turn()]) / 1000;
+        game->clocks[game->savedBoard.Turn()]->TimeTaken() / 1000;
     int nps = (int) (((uint64) nodes) * 1000 / (timeTaken ? timeTaken : 1));
     int charsWritten;
 

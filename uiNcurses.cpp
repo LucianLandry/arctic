@@ -23,7 +23,7 @@
 #include <stdlib.h> // exit()
 #include <string.h> // strlen()
 
-#include "clock.h"
+#include "Clock.h"
 #include "clockUtil.h"
 #include "comp.h" // CompCurrentLevel()
 #include "conio.h"
@@ -106,7 +106,7 @@ static void UIPrintPositionStatus(const Position &position)
 
 static void UINotifyTick(GameT *game)
 {
-    ClockT *myClock;
+    Clock *myClock;
     char timeStr[CLOCK_TIME_STR_LEN];
     int i;
     bigtime_t myTime, perMoveTime;
@@ -118,22 +118,22 @@ static void UINotifyTick(GameT *game)
     for (i = 0; i < NUM_PLAYERS; i++)
     {
         myClock = game->clocks[i];
-        myTime = ClockGetTime(myClock);
-        perMoveTime = ClockGetPerMoveTime(myClock);
+        myTime = myClock->Time();
 
         // The clock goes red even when the time supposedly reaches 0, probably
         // because TimeStringFromBigTime() is rounding up.  FIXME: need to
         // rethink that.
         textcolor(myTime >= 0 ? LIGHTGRAY : RED);
         bytesWritten += cprintf("%s", TimeStringFromBigTime(timeStr, myTime));
-        if (perMoveTime < CLOCK_TIME_INFINITE)
+        if (myClock->PerMoveLimit() < CLOCK_TIME_INFINITE)
         {
+            perMoveTime = myClock->PerMoveTime();
             textcolor(perMoveTime >= 0 ? LIGHTGRAY : RED);
             bytesWritten += cprintf("(%s)", TimeStringFromBigTime(timeStr,
                                                                   perMoveTime));
         }
         textcolor(LIGHTGRAY);
-        bytesWritten += cprintf("%s ", ClockIsRunning(myClock) ? "r" : "s");
+        bytesWritten += cprintf("%s ", myClock->IsRunning() ? "r" : "s");
     }
 
     // Prevent old longer clock-line strings from sticking around.
@@ -154,7 +154,7 @@ static void UIStatusDraw(GameT *game)
     UINotifyTick(game);
 
     gotoxy(OPTIONS_X, 20);
-    timeTaken = ClockTimeTaken(game->clocks[turn ^ 1]);
+    timeTaken = game->clocks[turn ^ 1]->TimeTaken();
     cprintf("move: %d (%.2f sec)     ",
             (board->Ply() >> 1) + 1,
             ((double) timeTaken) / 1000000);
@@ -371,19 +371,19 @@ static void UITimeOptionsDraw(GameT *game, int applyToggle)
     textcolor(SYSTEMCOL);
     cprintf("Options:");
     prettyprint(2, "Start time(s) (%s %s)", NULL,
-                TimeStringFromBigTime(t1, ClockGetTime(&game->origClocks[0])),
-                TimeStringFromBigTime(t2, ClockGetTime(&game->origClocks[1])));
+                TimeStringFromBigTime(t1, game->origClocks[0].Time()),
+                TimeStringFromBigTime(t2, game->origClocks[1].Time()));
     prettyprint(3, "Increment(s) (%s %s)",  NULL,
-                TimeStringFromBigTime(t1, ClockGetInc(&game->origClocks[0])),
-                TimeStringFromBigTime(t2, ClockGetInc(&game->origClocks[1])));
+                TimeStringFromBigTime(t1, game->origClocks[0].Increment()),
+                TimeStringFromBigTime(t2, game->origClocks[1].Increment()));
     prettyprint(4, "Time control period(s) (%d %d)", NULL,
-                ClockGetTimeControlPeriod(&game->origClocks[0]),
-                ClockGetTimeControlPeriod(&game->origClocks[1]));
+                game->origClocks[0].TimeControlPeriod(),
+                game->origClocks[1].TimeControlPeriod());
     prettyprint(5, "Per-move limit (%s %s)", NULL,
                 TimeStringFromBigTime
-                (t1, ClockGetPerMoveLimit(&game->origClocks[0])),
+                (t1, game->origClocks[0].PerMoveLimit()),
                 TimeStringFromBigTime
-                (t2, ClockGetPerMoveLimit(&game->origClocks[1])));
+                (t2, game->origClocks[1].PerMoveLimit()));
     prettyprint(7, "Apply to current game", NULL);
     prettyprint(8, "Changes: (%s)", NULL,
                 applyToggle == 0 ? "white" :
@@ -733,9 +733,9 @@ static void UITimeMenu(GameT *game)
                 {
                     if (applyToggle == i || applyToggle == APPLY_BOTH)
                     {
-                        ClockSetStartTime(&game->origClocks[i],
-                                          TimeStringToBigTime(timeStr));
-                        ClockReset(&game->origClocks[i]);
+                        game->origClocks[i].
+                            SetStartTime(TimeStringToBigTime(timeStr));
+                        game->origClocks[i].Reset();
                     }
                 }
                 break;
@@ -751,8 +751,8 @@ static void UITimeMenu(GameT *game)
                 {
                     if (applyToggle == i || applyToggle == APPLY_BOTH)
                     {
-                        ClockSetInc(&game->origClocks[i],
-                                    TimeStringToBigTime(timeStr));
+                        game->origClocks[i].
+                            SetIncrement(TimeStringToBigTime(timeStr));
                     }
                 }
                 break;
@@ -768,8 +768,8 @@ static void UITimeMenu(GameT *game)
                 {
                     if (applyToggle == i || applyToggle == APPLY_BOTH)
                     {
-                        ClockSetTimeControlPeriod(&game->origClocks[i],
-                                                  timeControlPeriod);
+                        game->origClocks[i].
+                            SetTimeControlPeriod(timeControlPeriod);
                     }
                 }
                 break;
@@ -785,8 +785,8 @@ static void UITimeMenu(GameT *game)
                 {
                     if (applyToggle == i || applyToggle == APPLY_BOTH)
                     {
-                        ClockSetPerMoveLimit(&game->origClocks[i],
-                                             TimeStringToBigTime(timeStr));
+                        game->origClocks[i].
+                            SetPerMoveLimit(TimeStringToBigTime(timeStr));
                     }
                 }
                 break;

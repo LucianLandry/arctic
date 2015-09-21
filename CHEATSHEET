@@ -128,7 +128,7 @@ gnome-terminal has funky color handling and the background shows up as dark
 
 NIFTY XBOARD COMMANDS:
 # human play against arctic (black)
-xboard -size bulky -debug -nameOfDebugFile ~/xboard.debug -thinking -depth 5 -fcp ./arctic
+xboard -size bulky -debug -nameOfDebugFile ~/xboard.debug -thinking -fcp ./arctic
 
 # play arctic (white) against default computer opponent (black)
 # (note: cannot use '-depth' argument, gnuchessx now gets confused and thinks

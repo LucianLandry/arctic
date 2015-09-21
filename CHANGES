@@ -52,6 +52,7 @@ Bugfix: fixed futility check (potentialImprovement() looked at wrong player's
 Refactored MoveList (and removed MLIST_MAX_MOVES limit) (7% slowdown).
 Refactored Board and Position (~3% slowdown, but fixed a minor biasDraw issue).
 Removed MAX_NUM_PROCS limitation (except for basic user input validation).
+Refactored Clock API + made PerMoveTime() take total clock time into account.
 
 Version 10:
 Implemented depth-1 futility pruning.

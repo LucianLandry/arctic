@@ -20,8 +20,8 @@
 #include <vector>
 
 #include "aTypes.h"
-#include "clock.h"
 #include "Board.h"
+#include "Clock.h"
 
 typedef struct {
     MoveT move;
@@ -31,7 +31,7 @@ typedef struct {
 
 // Contains minimal game save + restore + undo + redo information.
 typedef struct SaveGameS {
-    ClockT clocks[NUM_PLAYERS]; // starting time.
+    Clock clocks[NUM_PLAYERS]; // starting time.
 
     Position startPosition;
 
@@ -55,8 +55,8 @@ int SaveGameSave(SaveGameT *game);
 // 'sgame' is guaranteed to be 'sane' after return, regardless of result.
 int SaveGameRestore(SaveGameT *sgame);
 void SaveGamePositionSet(SaveGameT *game, Board *board);
-void SaveGameClocksSet(SaveGameT *sgame, ClockT *clocks[]);
-int SaveGameGotoPly(SaveGameT *game, int ply, Board *board, ClockT *clocks[]);
+void SaveGameClocksSet(SaveGameT *sgame, Clock *clocks[]);
+int SaveGameGotoPly(SaveGameT *game, int ply, Board *board, Clock *clocks[]);
 
 static inline int SaveGameCurrentPly(SaveGameT *sgame)
 {

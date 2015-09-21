@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                         clock.cpp - clock control
+//                clockUtil.cpp - supplementary clock routines
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -15,153 +15,11 @@
 //--------------------------------------------------------------------------
 
 #include <assert.h>
-#include <ctype.h>     // isdigit()
-#include <stdio.h>     // sprintf()
-#include <stdlib.h>    // abs()
-#include <sys/time.h>  // gettimeofday()
-#include <time.h>
+#include <sys/time.h> // gettimeofday(2)
 
-#include "clock.h"
 #include "clockUtil.h"
-#include "ref.h"
-#include "uiUtil.h"
 
 #define CLOCK_TIME_INFINITE_STR "inf"
-
-static bigtime_t calcTimeTaken(ClockT *myClock)
-{
-    return getBigTime() - myClock->turnStartTime;
-}
-
-void ClockInit(ClockT *myClock)
-{
-    memset(myClock, 0, sizeof(ClockT));
-    myClock->startTime = CLOCK_TIME_INFINITE;
-    myClock->time = CLOCK_TIME_INFINITE;
-    myClock->perMoveLimit = CLOCK_TIME_INFINITE;
-}
-
-
-void ClockReset(ClockT *myClock)
-{
-    ClockStop(myClock);
-    myClock->time = myClock->startTime;
-}
-
-
-void ClockStop(ClockT *myClock)
-{
-    if (myClock->bRunning)
-    {
-        myClock->bRunning = false;
-        myClock->timeTaken = calcTimeTaken(myClock);
-
-        if (!ClockIsInfinite(myClock))
-        {
-            myClock->time -= myClock->timeTaken;
-        }
-    }
-}
-
-
-void ClockStart(ClockT *myClock)
-{
-    if (!myClock->bRunning)
-    {
-        myClock->bRunning = true;
-        myClock->turnStartTime = getBigTime();
-    }
-}
-
-
-static void ClockAddTime(ClockT *myClock, bigtime_t myTime)
-{
-    if (myClock->time == CLOCK_TIME_INFINITE)
-    {
-        return;
-    }
-    if (myTime == CLOCK_TIME_INFINITE)
-    {
-        myClock->time = myTime;
-    }
-    else
-    {
-        myClock->time += myTime;
-    }
-}
-
-// Adjust clock by its appropriate increment.  Meant to be applied just
-// *after* we make our move (meaning: it is no longer our turn).
-//
-// We do this, since in chess you normally adjust time after your
-// move is made.
-void ClockApplyIncrement(ClockT *myClock, int ply)
-{
-    if (ClockIsInfinite(myClock))
-    {
-        return;
-    }
-
-    // Apply per-move increment (if any)
-    ClockAddTime(myClock, myClock->inc);
-
-    // Add any time from a new time control.
-    if (myClock->timeControlPeriod)
-    {
-        if (// add 2 instead of 1, if want to apply 'before' move
-            ((ply + 1) >> 1) % myClock->timeControlPeriod == 0)
-        {
-            ClockAddTime(myClock, myClock->startTime);
-        }
-    }
-    else if (myClock->numMovesToNextTimeControl == 1)
-    {
-        ClockAddTime(myClock, myClock->startTime);
-    }
-}
-
-
-
-bigtime_t ClockGetTime(ClockT *myClock)
-{
-    if (myClock->bRunning && !ClockIsInfinite(myClock))
-    {
-        return myClock->time - calcTimeTaken(myClock);
-    }
-    return myClock->time;
-}
-
-// Get the remaining per-move time of a running clock.
-// Returns the per-move limit if the clock is not actually running.
-bigtime_t ClockGetPerMoveTime(ClockT *myClock)
-{
-    if (myClock->perMoveLimit == CLOCK_TIME_INFINITE ||
-        !ClockIsRunning(myClock))
-    {
-        return myClock->perMoveLimit;
-    }
-    return myClock->perMoveLimit - calcTimeTaken(myClock);
-}
-
-void ClockSetTime(ClockT *myClock, bigtime_t myTime)
-{
-    int wasRunning = ClockIsRunning(myClock);
-
-    // This sequence resets the turnStartTime.
-    ClockStop(myClock);
-    myClock->time = myTime;
-    if (wasRunning)
-    {
-        ClockStart(myClock);
-    }
-}
-
-bigtime_t ClockTimeTaken(ClockT *myClock)
-{
-    return ClockIsRunning(myClock) ?
-        calcTimeTaken(myClock) : myClock->timeTaken;
-}
-
 
 // We want either xx:yy:zz, yy:zz, or (:)zz.
 // (or CLOCK_TIME_INFINITE_STR, --> "inf")
@@ -315,9 +173,8 @@ char *TimeStringFromBigTime(char *result, bigtime_t myTime)
 
 void ClocksReset(GameT *game)
 {
-    memcpy(&game->actualClocks[0],
-           &game->origClocks[0],
-           sizeof(ClockT) * NUM_PLAYERS);
+    for (int i = 0; i < NUM_PLAYERS; i++)
+        game->actualClocks[i] = game->origClocks[i];
     
     if (GameCurrentPly(game) == 0)
     {
@@ -332,27 +189,25 @@ void ClocksStop(GameT *game)
 {
     int i;
     for (i = 0; i < NUM_PLAYERS; i++)
-    {
-        ClockStop(game->clocks[i]);
-    }
+        game->clocks[i]->Stop();
 }
 
 
 void ClocksPrint(GameT *game, char *context)
 {
     int i;
-    ClockT *myClock;
+    Clock *myClock;
     for (i = 0; i < NUM_PLAYERS; i++)
     {
         myClock = game->clocks[i];
         printf("ClocksPrint(%s): clock %d: %lld %lld %d %lld %c\n",
                context ? context : "",
                i,
-               (long long) ClockGetTime(myClock),
-               (long long) ClockGetInc(myClock),
-               ClockGetTimeControlPeriod(myClock),
-               (long long) ClockGetPerMoveLimit(myClock),
-               ClockIsRunning(myClock) ? 'r' : 's');
+               (long long) myClock->Time(),
+               (long long) myClock->Increment(),
+               myClock->TimeControlPeriod(),
+               (long long) myClock->PerMoveLimit(),
+               myClock->IsRunning() ? 'r' : 's');
     }
 }
 
@@ -380,17 +235,17 @@ void GoaltimeCalc(GameT *game)
 {
     uint8 turn = game->savedBoard.Turn();
     int ply = game->savedBoard.Ply();
-    ClockT *myClock = game->clocks[turn];
+    Clock *myClock = game->clocks[turn];
     bigtime_t myTime, calcTime, altCalcTime, myInc, safeTime,
         myPerMoveLimit, safeMoveLimit;
     int myTimeControlPeriod, numMovesToNextTimeControl;
     int numIncs;
 
-    myTime = ClockGetTime(myClock);
-    myPerMoveLimit = ClockGetPerMoveLimit(myClock);
-    myTimeControlPeriod = ClockGetTimeControlPeriod(myClock);
-    numMovesToNextTimeControl = ClockGetNumMovesToNextTimeControl(myClock);
-    myInc = ClockGetInc(myClock);
+    myTime = myClock->Time();
+    myPerMoveLimit = myClock->PerMoveLimit();
+    myTimeControlPeriod = myClock->TimeControlPeriod();
+    numMovesToNextTimeControl = myClock->NumMovesToNextTimeControl();
+    myInc = myClock->Increment();
 
     safeMoveLimit =
         myPerMoveLimit == CLOCK_TIME_INFINITE ? CLOCK_TIME_INFINITE :
@@ -403,7 +258,7 @@ void GoaltimeCalc(GameT *game)
     safeMoveLimit = MAX(safeMoveLimit, 0);
 
     // Degenerate case.
-    if (ClockIsInfinite(myClock))
+    if (myClock->IsInfinite())
     {
         game->goalTime[turn] =
             myPerMoveLimit == CLOCK_TIME_INFINITE ?
@@ -432,7 +287,7 @@ void GoaltimeCalc(GameT *game)
                   myTimeControlPeriod) :
                  0);
 
-        calcTime += (ClockGetStartTime(myClock) * numIncs) / GAME_NUM_MOVES;
+        calcTime += (myClock->StartTime() * numIncs) / GAME_NUM_MOVES;
         // However, say we have :30 on the clock, 10 moves to make, and a one-
         // minute increment every two moves.  We want to burn only :15.
         altCalcTime = safeTime / MIN(GAME_NUM_MOVES,

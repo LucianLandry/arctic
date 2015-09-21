@@ -24,6 +24,13 @@
 extern "C" {
 #endif
 
+// 2^32 / 3600 = 7 digits, + 2 colons, +minutes+seconds + terminator
+#define CLOCK_TIME_STR_LEN 14
+
+bool TimeStringIsValid(char *str);
+bigtime_t TimeStringToBigTime(char *str);
+char *TimeStringFromBigTime(char *result, bigtime_t myTime);
+    
 void ClocksReset(GameT *game);
 void ClocksStop(GameT *game);
 void ClocksPrint(GameT *game, char *context);

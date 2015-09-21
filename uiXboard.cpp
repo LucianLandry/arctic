@@ -337,12 +337,12 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 
         for (i = 0; !err && i < NUM_PLAYERS; i++)
         {
-            ClockInit(&game->origClocks[i]);
-            ClockSetStartTime(&game->origClocks[i], baseTime);
-            ClockReset(&game->origClocks[i]);
-            ClockSetTimeControlPeriod(&game->origClocks[i], mps);
-            // Incremental time control.
-            ClockSetInc(&game->origClocks[i], ((bigtime_t) inc) * 1000000);
+            game->origClocks[i].ReInit()
+                .SetStartTime(baseTime)
+                .Reset()
+                .SetTimeControlPeriod(mps)
+                // Incremental time control.
+                .SetIncrement(bigtime_t(inc) * 1000000);
         }
         if (gXboardState.newgame)
         {
@@ -362,8 +362,8 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
         }
         for (i = 0; i < NUM_PLAYERS; i++)
         {
-            ClockInit(&game->origClocks[i]);
-            ClockSetPerMoveLimit(&game->origClocks[i], ((bigtime_t) perMoveLimit) * 1000000);
+            game->origClocks[i].ReInit()
+                .SetPerMoveLimit(bigtime_t(perMoveLimit) * 1000000);
         }
         if (gXboardState.newgame)
         {
@@ -393,7 +393,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
     else if (sscanf(inputStr, "time %d", &centiSeconds) == 1)
     {
         // Set engine clock.
-        ClockSetTime(ENGINE_CLOCK, ((bigtime_t) centiSeconds) * 10000);
+        ENGINE_CLOCK->SetTime(bigtime_t(centiSeconds) * 10000);
 
         // I interpret the xboard doc's "idioms" section as saying the computer
         // will not be on move when this command comes in.  But just in case
@@ -405,7 +405,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
     else if (sscanf(inputStr, "otim %d", &centiSeconds) == 1)
     {
         // Set opponent clock.
-        ClockSetTime(OPPONENT_CLOCK, ((bigtime_t) centiSeconds) * 10000);
+        OPPONENT_CLOCK->SetTime(bigtime_t(centiSeconds) * 10000);
         // ClocksPrint(game, "otim");
     }
 
@@ -573,7 +573,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
         game->control[turn] = 1;
         game->clocks[turn] = ENGINE_CLOCK;
         game->clocks[turn ^ 1] = OPPONENT_CLOCK;
-        ClockStart(ENGINE_CLOCK);
+        ENGINE_CLOCK->Start();
         // ClocksPrint(game, "go");
         GoaltimeCalc(game);
         ThinkerCmdThink(th, board);
@@ -671,7 +671,7 @@ static void xboardNotifyPV(GameT *game, PvRspArgsT *pvArgs)
     printf("%d %d %u %d %s.\n",
            pv->level, pv->eval,
            // (Convert bigtime to centiseconds)
-           (uint32) (ClockTimeTaken(game->clocks[board.Turn()]) / 10000),
+           uint32(game->clocks[board.Turn()]->TimeTaken() / 10000),
            pvArgs->stats.nodes, mySanString);
 }
 

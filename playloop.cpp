@@ -153,7 +153,7 @@ void PlayloopRun(GameT *game, ThinkContextT *th)
 
     int tickTimeout, moveNowTimeout, pollTimeout;
     bool moveNowOnTimeout;
-    bigtime_t myTime, myPerMoveTime;
+    bigtime_t myTime;
     int turn;
 
     // Setup the pollfd array.
@@ -169,9 +169,7 @@ void PlayloopRun(GameT *game, ThinkContextT *th)
         pollTimeout = -1;
         turn = game->savedBoard.Turn();
         moveNowOnTimeout = false;
-        myTime = ClockGetTime(game->clocks[turn]);
-        myPerMoveTime = ClockGetPerMoveTime(game->clocks[turn]);
-        myTime = MIN(myTime, myPerMoveTime);
+        myTime = game->clocks[turn]->PerMoveTime();
 
         // In ClocksICS mode, the clock will run on the first move even though
         // we would rather it not.  Making it run makes the time recalc in the
@@ -179,7 +177,7 @@ void PlayloopRun(GameT *game, ThinkContextT *th)
         // clock in the meanwhile).
         // But, it means we should skip any tick notification.
         if (!ClocksICS(game) &&
-            ClockIsRunning(game->clocks[turn]) &&
+            game->clocks[turn]->IsRunning() &&
             myTime != CLOCK_TIME_INFINITE)
         {
             // Try to keep the UI time display refreshed.
@@ -198,7 +196,7 @@ void PlayloopRun(GameT *game, ThinkContextT *th)
 
         // The computer cannot currently decide for itself when to move, so
         // we decide for it.
-        if (ClockIsRunning(game->clocks[turn]) &&
+        if (game->clocks[turn]->IsRunning() &&
             game->control[turn] &&
             game->goalTime[turn] != CLOCK_TIME_INFINITE)
         {
