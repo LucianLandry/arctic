@@ -938,13 +938,13 @@ static void computermove(ThinkContextT *th, bool bPonder)
                              // prefer the most accurate score possible.
                              EVAL_LOSS + th->maxDepth,
                              // Try to find the shortest mates possible.
-                             EVAL_WIN - (th->maxDepth + 1),
+                             EVAL_WIN - th->maxDepth,
                              &pv, th, NULL);
             LOG_DEBUG("top-level eval: %d %d %d %d\n",
-                      EVAL_LOSS + (th->maxDepth + 2),
+                      EVAL_LOSS + th->maxDepth,
                       myEval.lowBound,
                       myEval.highBound,
-                      EVAL_WIN - (th->maxDepth + 1));
+                      EVAL_WIN - th->maxDepth);
 
             if (ThinkerCompNeedsToMove(th))
             {
@@ -961,17 +961,21 @@ static void computermove(ThinkContextT *th, bool bPonder)
                 break;
             }
             if (
-                // If we know are mating, or getting mated, further evaluation
-                // is unnecessary.
-                // (The logic works whether we are pondering or not.)
-                myEval.highBound <= EVAL_LOSS_THRESHOLD ||
-                myEval.lowBound >= EVAL_WIN_THRESHOLD)
+                // We could stop at (for example) EVAL_WIN_THRESHOLD instead of
+                //  'EVAL_WIN - th->maxDepth' here, but that triggers an
+                //  interesting issue where we might jump between 2 mating
+                //  positions (because other mating positions have been flushed
+                //  from the transposition table) until the opponent can draw by
+                //  repetition.
+                // The logic here should work whether we are pondering or not.
+                myEval.highBound <= EVAL_LOSS + th->maxDepth ||
+                myEval.lowBound >= EVAL_WIN - th->maxDepth)
             {
                 break;
             }
         }
 
-        th->maxDepth = 0; /* reset th->maxDepth */
+        th->maxDepth = 0; // reset th->maxDepth
         move = pv.moves[0];
     }
 
