@@ -938,13 +938,13 @@ static void computermove(ThinkContextT *th, bool bPonder)
                              // prefer the most accurate score possible.
                              EVAL_LOSS + th->maxDepth,
                              // Try to find the shortest mates possible.
-                             EVAL_WIN - th->maxDepth,
+                             EVAL_WIN - (th->maxDepth + 1),
                              &pv, th, NULL);
             LOG_DEBUG("top-level eval: %d %d %d %d\n",
                       EVAL_LOSS + th->maxDepth,
                       myEval.lowBound,
                       myEval.highBound,
-                      EVAL_WIN - th->maxDepth);
+                      EVAL_WIN - (th->maxDepth + 1));
 
             if (ThinkerCompNeedsToMove(th))
             {
@@ -967,9 +967,9 @@ static void computermove(ThinkContextT *th, bool bPonder)
                 //  positions (because other mating positions have been flushed
                 //  from the transposition table) until the opponent can draw by
                 //  repetition.
-                // The logic here should work whether we are pondering or not.
+                // The logic here should work whether or not we are pondering.
                 myEval.highBound <= EVAL_LOSS + th->maxDepth ||
-                myEval.lowBound >= EVAL_WIN - th->maxDepth)
+                myEval.lowBound >= EVAL_WIN - (th->maxDepth + 1))
             {
                 break;
             }
