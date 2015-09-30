@@ -244,7 +244,7 @@ void MoveList::AddMoveFast(MoveT move, const Board &board)
     if (isPreferredMoveFast(move, board))
     {
         // capture, check, or history move w/ depth?  Want good spot.
-        if (moves.size() == insrt)
+        if (int(moves.size()) == insrt)
         {
             moves.push_back(move);
             insrt++;
@@ -268,7 +268,7 @@ void MoveList::AddMove(MoveT move, const Board &board)
     if (isPreferredMove(move, board))
     {
         // capture, promo, check, or history move w/ depth?  Want good spot.
-        if (moves.size() == insrt)
+        if (int(moves.size()) == insrt)
         {
             moves.push_back(move);
             insrt++;
