@@ -18,12 +18,8 @@
 #ifndef PV_H
 #define PV_H
 
+#include "Eval.h"
 #include "move.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 
 // max PV moves we care to display (may not fit in an 80-char line)
 // I want this to be at least 16 (because we can hit that depth in endgames).
@@ -31,7 +27,7 @@ extern "C" {
 
 // Principal variation.
 typedef struct {
-    int eval;     // evaluation of the position.
+    Eval eval;    // evaluation of the position.  Normally an exact value.
     int level;    // nominal search depth.
     int depth;    // including quiescing.  May actually be < level if there are
                   // no associated moves (for example if a mate was found).
@@ -40,12 +36,6 @@ typedef struct {
 
 #define PV_COMPLETED_SEARCH (-1)
 
-// Current variation.  Useful for debugging.
-#define MAX_CV_DEPTH 128
-typedef struct {
-    MoveT moves[MAX_CV_DEPTH];
-} CvT;
-  
 void PvInit(PvT *pv);
 void PvDecrement(PvT *pv, MoveT *move);
 void PvRewind(PvT *pv, int numPlies);
@@ -56,11 +46,5 @@ class Board;
 // Returns the number of moves successfully converted.
 int PvBuildMoveString(PvT *pv, char *dstStr, int dstLen,
                       const MoveStyleT *moveStyle, const Board &board);
-
-void CvInit(CvT *cv);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // PV_H

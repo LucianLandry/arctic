@@ -70,12 +70,12 @@ static SearcherGroupT gSG;
 void SearchArgsInit(SearchArgsT *sa)
 {
     // sa->localBoard inits itself.
-    sa->alpha = EVAL_LOSS;
-    sa->beta = EVAL_WIN;
+    sa->alpha = Eval::Loss;
+    sa->beta = Eval::Win;
     // mvlist has its own constructor.
     sa->move = MoveNone;
     PvInit(&sa->pv);
-    sa->eval = (PositionEvalT) {EVAL_LOSS, EVAL_WIN};
+    sa->eval.Set(Eval::Loss, Eval::Win);
 }
 
 // Initialize a given ThinkContextT.
@@ -426,7 +426,7 @@ int ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT move)
     return 0;
 }
 
-// The purpose of ThinkerSearchersMove(Un)[Mm]ake() is to keep all all
+// The purpose of ThinkerSearchersMove(Un)[Mm]ake() is to keep all
 // search threads' boards in lock-step with the 'masterNode's board.  All moves
 // but the PV are delegated to a searcher thread even on a uni-processor.
 void ThinkerSearchersMoveMake(MoveT move)
@@ -483,7 +483,7 @@ static int searcherWaitOne(void)
     return -1;
 }
 
-PositionEvalT ThinkerSearchersWaitOne(MoveT *move, PvT *pv)
+Eval ThinkerSearchersWaitOne(MoveT *move, PvT *pv)
 {
     SearchArgsT *sa = &gSG.th[searcherWaitOne()].searchArgs;
     *move = sa->move;

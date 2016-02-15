@@ -32,7 +32,6 @@ More search time if first move's eval goes down.  Finish the level. ... at
      evals to -checkmate.
 
 Version 11:
-Done:
 Build improvements: use Git for version control, cmake for building
 Bugfix: uiXboard: handle 0 increment and 0 moves per timecontrol properly
 Bugfix: uiUci: fix 'searchMoves' parameter handling (untested)
@@ -55,6 +54,7 @@ Removed MAX_NUM_PROCS limitation (except for basic user input validation).
 Refactored Clock API + made PerMoveTime() take total clock time into account.
 Bugfix: we were jumping between 2 mating positions (because nothing better was
         in the transposition table) until the opponent could draw.
+Refactored Eval(uations) into their own class, and made PV contain a true eval.
 
 Version 10:
 Implemented depth-1 futility pruning.

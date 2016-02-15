@@ -190,20 +190,21 @@ static void UINotifyPV(GameT *game, PvRspArgsT *pvArgs)
     textcolor(SYSTEMCOL);
     cprintf("%s", spaces);
 
-    if (abs(pv->eval) >= EVAL_WIN_THRESHOLD)
+    if (pv->eval.DetectedWinOrLoss())
     {
+        int movesUntilMate = pv->eval.MovesToWinOrLoss();
         len = snprintf(evalString, sizeof(evalString), "%smate",
-                       pv->eval < 0 ? "-" : "");
-        if (abs(pv->eval) < EVAL_WIN)
+                       pv->eval.DetectedLoss() ? "-" : "");
+        if (movesUntilMate > 0)
         {
             snprintf(&evalString[len], sizeof(evalString) - len, "%d",
-                     (EVAL_WIN - abs(pv->eval) + 1) / 2);
+                     movesUntilMate);
         }
     }
     else
     {
         snprintf(evalString, sizeof(evalString), "%+.2f",
-                 ((double) pv->eval) / EVAL_PAWN);
+                 ((double) pv->eval.LowBound()) / Eval::Pawn);
     }
 
     // print the new pv.
@@ -211,7 +212,6 @@ static void UINotifyPV(GameT *game, PvRspArgsT *pvArgs)
     cprintf("pv: d%d %s %s.",
             pv->level, evalString, mySanString);
 }
-
 
 #define CURSOR_NOBLINK 0
 #define CURSOR_BLINK 1

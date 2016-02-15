@@ -20,13 +20,10 @@
 #include "aThread.h"
 #include "aTypes.h"
 #include "Board.h"
+#include "Eval.h"
 #include "MoveList.h"
 #include "ref.h"
 #include "saveGame.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 typedef struct {
     // passed-in args.
@@ -40,7 +37,7 @@ typedef struct {
 
     // passed-out args.
     PvT pv;             // (eCmdSearch ... not used for eRspPv)
-    PositionEvalT eval; // (eCmdSearch)
+    Eval eval;          // (eCmdSearch)
 } SearchArgsT;
 
 typedef struct {
@@ -128,7 +125,7 @@ eThinkMsgT ThinkerCompWaitSearch(ThinkContextT *th);
 
 // Operations on slave threads.
 int ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT move);
-PositionEvalT ThinkerSearchersWaitOne(MoveT *move, PvT *pv);
+Eval ThinkerSearchersWaitOne(MoveT *move, PvT *pv);
 void ThinkerSearchersBail(void);
 
 void ThinkerSearchersMoveMake(MoveT move);
@@ -143,9 +140,5 @@ typedef struct {
     ThinkContextT *th;
 } SearcherArgsT;
 void ThinkerSearchersCreate(int numThreads, THREAD_FUNC threadFunc);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // THINKER_H

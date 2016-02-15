@@ -969,15 +969,16 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
         bDisplayPv = false;
     }
 
-    if (abs(pv->eval) >= EVAL_WIN_THRESHOLD)
+    if (pv->eval.DetectedWinOrLoss())
     {
-        int mateInYMoves = (EVAL_WIN - abs(pv->eval) + 1) / 2;
+        int movesToMate = pv->eval.MovesToWinOrLoss();
         snprintf(evalString, sizeof(evalString), "mate %d",
-                 pv->eval < 0 ? -mateInYMoves : mateInYMoves);
+                 pv->eval.DetectedLoss() ? -movesToMate : movesToMate);
+
     }
     else
     {
-        snprintf(evalString, sizeof(evalString), "cp %d", pv->eval);
+        snprintf(evalString, sizeof(evalString), "cp %d", pv->eval.LowBound());
     }
 
     // Sending a fairly basic string here.

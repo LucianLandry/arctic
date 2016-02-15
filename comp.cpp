@@ -15,19 +15,16 @@
 //--------------------------------------------------------------------------
 
 #include <assert.h>
-#include <errno.h>
-#include <poll.h>     // poll(2)
 #include <stddef.h>   // NULL
-#include <stdlib.h>   // exit()
 #include <string.h>
 
 #include "aThread.h"
 #include "Board.h"
 #include "comp.h"
+#include "Eval.h"
 #include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
-#include "Position.h"
 #include "ref.h"
 #include "thinker.h"
 #include "transTable.h"
@@ -40,7 +37,7 @@
 // For starters, it is not valid to dec 'beta'.  For an orig window
 // "             alpha                        beta"
 // We don't want to return:
-// "                            hashhighbound          EVAL_WIN"
+// "                            hashhighbound          Eval::Win"
 // ... that is all well and good, but also not enough information.
 // We could attempt to compensate for that by using the hashed move
 // eval, but it is not necessarily the best move,
@@ -92,9 +89,8 @@ CompStatsT gStats;
 #define HASH_HIT 0
 
 // Forward declarations.
-static PositionEvalT minimax(Board *board, int alpha, int beta,
-                             PvT *goodPv, ThinkContextT *th, int *hashHitOnly);
-
+static Eval minimax(Board *board, int alpha, int beta,
+                    PvT *goodPv, ThinkContextT *th, int *hashHitOnly);
 
 // Assumes neither side has any pawns.
 static int endGameEval(Board *board, int turn)
@@ -112,9 +108,6 @@ static int endGameEval(Board *board, int turn)
         (14 - gPreCalc.distance[kcoord] [ekcoord]); /* max 14 */
 }
 
-
-#define QUIESCING (searchDepth < 0)
-
 // 'alpha' is the lowbound for the search (any move must be at least this
 // good).
 // It is also roughly equivalent to 'bestVal' (for any move so far), except
@@ -126,26 +119,8 @@ static int endGameEval(Board *board, int turn)
 // 'lowBound' and 'highBound' are the possible limits of the best 'move' found
 // so far.
 
-static inline PositionEvalT invertEval(PositionEvalT eval)
-{
-    return (PositionEvalT) {-eval.highBound, -eval.lowBound};
-}
-
-#define SET_BOUND(low, high) \
-do { retVal.lowBound = (low); retVal.highBound = (high); } while (0)
-
-#define BUMP_BOUND_TO(eval) \
-do { if (retVal.lowBound < (eval).lowBound) \
-         retVal.lowBound = (eval).lowBound; \
-     if (retVal.highBound < (eval).highBound) \
-         retVal.highBound = (eval).highBound; } while (0)
-
-#define RETURN_BOUND(low, high) \
-do { return (PositionEvalT) {(low), (high)}; } while (0)
-
-
 static void updatePv(ThinkContextT *th, PvT *goodPv, PvT *childPv, MoveT move,
-                     int eval)
+                     Eval eval)
 {
     int depth = th->depth;
 
@@ -186,11 +161,11 @@ static void updatePv(ThinkContextT *th, PvT *goodPv, PvT *childPv, MoveT move,
     }
 }
 
-static PositionEvalT tryMove(Board *board, MoveT move,
-                             int alpha, int beta, PvT *newPv,
-                             ThinkContextT *th, int *hashHitOnly)
+static Eval tryMove(Board *board, MoveT move,
+                    int alpha, int beta, PvT *newPv,
+                    ThinkContextT *th, int *hashHitOnly)
 {
-    PositionEvalT myEval;
+    Eval myEval;
 
     LOGMOVE_DEBUG(board, move, th->depth);
     board->MakeMove(move); // switches sides
@@ -200,31 +175,30 @@ static PositionEvalT tryMove(Board *board, MoveT move,
     // massage alpha/beta for mate detection so that we can "un-massage" the
     // returned bounds later w/out violating our alpha/beta.
     // Okay, example: let's think about the case where we try to find a mate in one.
-    // alpha = EVAL_WIN - 1, beta = EVAL_WIN. maxLevel = 0.
-    // minimax called, a=EVAL_LOSS, b = EVAL_LOSS.  quiescing and ncheck.  {EVAL_LOSS, EVAL_LOSS}
-    // We get {EVAL_WIN, EVAL_WIN}, which we return as {EVAL_WIN - 1, EVAL_WIN - 1}.
+    // alpha = Eval::Win - 1, beta = Eval::Win. maxLevel = 0.
+    // minimax called, a=Eval::Loss, b = Eval::Loss.  quiescing and ncheck.  {Eval::Loss, Eval::Loss}
+    // We get {Eval::Win, Eval::Win}, which we return as {Eval::Win - 1, Eval::Win - 1}.
     // If far side not in check, we get ... probably quiescing, so {strgh, strgh}, but
-    // worst case a fail high of {EVAL_LOSS, EVAL_WIN}.  We return
-    // {EVAL_LOSS - 1, EVAL_WIN - 1} which works.
-    if (alpha >= EVAL_WIN_THRESHOLD && alpha < EVAL_WIN)
+    // worst case a fail high of {Eval::Loss, Eval::Win}.  We return
+    // {Eval::Loss - 1, Eval::Win - 1} which works.
+    if (alpha >= Eval::WinThreshold && alpha < Eval::Win)
     {
         alpha++;
     }
-    else if (alpha <= EVAL_LOSS_THRESHOLD && alpha > EVAL_LOSS)
+    else if (alpha <= Eval::LossThreshold && alpha > Eval::Loss)
     {
         alpha--;
     }
-    if (beta >= EVAL_WIN_THRESHOLD && beta < EVAL_WIN)
+    if (beta >= Eval::WinThreshold && beta < Eval::Win)
     {
         beta++;
     }
-    else if (beta <= EVAL_LOSS_THRESHOLD && beta > EVAL_LOSS)
+    else if (beta <= Eval::LossThreshold && beta > Eval::Loss)
     {
         beta--;
     }
 
-    myEval = invertEval(minimax(board, -beta, -alpha,
-                                newPv, th, hashHitOnly));
+    myEval = minimax(board, -beta, -alpha, newPv, th, hashHitOnly).Invert();
 
     th->depth--;
 
@@ -234,63 +208,50 @@ static PositionEvalT tryMove(Board *board, MoveT move,
     // Enable calculation of plies to win/loss by tweaking the eval.
     // Slightly hacky.
     // If we got here, we could make a move and had to try it.
-    // Therefore neither bound can be EVAL_WIN.
-    if (myEval.lowBound >= EVAL_WIN_THRESHOLD)
-    {
-        myEval.lowBound--;
-    }
-    else if (myEval.lowBound <= EVAL_LOSS_THRESHOLD)
-    {
-        myEval.lowBound++;
-    }
-    if (myEval.highBound >= EVAL_WIN_THRESHOLD)
-    {
-        myEval.highBound--;
-    }
-    else if (myEval.highBound <= EVAL_LOSS_THRESHOLD)
-    {
-        myEval.highBound++;
-    }
+    // Therefore neither bound can be Eval::Win.
+    myEval.DecayTo(Eval::WinThreshold - 1);
 
-    LOG_DEBUG("eval: %d %d %d %d\n",
-              alpha, myEval.lowBound, myEval.highBound, beta);
+#ifdef ENABLE_DEBUG_LOGGING
+    char tmpStr[kMaxEvalStringLen];
+    LOG_DEBUG("eval: %d %s %d\n",
+              alpha, myEval.ToLogString(tmpStr), beta);
+#endif
 
     return myEval;
 }
 
-static int potentialImprovement(Board *board)
+static int potentialImprovement(const Board &board)
 {
-    uint8 turn = board->Turn();
+    uint8 turn = board.Turn();
     int improvement = 0;
     int lowcoord, highcoord;
-    int i, x;
 
     do
     {
         // Traipse through the enemy piece vectors.
-        if (board->PieceExists(Piece(turn ^ 1, PieceType::Queen)))
+        if (board.PieceExists(Piece(turn ^ 1, PieceType::Queen)))
         {
-            improvement = EVAL_QUEEN;
+            improvement = Eval::Queen;
             break;
         }
-        if (board->PieceExists(Piece(turn ^ 1, PieceType::Rook)))
+        if (board.PieceExists(Piece(turn ^ 1, PieceType::Rook)))
         {
-            improvement = EVAL_ROOK;
+            improvement = Eval::Rook;
             break;
         }
-        if (board->PieceExists(Piece(turn ^ 1, PieceType::Bishop)))
+        if (board.PieceExists(Piece(turn ^ 1, PieceType::Bishop)))
         {
-            improvement = EVAL_BISHOP;
+            improvement = Eval::Bishop;
             break;
         }
-        if (board->PieceExists(Piece(turn ^ 1, PieceType::Knight)))
+        if (board.PieceExists(Piece(turn ^ 1, PieceType::Knight)))
         {
-            improvement = EVAL_KNIGHT;
+            improvement = Eval::Knight;
             break;
         }
-        if (board->PieceExists(Piece(turn ^ 1, PieceType::Pawn)))
+        if (board.PieceExists(Piece(turn ^ 1, PieceType::Pawn)))
         {
-            improvement = EVAL_PAWN;
+            improvement = Eval::Pawn;
             break;
         }
     } while (0);
@@ -300,7 +261,7 @@ static int potentialImprovement(Board *board)
     // routine is really lazy, and calculated before any depth-1 move, as
     // opposed to after each one).
     const std::vector<cell_t> &pvec =
-        board->PieceCoords(Piece(turn, PieceType::Pawn));
+        board.PieceCoords(Piece(turn, PieceType::Pawn));
     int len = pvec.size();
 
     if (len)
@@ -315,12 +276,11 @@ static int potentialImprovement(Board *board)
             lowcoord = 40;  // 6th rank, white
             highcoord = 55; // 7th rank, white
         }
-        for (i = 0; i < len; i++)
+        for (auto coord : pvec)
         {
-            x = pvec[i];
-            if (x >= lowcoord && x <= highcoord)
+            if (coord >= lowcoord && coord <= highcoord)
             {
-                improvement += EVAL_QUEEN - EVAL_PAWN;
+                improvement += Eval::Queen - Eval::Pawn;
                 break;
             }
         }
@@ -334,12 +294,12 @@ static int potentialImprovement(Board *board)
 // Returns the evaluation of the found move
 // (if no move found, 'cookie' is set to -1).
 // Side effect: removes the move from the list.
-static PositionEvalT tryNextHashMove(Board *board, int alpha, int beta,
-                                     PvT *newPv, ThinkContextT *th,
-                                     MoveList *mvlist, int *cookie,
-                                     MoveT *hashMove)
+static Eval tryNextHashMove(Board *board, int alpha, int beta,
+                            PvT *newPv, ThinkContextT *th,
+                            MoveList *mvlist, int *cookie,
+                            MoveT *hashMove)
 {
-    PositionEvalT myEval = {EVAL_LOSS, EVAL_LOSS};
+    Eval myEval(EvalLoss);
     int hashHitOnly = HASH_MISS;
     int i;
     MoveT move;
@@ -386,46 +346,38 @@ static int biasDraw(int strgh, int depth)
         1;
 }
 
-// Note: the simple lock/unlock of the hashLock is good for about a 6%
-// slowdown ... even using spinlocks.  So it could be to our advantage to check
-// for SMP before actually doing it. ...
-// although on second thought, that has a measurable slowdown of its own, so I
-// will optimize for the multithread case.
+// Note: a simple lock/unlock of the hashLock is good for about a 6% slowdown
+// ... even using spinlocks.  It could be advantageous to check for
+// SMP before actually doing it.  But that has a measurable slowdown of its own,
+// so we optimize for the multithread case.
 
 // Evaluates a given board position from {board->turn}'s point of view.
-static PositionEvalT minimax(Board *board, int alpha, int beta,
-                             PvT *goodPv, ThinkContextT *th, int *hashHitOnly)
+static Eval minimax(Board *board, int alpha, int beta,
+                    PvT *goodPv, ThinkContextT *th, int *hashHitOnly)
 {
     // Trying to order the declared variables by their struct size, to
     // increase cache hits, does not work.  Trying instead by functionality.
     // and/or order of usage, is also not reliable.
-    int searchDepth;
-
-    uint8 turn;
-    bool inCheck;
     bool mightDraw; // Is it possible to hit a draw while evaluating from
                     //  this position.
     bool masterNode;  // multithread support.
 
     MoveT hashMove;
-    PositionEvalT hashEval;
+    Eval hashEval;
     MoveT bestMove;
-    PositionEvalT retVal;
+    Eval retVal;
     MoveT move;
     int preEval, improvement, i, secondBestVal;
     int cookie;
-    PositionEvalT myEval;
-    int newVal;
+    Eval myEval;
     PvT newPv;
-    int strgh;
     uint16 basePly = board->Ply() - th->depth;
+    int strgh = board->RelativeMaterialStrength();
+    int searchDepth = th->maxDepth - th->depth;
+#define QUIESCING (searchDepth < 0)
 
     // I'm trying to use lazy initialization for this function.
     goodPv->depth = 0;
-    turn = board->Turn();
-    strgh = board->RelativeMaterialStrength();
-    searchDepth = th->maxDepth - th->depth;
-
     gStats.nodes++;
     if (!QUIESCING)
     {
@@ -438,14 +390,13 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
     {
         // Draw detected.
         // Skew the eval a bit: If we have equal or better material, try not to
-        // draw.  Otherwise, try to draw.  (here, strgh is used as a tmp
-        // variable)
-        strgh = biasDraw(strgh, th->depth);
-        RETURN_BOUND(strgh, strgh);
+        // draw.  Otherwise, try to draw.
+        return Eval(biasDraw(strgh, th->depth));
     }
 
-    inCheck = board->IsInCheck();
-
+    bool inCheck = board->IsInCheck();
+    uint8 turn   = board->Turn();
+    
     if (board->RepeatPly() != -1)
     {
         // Detected repeated position.  Fudge things a bit and (again) try to
@@ -474,8 +425,7 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
         if (board->MaterialStrength(turn ^ 1) == 0 &&
             !board->PieceExists(Piece(turn, PieceType::Pawn)))
         {
-            strgh += endGameEval(board, turn); // (oh good.)
-            RETURN_BOUND(strgh, strgh);
+            return Eval(strgh + endGameEval(board, turn)); // (oh good.)
         }
 
         // When quiescing (inCheck is a special case because we attempt to
@@ -485,7 +435,7 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
         // evaluation function, cleverly hidden.
         if (strgh >= beta)
         {
-            RETURN_BOUND(strgh, EVAL_WIN);
+            return Eval(strgh, Eval::Win);
         }
     }
 
@@ -509,18 +459,18 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
                       basePly, alpha, beta))
     {
         // record the move (if there is one).
-        updatePv(th, goodPv, NULL, hashMove, hashEval.lowBound);
+        updatePv(th, goodPv, NULL, hashMove, hashEval);
         return hashEval;
     }
     if (hashHitOnly != NULL)
     {
         *hashHitOnly = HASH_MISS;
-        /* actual bounds should not matter. */
-        RETURN_BOUND(EVAL_LOSS, EVAL_WIN);
+        // actual bounds should not matter.
+        return Eval(Eval::Loss, Eval::Win);
     }
 
+    // At this point, (expensive) move generation is required.
     gStats.moveGenNodes++;
-
     MoveList mvlist;
 
     if (th->depth || !th->searchArgs.mvlist.NumMoves())
@@ -552,15 +502,11 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
         }
     }
 
-    // Note:  ncheck for any side guaranteed to be correct *only* after
-    //  the other side has made its move.
     if (!mvlist.NumMoves())
     {
-        strgh =
-            inCheck    ? EVAL_LOSS : // checkmate detected
-            !QUIESCING ? 0 :         // stalemate detected
-            strgh;
-        SET_BOUND(strgh, strgh);
+        retVal.Set(inCheck    ? Eval::Loss : // checkmate detected
+                   !QUIESCING ? 0 :          // stalemate detected
+                   strgh);
         goto out;
     }
 
@@ -569,7 +515,7 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
         // Once we know we're not mated, alpha always >= strgh.
         if (strgh >= beta)
         {
-            SET_BOUND(strgh, EVAL_WIN);
+            retVal.Set(strgh, Eval::Win);
             goto out;
         }
 
@@ -581,7 +527,7 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
         }
 
         // If we find no better moves ...
-        SET_BOUND(strgh, strgh);
+        retVal.Set(strgh);
     }
     else
     {
@@ -595,7 +541,7 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
         }
 
         // If we find no better moves ...
-        SET_BOUND(EVAL_LOSS, alpha);
+        retVal.Set(Eval::Loss, alpha);
     }
 
 
@@ -610,7 +556,7 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
 
     if (searchDepth == 1)
     {
-        improvement += potentialImprovement(board);
+        improvement += potentialImprovement(*board);
     }
 
 #if 1
@@ -693,24 +639,16 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
                    So, this particular move will not improve things...
                    and we can skip it.
 
-                   (In the case of searchDepth == 1, we assume we cannot
-                   improve our position more than a queen capture, which
-                   is true unless there is a capturing checkmate at depth '-1',
-                   which is rare enough that I am willing to live with it.)
+                   (In the case of searchDepth == 1, the logic works unless
+                   there is a capturing checkmate at depth '-1', which is rare
+                   enough that I am willing to live with it.)
 
                    This is the familiar 'futility pruning'.
                 */
 
-                /* (however, we do need to bump the highbound.  Otherwise, a
-                   depth-0 position can be mistakenly evaluated as +checkmate.)
-                */
-                retVal.highBound = MAX(retVal.highBound, preEval);
-
-                /* *if* alpha > origalpha, we found a newVal > origalpha.  In
-                   this case, we want to set an exact value for this.  However,
-                   an alpha < newVal < beta should actually have an exactval
-                   already.
-                */
+                // (however, we do need to bump the highbound.  Otherwise, a
+                //  depth-0 position can be mistakenly evaluated as +checkmate.)
+                retVal.BumpHighBoundTo(preEval);
 
                 if (!mvlist.IsPreferredMove(i + 1))
                 {
@@ -724,9 +662,8 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
             myEval = tryMove(board, move, alpha, beta, &newPv, th, NULL);
         }
 
-        // Note: If we need to move, we cannot trust (and should not hash)
-        //  'myEval'.  We must go with the best value/move we already had ...
-        //  if any.
+        // If we need to move, we cannot trust (and should not hash) 'myEval'.
+        // We must go with the best value/move we already had ... if any.
         if (ThinkerCompNeedsToMove(gThinker) ||
             (gVars.maxNodes != NO_LIMIT && gStats.nodes >= gVars.maxNodes))
         {
@@ -735,40 +672,41 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
                 // Wait for any searchers to terminate.
                 ThinkerSearchersBail();
             }
-            RETURN_BOUND(retVal.lowBound, EVAL_WIN);
+            return retVal.BumpHighBoundToWin();
         }
 
         // In case of a <= alpha exact eval, this can at least tighten
-        // the evaluation of this position.  Even though we don't record the
-        // move, I think that's good enough to avoid 'bestVal'.
-        BUMP_BOUND_TO(myEval);
+        //  the evaluation of this position.  Even though we don't record the
+        //  move, I think that's good enough to avoid 'bestVal'.
+        retVal.BumpTo(myEval);
 
-        newVal = myEval.lowBound;
-        if (newVal >= alpha)
+        int newLowBound = myEval.LowBound();
+        if (newLowBound >= alpha)
         {
-            /* This does *not* practically disable the history table,
-               because most moves should fail w/{EVAL_LOSS, alpha}. */
-            secondBestVal = alpha;  /* record 2ndbest val for history table. */
+            // This does *not* practically disable the history table,
+            //  because most moves should fail w/{Eval::Loss, alpha}.
+            secondBestVal = alpha;  // record 2ndbest val for history table.
         }
 
-        if (newVal > alpha)
+        if (newLowBound > alpha)
         {
-            bestMove = move; // struct assign
-            alpha = newVal;
+            // This is an unquestionably better move.
+            bestMove = move;
+            alpha = newLowBound;
 
-            updatePv(th, goodPv, &newPv, bestMove, newVal);
+            updatePv(th, goodPv, &newPv, bestMove, myEval);
 
-            if (newVal >= beta) // ie, will leave other side just as bad
-                                // off (if not worse)
+            if (newLowBound >= beta) // ie, will leave other side just as bad
+                                     // off (if not worse)
             {
                 if (masterNode && ThinkerSearchersSearching())
                 {
                     ThinkerSearchersBail();
-                    retVal.highBound = EVAL_WIN;
+                    retVal.BumpHighBoundToWin();
                 }
                 else if (cookie != -1 || i != mvlist.NumMoves() - 1)
                 {
-                    retVal.highBound = EVAL_WIN;
+                    retVal.BumpHighBoundToWin();
                 }
                 // (else, we should have got through the last move
                 //  and do not need to clobber the highBound.)
@@ -776,17 +714,19 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
                 break;        // why bother checking how bad the other
                               // moves are?
             }
-            else if (myEval.lowBound != myEval.highBound)
+            else if (!myEval.IsExactVal())
             {
-                /* alpha < lowbound < beta needs an exact evaluation. */
-                LOG_EMERG("alhb: %d %d %d %d\n",
-                          alpha, myEval.lowBound, myEval.highBound, beta);
+                char tmpStr[kMaxEvalStringLen];
+
+                // alpha < lowbound < beta needs an exact evaluation.
+                LOG_EMERG("alhb: %d %s %d\n",
+                          alpha, myEval.ToLogString(tmpStr), beta);
                 assert(0);
             }
         }
         else
         {
-            assert(myEval.highBound <= alpha);
+            assert(myEval <= alpha);
         }
     }
 
@@ -802,8 +742,7 @@ static PositionEvalT minimax(Board *board, int alpha, int beta,
     {
         assert(bestMove != MoveNone);
         // move is at least one point better than others.
-        gVars.hist[turn]
-            [bestMove.src] [bestMove.dst] = board->Ply();
+        gVars.hist[turn] [bestMove.src] [bestMove.dst] = board->Ply();
     }
 
 out:
@@ -838,16 +777,16 @@ static bool canClaimDraw(Board *board)
 // or something to avoid mate as long as possible, only to turn around and
 // resign on the next move.
 // Assumes the 'board' passed in is set to our turn.
-static bool shouldResign(Board *board, PositionEvalT myEval, bool bPonder)
+static bool shouldResign(Board *board, Eval myEval, bool bPonder)
 {
     return
         // do not resign while pondering; let opponent make move
         // (or possibly run out of time)
         !bPonder &&
         // opponent has a clear mating strategy
-        myEval.highBound <= EVAL_LOSS_THRESHOLD &&
+        myEval <= Eval::LossThreshold &&
         // We are down by at least a rook's worth of material
-        board->RelativeMaterialStrength() <= -EVAL_ROOK &&
+        board->RelativeMaterialStrength() <= -Eval::Rook &&
         // We do not have a queen (the theory being that things could quickly
         // turn around if the opponent makes a mistake)
         !board->PieceExists(Piece(board->Turn(), PieceType::Queen));
@@ -856,7 +795,7 @@ static bool shouldResign(Board *board, PositionEvalT myEval, bool bPonder)
 
 static void computermove(ThinkContextT *th, bool bPonder)
 {
-    PositionEvalT myEval;
+    Eval myEval;
     PvT pv;
     Board *board = &th->searchArgs.localBoard;
     int resigned = 0;
@@ -910,22 +849,20 @@ static void computermove(ThinkContextT *th, bool bPonder)
         // setup known search parameters across the slaves.
         ThinkerSearchersBoardSet(board);
 
-        for (th->maxDepth =
-             // Always try to find the shortest mate if we have stumbled
-             // onto one.  But normally we start at a deeper level just to
-             // save the cycles.
-             abs(gVars.pv.eval) >= EVAL_WIN_THRESHOLD && !bPonder ? 0 :
-
-             // We start the search at the same level as the PV if we did not
-             // complete the search, or at the next level if we did.  If the PV
-             // level is zero, we just start over because the predicted move may
-             // not have been made.
-             gVars.pv.level +
-             (gVars.pv.level && gVars.pv.depth == PV_COMPLETED_SEARCH ?
-              1 : 0);
-
-             th->maxDepth <= maxSearchDepth;
-             th->maxDepth++)
+        th->maxDepth =
+            // Always try to find the shortest mate if we have stumbled
+            // onto one.  But normally we start at a deeper level just to
+            // save the cycles.
+            gVars.pv.eval.DetectedWinOrLoss() && !bPonder ? 0 :
+            // We start the search at the same level as the PV if we did not
+            // complete the search, or at the next level if we did.  If the PV
+            // level is zero, we just start over because the predicted move may
+            // not have been made.
+            gVars.pv.level +
+            (gVars.pv.level && gVars.pv.depth == PV_COMPLETED_SEARCH ?
+             1 : 0);
+            
+        for (; th->maxDepth <= maxSearchDepth; th->maxDepth++)
         {
             /* setup known search parameters across the slaves. */
             ThinkerSearchersSetDepthAndLevel(th->depth, th->maxDepth);
@@ -933,18 +870,18 @@ static void computermove(ThinkContextT *th, bool bPonder)
             LOG_DEBUG("ply %d searching level %d\n",
                       board->Ply(), th->maxDepth);
             myEval = minimax(board,
-                             // Could use EVAL_LOSS_THRESHOLD here w/a
+                             // Could use Eval::LossThreshold here w/a
                              // different resign strategy, but right now we
                              // prefer the most accurate score possible.
-                             EVAL_LOSS + th->maxDepth,
+                             Eval::Loss + th->maxDepth,
                              // Try to find the shortest mates possible.
-                             EVAL_WIN - (th->maxDepth + 1),
+                             Eval::Win - (th->maxDepth + 1),
                              &pv, th, NULL);
             LOG_DEBUG("top-level eval: %d %d %d %d\n",
-                      EVAL_LOSS + th->maxDepth,
+                      Eval::Loss + th->maxDepth,
                       myEval.lowBound,
                       myEval.highBound,
-                      EVAL_WIN - (th->maxDepth + 1));
+                      Eval::Win - (th->maxDepth + 1));
 
             if (ThinkerCompNeedsToMove(th))
             {
@@ -961,15 +898,15 @@ static void computermove(ThinkContextT *th, bool bPonder)
                 break;
             }
             if (
-                // We could stop at (for example) EVAL_WIN_THRESHOLD instead of
-                //  'EVAL_WIN - th->maxDepth' here, but that triggers an
+                // We could stop at (for example) Eval::WinThreshold instead of
+                //  'Eval::Win - th->maxDepth' here, but that triggers an
                 //  interesting issue where we might jump between 2 mating
                 //  positions (because other mating positions have been flushed
                 //  from the transposition table) until the opponent can draw by
                 //  repetition.
                 // The logic here should work whether or not we are pondering.
-                myEval.highBound <= EVAL_LOSS + th->maxDepth ||
-                myEval.lowBound >= EVAL_WIN - (th->maxDepth + 1))
+                myEval <= Eval::Loss + th->maxDepth ||
+                myEval >= Eval::Win - (th->maxDepth + 1))
             {
                 break;
             }

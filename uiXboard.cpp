@@ -669,7 +669,7 @@ static void xboardNotifyPV(GameT *game, PvRspArgsT *pvArgs)
     }
 
     printf("%d %d %u %d %s.\n",
-           pv->level, pv->eval,
+           pv->level, pv->eval.LowBound(),
            // (Convert bigtime to centiseconds)
            uint32(game->clocks[board.Turn()]->TimeTaken() / 10000),
            pvArgs->stats.nodes, mySanString);

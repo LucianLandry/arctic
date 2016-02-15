@@ -32,19 +32,6 @@ typedef struct {
     uint64 zobrist;
 } PositionInfoElementT;
 
-typedef struct {
-    int lowBound;
-    int highBound;
-} PositionEvalT;
-
-#define POSITIONEVAL_STRING_MAX (26)
-// Writes to 'result', which is assumed to be at least POSITIONEVAL_STRING_MAX
-//  chars long.
-char *PositionEvalToLogString(char *result, PositionEvalT *pe);
-
-// Convenience constants used for initialization.
-extern const PositionEvalT gPELoss;
-
 // Any static board position that can be set by FEN.  May contain an
 //  in-progress or "illegal" position that a Board cannot be set to.
 class Position

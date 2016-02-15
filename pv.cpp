@@ -28,7 +28,7 @@ void PvInit(PvT *pv)
 {
     int i;
 
-    pv->eval = 0;
+    pv->eval.Set(0);
     pv->depth = 0;
     pv->level = 0;
     for (i = 0; i < MAX_PV_DEPTH; i++)
@@ -50,15 +50,8 @@ void PvDecrement(PvT *pv, MoveT *move)
     // the PV as a hint as to what moves to prefer.
     memmove(&pv->moves[0], &pv->moves[1], MAX_PV_DEPTH - 1);
     pv->moves[MAX_PV_DEPTH - 1] = MoveNone;
-    pv->eval = -pv->eval;
-    if (pv->eval >= EVAL_WIN_THRESHOLD && pv->eval < EVAL_WIN)
-    {
-        pv->eval++;
-    }
-    else if (pv->eval <= EVAL_LOSS_THRESHOLD && pv->eval > EVAL_LOSS)
-    {
-        pv->eval--;
-    }
+    pv->eval.Invert()
+        .RipenFrom(Eval::WinThreshold);
     if (pv->depth != PV_COMPLETED_SEARCH)
     {
         pv->depth = MAX(pv->depth - 1, 0);
@@ -90,7 +83,8 @@ void PvRewind(PvT *pv, int numPlies)
     }
     // We need to clear everything else out, though, because it is no longer
     // valid since we have no idea what move might be selected.
-    pv->eval = pv->level = pv->depth = 0;
+    pv->level = pv->depth = 0;
+    pv->eval.Set(0);
 }
 
 void PvFastForward(PvT *pv, int numPlies)
@@ -104,15 +98,6 @@ void PvFastForward(PvT *pv, int numPlies)
     for (; numPlies > 0; numPlies--)
     {
         PvDecrement(pv, &pv->moves[0]);
-    }
-}
-
-void CvInit(CvT *cv)
-{
-    int i;
-    for (i = 0; i < MAX_CV_DEPTH; i++)
-    {
-        cv->moves[i] = MoveNone;
     }
 }
 

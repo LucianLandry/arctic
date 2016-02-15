@@ -27,7 +27,7 @@
 
 typedef struct {
     uint64 zobrist;
-    PositionEvalT eval;
+    Eval eval;
     MoveT move;       // stores preferred move for this position.
     uint16 basePly;   // lets us evaluate if this entry is 'too old'.
     int8 depth;       // needs to be plys from quiescing, due to incremental
@@ -273,17 +273,16 @@ static inline bool entryMatches(HashPositionT *hp, uint64 zobrist,
         // hp->depth != HASH_NOENTRY &&
 
         // know eval exactly?
-        (hp->eval.highBound == hp->eval.lowBound ||
+        (hp->eval.IsExactVal() ||
          // know it's good enough?
-         hp->eval.lowBound >= beta ||
+         hp->eval >= beta ||
          // know it's bad enough?
-         hp->eval.highBound <= alpha) &&
+         hp->eval <= alpha) &&
 
         // is the hashed search deep enough?
         (QUIESCING || searchDepth <= hp->depth ||
          // For detected win/loss, depth does not matter.
-         hp->eval.highBound <= EVAL_LOSS_THRESHOLD ||
-         hp->eval.lowBound >= EVAL_WIN_THRESHOLD);
+         hp->eval.DetectedWinOrLoss());
 }
 
 static inline size_t calcEntry(uint64 zobrist)
@@ -323,7 +322,7 @@ static inline size_t calcEntry(uint64 zobrist)
 
 // Fills in 'hashEval' and 'hashMove' iff we had a successful hit.
 // Assumes TransTableQuickHitTest() returned true.
-bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
+bool TransTableHit(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
                    int searchDepth, uint16 basePly, int alpha, int beta)
 {
     size_t entry = calcEntry(zobrist);
@@ -387,7 +386,7 @@ bool TransTableQuickHitTest(uint64 zobrist)
         gHash.hash[calcEntry(zobrist)].zobrist == zobrist;
 }
 
-void TransTableConditionalUpdate(PositionEvalT eval, MoveT move, uint64 zobrist,
+void TransTableConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
                                  int searchDepth, uint16 basePly)
 {
     size_t entry = calcEntry(zobrist);
@@ -408,8 +407,7 @@ void TransTableConditionalUpdate(PositionEvalT eval, MoveT move, uint64 zobrist,
         // Otherwise, use the position that gives us as much info as
         // possible, and after that the most recently used (ie this move).
         (searchDepth == vHp->depth &&
-         (eval.highBound - eval.lowBound) <=
-         (vHp->eval.highBound - vHp->eval.lowBound)))
+         eval.Range() <= vHp->eval.Range()))
     {
         // We only lock the hashtable once we know we want to do an update.
         // This lets us do slightly lazier locking.

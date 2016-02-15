@@ -27,14 +27,6 @@ using arctic::Rank;
 using arctic::ToCoord;
 using std::to_string;
 
-const PositionEvalT gPELoss = { EVAL_LOSS, EVAL_LOSS };
-
-char *PositionEvalToLogString(char *result, PositionEvalT *pe)
-{
-    sprintf(result, "{(PosEval) %d %d}", pe->lowBound, pe->highBound);
-    return result;
-}
-
 Position::Position()
 {
     ply = 0;

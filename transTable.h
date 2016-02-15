@@ -18,7 +18,7 @@
 #define TRANSTABLE_H
 
 #include "aTypes.h"
-#include "Position.h"
+#include "Eval.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -58,10 +58,10 @@ bool TransTableQuickHitTest(uint64 zobrist);
 
 // Fills in 'hashEval' and 'hashMove' iff we had a successful hit.
 // Assumes a non-zero-size hash.
-bool TransTableHit(PositionEvalT *hashEval, MoveT *hashMove, uint64 zobrist,
+bool TransTableHit(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
                    int searchDepth, uint16 basePly, int alpha, int beta);
 
-void TransTableConditionalUpdate(PositionEvalT eval, MoveT move, uint64 zobrist,
+void TransTableConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
                                  int searchDepth, uint16 basePly);
 
 #ifdef __cplusplus

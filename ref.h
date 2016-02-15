@@ -22,7 +22,7 @@
 
 #define VERSION_STRING_MAJOR "1"
 #define VERSION_STRING_MINOR "1"
-#define VERSION_STRING_PHASE "devel" // or beta, release
+#define VERSION_STRING_PHASE "release" // devel, beta, or release
 
 // The identifier for a 'cell' (basically, a board square, but in the future
 // perhaps not every type of board will have to use square-shaped cells).
@@ -47,25 +47,6 @@ typedef uint8 cell_t;
 #define MAX3(a, b, c) (MAX((a), (MAX((b), (c)))))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MIN3(a, b, c) (MIN((a), (MIN((b), (c)))))
-
-// A 'royal' piece in this sense is any piece that loses the game if captured.
-// They are in effect invaluable.  Making this '0' lets us implement multiple
-// royal pieces on one side w/out screwing up the evaluation.
-#define EVAL_ROYAL     0
-
-#define EVAL_KING      EVAL_ROYAL
-#define EVAL_PAWN      100
-#define EVAL_BISHOP    300
-#define EVAL_KNIGHT    300
-#define EVAL_ROOK      500
-#define EVAL_QUEEN     900
-
-#define EVAL_WIN       100000      // For chess, this is a checkmate.
-#define EVAL_LOSS      (-EVAL_WIN)
-
-// For win/loss detection in x plies.  Here, x can be 100 plies.
-#define EVAL_WIN_THRESHOLD (EVAL_WIN - 100)
-#define EVAL_LOSS_THRESHOLD (-EVAL_WIN_THRESHOLD)
 
 // NOTE: these are not exact counts, since we do not want the speed hit that
 // comes from updating these atomically.  We could have the child threads

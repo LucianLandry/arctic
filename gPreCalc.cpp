@@ -446,12 +446,12 @@ void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads)
     Piece::Init();
     
     // Initialize 'worth' values.
-    Piece::SetWorth(PieceType::King, EVAL_KING);
-    Piece::SetWorth(PieceType::Pawn, EVAL_PAWN);
-    Piece::SetWorth(PieceType::Knight, EVAL_KNIGHT);
-    Piece::SetWorth(PieceType::Bishop, EVAL_BISHOP);
-    Piece::SetWorth(PieceType::Rook, EVAL_ROOK);
-    Piece::SetWorth(PieceType::Queen, EVAL_QUEEN);
+    Piece::SetWorth(PieceType::King,   Eval::King);
+    Piece::SetWorth(PieceType::Pawn,   Eval::Pawn);
+    Piece::SetWorth(PieceType::Knight, Eval::Knight);
+    Piece::SetWorth(PieceType::Bishop, Eval::Bishop);
+    Piece::SetWorth(PieceType::Rook,   Eval::Rook);
+    Piece::SetWorth(PieceType::Queen,  Eval::Queen);
 
     // initialize zobrist hashing.
     for (i = 0; i < NUM_SQUARES; i++)

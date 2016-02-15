@@ -853,7 +853,7 @@ bool Board::IsDrawInsufficientMaterial() const
         totalStrength == 0 ||
 
         // (KN or KB) vs k
-        (totalStrength == EVAL_KNIGHT &&
+        (totalStrength == Eval::Knight &&
          !PieceExists(Piece(0, PieceType::Pawn)) &&
          !PieceExists(Piece(1, PieceType::Pawn))))
     {
@@ -862,7 +862,7 @@ bool Board::IsDrawInsufficientMaterial() const
 
     if (
         // KB vs kb, bishops on same color
-        totalStrength == (EVAL_BISHOP << 1) &&
+        totalStrength == (Eval::Bishop << 1) &&
         PieceCoords(Piece(0, PieceType::Bishop)).size() == 1 &&
         PieceCoords(Piece(1, PieceType::Bishop)).size() == 1)
     {
@@ -949,7 +949,7 @@ int Board::CalcCapWorth(MoveT move) const
     Piece capPiece(PieceAt(move.dst));
     int capWorth = capPiece.Worth();
 
-    if (!capPiece.IsEmpty() && capWorth == EVAL_ROYAL)
+    if (!capPiece.IsEmpty() && capWorth == Eval::Royal)
         assert(0); // Captured king, cannot happen.
 
     if (move.promote != PieceType::Empty)
@@ -958,7 +958,7 @@ int Board::CalcCapWorth(MoveT move) const
         // (for en passant, there is no 'capPiece')
         capWorth += Piece(0, move.promote).Worth();
         if (move.promote != PieceType::Pawn)
-            capWorth -= EVAL_PAWN;
+            capWorth -= Eval::Pawn;
     }
 
     return capWorth;
