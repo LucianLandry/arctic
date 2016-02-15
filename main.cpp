@@ -40,7 +40,8 @@
 
 static void usage(char *programName)
 {
-    printf("usage: %s [-h=<hashtablesize>] [-p=<numcputhreads>] [--ui=<console,juce,uci,xboard>]\n"
+    printf("arctic %s.%s-%s\n"
+           "usage: %s [-h=<hashtablesize>] [-p=<numcputhreads>] [--ui=<console,juce,uci,xboard>]\n"
            "\t'hashtablesize' examples: 200000, 100k, 0M, 1G\n"
            // as picked by TransTableDefaultSize()
            "\t'hashtablesize' default == MIN(1/3 total memory, 512M)\n"
@@ -48,6 +49,7 @@ static void usage(char *programName)
            "\t'numcputhreads' in range 1-%d\n"
            "\t'numcputhreads' default == number of online processors\n\n"
            "\t'ui' default == console (if stdin is terminal), or xboard (otherwise)\n",
+           VERSION_STRING_MAJOR, VERSION_STRING_MINOR, VERSION_STRING_PHASE,
            programName, MAX_NUM_PROCS);
     exit(0);
 }
