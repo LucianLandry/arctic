@@ -67,6 +67,8 @@ public:
     // Accessor.
     inline int LowBound() const;
     inline int HighBound() const;
+
+    inline Eval Inverted() const;
     
     // These operations can be chained.
     inline Eval &Invert();
@@ -80,9 +82,9 @@ public:
     //  evaluation is below '-threshold', increments it.
     // This enables calculation of plies to win/loss by tweaking the eval.
     // Slightly hacky.  This is not the inverse of BumpTo()!
-    inline void DecayTo(int threshold);
+    inline Eval &DecayTo(int threshold);
     // This is sort of the opposite of 'DecayTo()'.
-    inline void RipenFrom(int threshold);
+    inline Eval &RipenFrom(int threshold);
     
     // Writes to and returns 'result', which is assumed to be at least
     //  kMaxEvalStringLen chars long.
@@ -164,6 +166,11 @@ inline int Eval::HighBound() const
     return highBound;
 }
 
+inline Eval Eval::Inverted() const
+{
+    return Eval(-highBound, -lowBound);
+}
+
 inline Eval &Eval::Invert()
 {
     int tmpVal = lowBound;
@@ -208,7 +215,7 @@ inline Eval &Eval::BumpHighBoundToWin()
     return *this;
 }
 
-inline void Eval::DecayTo(int threshold)
+inline Eval &Eval::DecayTo(int threshold)
 {
     if (lowBound > threshold)
         lowBound--;
@@ -221,9 +228,11 @@ inline void Eval::DecayTo(int threshold)
         highBound--;
     else if (highBound < -threshold)
         highBound++;
+
+    return *this;
 }
 
-inline void Eval::RipenFrom(int threshold)
+inline Eval &Eval::RipenFrom(int threshold)
 {
     if (lowBound > threshold && lowBound < Eval::Win)
         lowBound++;
@@ -234,6 +243,8 @@ inline void Eval::RipenFrom(int threshold)
         highBound++;
     else if (highBound < -threshold && highBound > Eval::Loss)
         highBound--;
+
+    return *this;
 }
 
 #endif // EVAL_H
