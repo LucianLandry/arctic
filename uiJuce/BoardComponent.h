@@ -17,7 +17,6 @@
 #ifndef BOARD_COMPONENT_H
 #define BOARD_COMPONENT_H
 
-#include "../AppConfig.h"
 #include "juce_gui_basics/juce_gui_basics.h" // juce::Component
 
 #include "Position.h"

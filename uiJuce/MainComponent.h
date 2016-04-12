@@ -17,7 +17,6 @@
 #ifndef MAINCOMPONENT_H
 #define MAINCOMPONENT_H
 
-#include "../AppConfig.h"
 #include "juce_gui_basics/juce_gui_basics.h" // juce::Component
 #include "BoardComponent.h"
 

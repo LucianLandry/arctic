@@ -17,7 +17,6 @@
 #ifndef PIECECACHE_H
 #define PIECECACHE_H
 
-#include "../AppConfig.h"
 #include "juce_gui_basics/juce_gui_basics.h" // juce::Drawable
 #include "Piece.h"
 #include "ref.h"

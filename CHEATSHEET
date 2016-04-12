@@ -22,15 +22,8 @@ USING CMAKE:
 
 cd <builddir>
 # generates Makefiles.
-# Juce's actual classes/structures change depending on whether JUCE_DEBUG has
-#  been defined.  As a consequence:
-# If Juce has been built with "Debugging enabled" checked in the Introjucer,
-#  you MUST define JUCE_DEBUG or else you will get either weird 'non-virtual
-#  thunk to ...' errors during link, or worse (on older compilers), weird
-#  runtime errors.
-# If Juce has been built w/out debugging, you MUST NOT define JUCE_DEBUG or else
-#  you will ... wait for it ... get weird runtime errors.
-cmake -D JUCE_PATH=/home/blandry/libjuce -D JUCE_DEBUG=1 ../src
+cmake -D JUCE_PATH=/home/blandry/juce -D JUCE_DEBUG=1 ../src
+
 # Under Debian Jessie, 'arctic' currently runs faster when built by clang.
 # Note that the `which ...` below seems to be required for cmake 3.0.2;
 #  otherwise multiple invocations of cmake in the same build directory will
@@ -38,8 +31,8 @@ cmake -D JUCE_PATH=/home/blandry/libjuce -D JUCE_DEBUG=1 ../src
 # Also note that gcc 4.9.2 is subtly broken in the warnings department; we run
 #  into https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61971 (or similar).  The
 #  issue is fixed in gcc 4.9.3.
-cmake -D JUCE_PATH=/home/blandry/libjuce -D JUCE_DEBUG=1 -D CMAKE_C_COMPILER=`which gcc` -D CMAKE_CXX_COMPILER=`which g++` ../src
-cmake -D JUCE_PATH=/home/blandry/libjuce -D JUCE_DEBUG=1 -D CMAKE_C_COMPILER=`which clang` -D CMAKE_CXX_COMPILER=`which clang++` ../src
+cmake -D JUCE_PATH=/home/blandry/juce -D JUCE_DEBUG=1 -D CMAKE_C_COMPILER=`which gcc` -D CMAKE_CXX_COMPILER=`which g++` ../src
+cmake -D JUCE_PATH=/home/blandry/juce -D JUCE_DEBUG=1 -D CMAKE_C_COMPILER=`which clang` -D CMAKE_CXX_COMPILER=`which clang++` ../src
 make
 
 No true build log is normally generated, but if you need one, you can do:
@@ -69,44 +62,22 @@ Not tried: valgrind/callgrind/etc.
 -------------------------------------------------------------------------------
 
 BUILDING JUCE:
-Download juce 2.0, and unpack it such that it shows up as ${HOME}/juce.
-cd ${HOME}/juce/extras/static\ library
-../Introjucer/Builds/Linux/build/Introjucer juce.jucer
-# tweak as necessary (adding Linux release), then save project, preferably as
-# another file like juceb.jucer.  Then
-cd Builds/Linux
-make clean
-make
-
-Current download instructions for Juce's latest git version (not currently used) are:
+Current download instructions for Juce's latest git version are:
+mkdir ~/juce-git.20160409
+cd ~/juce-git.20160409
 git clone --depth 1 git://github.com/julianstorer/JUCE.git
-mv JUCE juce-git.20150629
-ln -s juce-git.20150629 juce
-cd juce/extras/Introjucer/Builds/Linux
-make # builds Introjucer
-mkdir ~/libJuce
-build/IntroJucer
-File -> "New Project"
-Click "Static Library"
-Project Name: libjuce
-("Create")
-"Ok" (to use current juce directory as modules directory)
-uncheck "Include BinaryData.h in the AppConfig.h file"
-Clicked on "Linux Makefile->Debug" just to make sure it looked sane.
-File->Save
-cd ~/libjuce/Builds/LinuxMakefile
-# this builds the Debug version.  For release, perhaps try "make CONFIG=Release"
-make
-# output is in ~/libjuce/Builds/LinuxMakefile/build/libjuce.a
+cd ~
+ln -s juce-git.20160409/JUCE juce
 
 Juce needs (at least) these Debian packages:
-g++             # g++
-libasound2-dev  # alsa/asoundlib.h
-libgl1-mesa-dev # libGL.so
-libxcursor-dev  # Xcursor.h
-libxinerama-dev # Xinerama.h
-libxrandr-dev   # Xrandr.h
-mesa-common-dev # GL/gl.h
+g++                  # g++
+libasound2-dev       # alsa/asoundlib.h
+libgl1-mesa-dev      # libGL.so
+libxcursor-dev       # Xcursor.h
+libxinerama-dev      # Xinerama.h
+libxrandr-dev        # Xrandr.h
+mesa-common-dev      # GL/gl.h
+libcurl4-openssl-dev # curl/curl.h # maybe could use nss-dev or gnutls-dev
 
 -------------------------------------------------------------------------------
 JUCE GOTCHAS:
@@ -124,8 +95,9 @@ JUCE GOTCHAS:
 USING ARCTIC FROM CONSOLE:
 
 gnome-terminal has funky color handling and the background shows up as dark
-    gray instead of black.  The linux console has a dark background, but the
-    flashing is messed up.  Only workaround so far is to use konsole or xterm.
+    gray instead of black.  Also, flashing is disabled.  The linux console has
+    a dark background, but the flashing is messed up.  Only workaround so far
+    is to use konsole or xterm.
 
 -------------------------------------------------------------------------------
 
