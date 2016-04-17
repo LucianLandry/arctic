@@ -49,7 +49,7 @@ public:
 //                       PRIVATE FUNCTIONS AND METHODS:
 //--------------------------------------------------------------------------
 
-static inline bool HistoryWindowHit(const Board &board, cell_t from, cell_t to)
+static inline bool historyWindowHit(const Board &board, cell_t from, cell_t to)
 {
     return
         abs(gVars.hist[board.Turn()] [from] [to] - board.Ply()) < gVars.hiswin;
@@ -59,14 +59,14 @@ static inline bool HistoryWindowHit(const Board &board, cell_t from, cell_t to)
 static inline bool isPreferredMoveFast(MoveT move, const Board &board)
 {
     return !board.PieceAt(move.dst).IsEmpty() || move.chk != FLAG ||
-        HistoryWindowHit(board, move.src, move.dst);
+        historyWindowHit(board, move.src, move.dst);
 }
 
 static inline bool isPreferredMove(MoveT move, const Board &board)
 {
     return (move.src != move.dst && !board.PieceAt(move.dst).IsEmpty()) ||
         move.chk != FLAG || move.promote != PieceType::Empty ||
-        HistoryWindowHit(board, move.src, move.dst);
+        historyWindowHit(board, move.src, move.dst);
 }
 
 static thread_local FreeMoves gFreeMoves;
@@ -103,7 +103,8 @@ MoveList::MoveList() : moves(*allocMoves())
 MoveList::~MoveList()
 {
     // Recycle our 'moves' vectors for later use, to prevent excess allocations.
-    if (!gFreeMoves.exiting)
+    // We limit the pool size to prevent possible cross-thread memory leaks.
+    if (!gFreeMoves.exiting && gFreeMoves.freeMoves.size() <= 100)
         gFreeMoves.freeMoves.push_back(&moves);
     else
         delete &moves;
