@@ -22,6 +22,7 @@
 #include "Board.h"
 #include "Eval.h"
 #include "MoveList.h"
+#include "pv.h"
 #include "ref.h"
 #include "saveGame.h"
 

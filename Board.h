@@ -25,7 +25,6 @@
 #include "move.h"
 #include "Piece.h"
 #include "Position.h"
-#include "pv.h"
 #include "ref.h"
 
 // This MUST be a power of 2 (to make our hashing work), and MUST be at least
