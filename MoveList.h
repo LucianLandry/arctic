@@ -94,6 +94,10 @@ protected:
     // We could use a separate vector for preferred moves, but I'm not sure how
     //  that would be a win.
     std::vector<MoveT> &moves;
+
+private:
+    // helper function for UseAsFirstMove().
+    void useAsFirstMove(MoveT move);
 };
 
 inline bool MoveList::IsPreferredMove(int idx)
@@ -109,6 +113,12 @@ inline int MoveList::NumMoves()
 inline MoveT MoveList::Moves(int idx)
 {
     return moves[idx];
+}
+
+inline void MoveList::UseAsFirstMove(MoveT move)
+{
+    if (move != MoveNone)
+        useAsFirstMove(move);
 }
 
 inline void MoveList::DeleteAllMoves()

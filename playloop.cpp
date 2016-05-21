@@ -29,11 +29,12 @@
 
 static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
 {
-    union {
-        CompStatsT stats;
-        PvRspArgsT pvArgs;
-        MoveT move;
-    } rspBuf;
+    // For this to work, 'stats', 'pvArgs', and 'move' must be trivially
+    //  copyable.
+    alignas(sizeof(void *)) char rspBuf[MAX3(sizeof(CompStatsT), sizeof(PvRspArgsT), sizeof(MoveT))];
+    CompStatsT *stats = (CompStatsT *)rspBuf;
+    PvRspArgsT *pvArgs = (PvRspArgsT *)rspBuf;
+    MoveT *move = (MoveT *)rspBuf;
 
     int turn;
     Board *board = &game->savedBoard; // shorthand.
@@ -48,10 +49,10 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
     switch(rsp)
     {
     case eRspStats:
-        gUI->notifyComputerStats(game, &rspBuf.stats);
+        gUI->notifyComputerStats(game, stats);
         break;
     case eRspPv:
-        gUI->notifyPV(game, &rspBuf.pvArgs);
+        gUI->notifyPV(game, pvArgs);
         break;
     case eRspDraw:
         if (!game->control[board->Turn()])
@@ -64,9 +65,9 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
 
         // Only claimed draws, not automatic draws, should go through
         // this path.
-        if (rspBuf.move != MoveNone && gUI->shouldCommitMoves())
+        if (*move != MoveNone && gUI->shouldCommitMoves())
         {
-            GameMoveCommit(game, &rspBuf.move, th, 1);
+            GameMoveCommit(game, move, th, 1);
         }
 
         ClocksStop(game);
@@ -75,11 +76,11 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
 
         if (board->IsDrawFiftyMove())
         {
-            gUI->notifyDraw("fifty-move rule", &rspBuf.move);
+            gUI->notifyDraw("fifty-move rule", move);
         }
         else if (board->IsDrawThreefoldRepetition())
         {
-            gUI->notifyDraw("threefold repetition", &rspBuf.move);
+            gUI->notifyDraw("threefold repetition", move);
         }
         else
         {
@@ -95,10 +96,10 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
             break;
         }
 
-        gUI->notifyMove(rspBuf.move);
+        gUI->notifyMove(*move);
         if (gUI->shouldCommitMoves())
         {
-            GameMoveCommit(game, &rspBuf.move, th, 0);
+            GameMoveCommit(game, move, th, 0);
         }
         LogFlush();
         break;

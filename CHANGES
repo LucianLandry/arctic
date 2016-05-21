@@ -31,7 +31,10 @@ More search time if first move's eval goes down.  Finish the level. ... at
      least try to find a move that doesn't go down.  Especially if first move
      evals to -checkmate.
 
-Version 11:
+Version 1.2:
+Refactored Pv into its own (3) classes.
+
+Version 1.1:
 Build improvements: use Git for version control, cmake for building
 Bugfix: uiXboard: handle 0 increment and 0 moves per timecontrol properly
 Bugfix: uiUci: fix 'searchMoves' parameter handling (untested)
@@ -56,7 +59,7 @@ Bugfix: we were jumping between 2 mating positions (because nothing better was
         in the transposition table) until the opponent could draw.
 Refactored Eval(uations) into their own class, and made PV contain a true eval.
 
-Version 10:
+Version 1.0:
 Implemented depth-1 futility pruning.
 Fix capture-king bug (enpassant codepath could reset dc to FLAG)
 Made pawn moves symmetrical (prefer kingside capture).
@@ -91,8 +94,7 @@ Compute optimization: brmove(), minimax(), addmove(), attacked(), hashlock ->
 	aSpinlockT, logging disabled by default, use global stats (~9.4%)
 Implement UCI interface.
 
-
-Version 9:
+Version 0.9:
 alpha-search -> alpha-beta search (oops)
 hashing: -- Use highbound/lowbound instead of eval+alpha.
 	 -- Always update entire entry (could change out from under us due to
@@ -119,8 +121,7 @@ Fix capture-king bug (en-passant capture: was not accounting for double-
 	discovered check)
 Bugfix: several "< 63" off-by-one errors in init.c (history table, zobrist)
 
-
-Version 8:
+Version 0.8:
 Rudimentary Makefile support.
 Implement asciiToNative() and friends.
 Implement edit-position functionality.
@@ -141,8 +142,7 @@ Separate UI thread (so I can move now/quit immediately etc)
 Implemented move-now functionality.
 Chess UI interface (xboard).
 
-
-Version 7:
+Version 0.7:
 Implement autopass.
 optimization via gprof (->CHECK(), TOLOWER(), optimize kingmove(),
 	addmove() split up)
@@ -166,8 +166,7 @@ Fixed probable bug on playermove promote (indexing into wrong move).
 Fix castling bug (newcbyte() before coord update in makemove())
 Detect draw due to threefold repetition.
 
-
-Version 6:
+Version 0.6:
 Port to linux (get conio running, 40-chr screen to 80-chr, fix warnings
 	(char -> uint8), etc)
 Tons of general cleanup -- reformatting, style, documentation,
@@ -184,6 +183,5 @@ Try pawn e2e4 moves before e2e3 moves.
 Try king moves last instead of first.
 hiswin went to short, so it will not rollover.
 
-
-Version 5:
+Version 0.5:
 Last version recovered from DOS environment.

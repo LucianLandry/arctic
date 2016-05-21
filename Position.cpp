@@ -369,9 +369,7 @@ void Position::Sanitize()
 void Position::Log(LogLevelT level) const
 {
     if (level > LogLevel())
-    {
         return; // no-op
-    }
 
     LogPrint(level, "{(Position %p) coords: ", this);
 

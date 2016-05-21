@@ -58,12 +58,8 @@ struct /* alignas(uint32) makes things slower */ MoveT
     }
     inline bool operator!=(const MoveT &other) const
     {
-        return
-            *reinterpret_cast<const uint32 *>(this) !=
-            *reinterpret_cast<const uint32 *>(&other);
+        return !(*this == other);
     }
-    // Empirically, overloading operator= similarly to "force" integer compares
-    //  does not appear to work well at all.
 };
 
 static_assert(sizeof(uint32) == sizeof(MoveT),
@@ -92,13 +88,13 @@ typedef enum {
 } MoveNotationT;
 
 typedef enum {
-    csOO,     // Use (PGN) "O-O" and "O-O-O" (even for nCAN).  This is our
+    csOO,     // Use (PGN) "O-O" and "O-O-O" (even for mnCAN).  This is our
               //  preferred internal string representation.
     csFIDE,   // Like above, but use zeros ("0-0") instead of letter Os.
               //  Currently unneeded, but trivial to implement.
     csKxR,    // Use King-captures-rook notation (used by UCI for chess960)
     csK2      // Use King-moves-2-spaces notation (falls back to csOO when this
-              //  is impossible)
+              //  is impossible, ie some variants)
 } MoveCastleStyleT;
 
 // Obviously the code implements a limited range of move styles.  It can be
@@ -117,11 +113,19 @@ void MoveStyleSet(MoveStyleT *style,
                   MoveCastleStyleT castleStyle,
                   bool showCheck);
 
+// 'result' should be at least MOVE_STRING_MAX chars long.
 char *MoveToString(char *result,
                    MoveT move,
                    const MoveStyleT *style,
                    // Used for disambiguation and legality checks, when !NULL.
                    const Board *board);
+
+// Writes out a sequence of moves using style 'moveStyle'.
+// Returns the number of moves successfully converted.
+int MovesToString(char *dstStr, int dstLen,
+                  const MoveT *moves, int numMoves,
+                  const MoveStyleT &moveStyle,
+                  const Board &board);
 
 static inline bool MoveIsCastle(MoveT move)
 {

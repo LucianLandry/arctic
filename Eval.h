@@ -86,8 +86,9 @@ public:
     // This is sort of the opposite of 'DecayTo()'.
     inline Eval &RipenFrom(int threshold);
     
-    // Writes to and returns 'result', which is assumed to be at least
-    //  kMaxEvalStringLen chars long.
+    // Writes to and returns 'result', which is suitable for logging, and
+    //  which is assumed to be at least kMaxEvalStringLen chars long.
+    // FIXME: most other classes use Log(); we should get our story straight.
     char *ToLogString(char *result) const;
 private:
     int lowBound;

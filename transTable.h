@@ -20,10 +20,6 @@
 #include "aTypes.h"
 #include "Eval.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // Pass this to TransTable(Lazy)Init() to let it pick a semi-sensible default.
 #define TRANSTABLE_DEFAULT_SIZE (-1)
 
@@ -63,9 +59,5 @@ bool TransTableHit(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
 
 void TransTableConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
                                  int searchDepth, uint16 basePly);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // TRANSTABLE_H

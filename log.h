@@ -24,10 +24,6 @@
 class Position;
 class Board;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef enum {
     eLogEmerg,
     eLogNormal,
@@ -83,8 +79,4 @@ static inline LogLevelT LogLevel(void)
     return gLogLevel;
 }
     
-#ifdef __cplusplus
-}
-#endif
-
 #endif // LOG_H

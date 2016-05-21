@@ -30,7 +30,7 @@
 #include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
-#include "pv.h"
+#include "Pv.h"
 #include "saveGame.h"
 #include "transTable.h"
 #include "ui.h"
@@ -173,12 +173,12 @@ static void UINotifyPV(GameT *game, PvRspArgsT *pvArgs)
     char mySanString[79 - 18];
     char evalString[20];
     int len;
-    PvT *pv = &pvArgs->pv; // shorthand.
+    const DisplayPv &pv = pvArgs->pv; // shorthand.
     MoveStyleT pvStyle = {mnSAN, csOO, true};
 
     // Get a suitable string of moves to print.
-    if (PvBuildMoveString(pv, mySanString, sizeof(mySanString), &pvStyle,
-                          game->savedBoard) < 1)
+    if (pv.BuildMoveString(mySanString, sizeof(mySanString), pvStyle,
+                           game->savedBoard) < 1)
     {
         return;
     }
@@ -190,11 +190,11 @@ static void UINotifyPV(GameT *game, PvRspArgsT *pvArgs)
     textcolor(SYSTEMCOL);
     cprintf("%s", spaces);
 
-    if (pv->eval.DetectedWinOrLoss())
+    if (pv.Eval().DetectedWinOrLoss())
     {
-        int movesUntilMate = pv->eval.MovesToWinOrLoss();
+        int movesUntilMate = pv.Eval().MovesToWinOrLoss();
         len = snprintf(evalString, sizeof(evalString), "%smate",
-                       pv->eval.DetectedLoss() ? "-" : "");
+                       pv.Eval().DetectedLoss() ? "-" : "");
         if (movesUntilMate > 0)
         {
             snprintf(&evalString[len], sizeof(evalString) - len, "%d",
@@ -204,13 +204,13 @@ static void UINotifyPV(GameT *game, PvRspArgsT *pvArgs)
     else
     {
         snprintf(evalString, sizeof(evalString), "%+.2f",
-                 ((double) pv->eval.LowBound()) / Eval::Pawn);
+                 ((double) pv.Eval().LowBound()) / Eval::Pawn);
     }
 
     // print the new pv.
     gotoxy(1, 25);
     cprintf("pv: d%d %s %s.",
-            pv->level, evalString, mySanString);
+            pv.Level(), evalString, mySanString);
 }
 
 #define CURSOR_NOBLINK 0

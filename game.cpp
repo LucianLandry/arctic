@@ -18,7 +18,7 @@
 
 #include "clockUtil.h"
 #include "game.h"
-#include "gDynamic.h" // gPvDecrement()
+#include "gDynamic.h"
 #include "log.h"
 #include "MoveList.h"
 #include "switcher.h"
@@ -132,7 +132,7 @@ void GameMoveMake(GameT *game, MoveT *move)
         SaveGameMoveCommit(&game->sgame, move, myClock->Time());
         
         // switched sides to another player.
-        gPvDecrement(move);
+        gVars.pv.Decrement(*move);
     }
     board->ConsistencyCheck("GameMoveMake");
 }
@@ -221,7 +221,7 @@ void GameNewEx(GameT *game, ThinkContextT *th, Board *board, int resetClocks,
         TransTableReset();
         gHistInit();
     }
-    gPvInit();
+    gVars.pv.Clear();
     GameMoveCommit(game, NULL, th, 0);
 }
 
@@ -243,7 +243,7 @@ int GameGotoPly(GameT *game, int ply, ThinkContextT *th)
     }
 
     ThinkerCmdBail(th);
-    gPvFastForward(plyDiff);
+    gVars.pv.FastForward(plyDiff);
 
     // We could TransTableReset()/gHistInit() here, but if the user tracks
     // back and forth through the history, we might not diverge that much.

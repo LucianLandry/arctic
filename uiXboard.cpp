@@ -657,19 +657,19 @@ static void xboardNotifyCheckmated(int turn)
 static void xboardNotifyPV(GameT *game, PvRspArgsT *pvArgs)
 {
     char mySanString[65];
-    PvT *pv = &pvArgs->pv; // shorthand
+    const DisplayPv &pv = pvArgs->pv; // shorthand
     Board &board = game->savedBoard; // shorthand
     MoveStyleT pvStyle = {mnSAN, csOO, true};
 
     if (!gXboardState.post ||
-        PvBuildMoveString(pv, mySanString, sizeof(mySanString), &pvStyle,
-                          board) < 1)
+        pv.BuildMoveString(mySanString, sizeof(mySanString), pvStyle,
+                           board) < 1)
     {
         return;
     }
 
     printf("%d %d %u %d %s.\n",
-           pv->level, pv->eval.LowBound(),
+           pv.Level(), pv.Eval().LowBound(),
            // (Convert bigtime to centiseconds)
            uint32(game->clocks[board.Turn()]->TimeTaken() / 10000),
            pvArgs->stats.nodes, mySanString);

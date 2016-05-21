@@ -153,7 +153,7 @@ void MoveList::SortByCapWorth(const Board &board)
 }
 
 // In current profiles, this needs to be fast, so the code is pointerrific.
-void MoveList::UseAsFirstMove(MoveT firstMove)
+void MoveList::useAsFirstMove(MoveT firstMove)
 {
     MoveT *foundMove = SearchSrcDstPromote(firstMove);
 
@@ -316,7 +316,7 @@ void MoveList::Log(LogLevelT level)
     if (level > LogLevel())
 	return; // no-op.
 
-    LogPrint(level, "{mvlist NumMoves %d insrt %d ",
+    LogPrint(level, "{(mvlist) NumMoves %d insrt %d ",
              // Log the private member variables.
 	     NumMoves(), insrt);
 

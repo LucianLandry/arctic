@@ -931,13 +931,12 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
     char evalString[20];
     char statsString[80];
     bool bDisplayPv = true;
-    PvT *pv = &pvArgs->pv; // shorthand
+    const DisplayPv &pv = pvArgs->pv; // shorthand
     bool chopFirst = false;
     int moveCount;
 
     // Save away a next move to ponder on, if possible.
-    gUciState.result.ponderMove =
-        pv->moves[0] != MoveNone ? pv->moves[1] : MoveNone;
+    gUciState.result.ponderMove = pv.Moves(1);
 
     if (gUciState.bPonder)
     {
@@ -946,7 +945,7 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
         // (If the UI is mean and tries to make us ponder on the first move,
         // this just means we will never display the PV since ponderMove ==
         // MoveNone)
-        if (memcmp(&pv->moves[0], &gUciState.ponderMove, sizeof(MoveT)))
+        if (pv.Moves(0) != gUciState.ponderMove)
         {
             bDisplayPv = false;
         }
@@ -958,8 +957,8 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
         chopFirst = true;
     }
 
-    moveCount = PvBuildMoveString(pv, lanString, sizeof(lanString), &gMoveStyleUCI,
-                                  game->savedBoard);
+    moveCount = pv.BuildMoveString(lanString, sizeof(lanString), gMoveStyleUCI,
+                                   game->savedBoard);
     if (chopFirst && chopFirstMove(lanString))
     {
         moveCount--;
@@ -969,21 +968,21 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
         bDisplayPv = false;
     }
 
-    if (pv->eval.DetectedWinOrLoss())
+    if (pv.Eval().DetectedWinOrLoss())
     {
-        int movesToMate = pv->eval.MovesToWinOrLoss();
+        int movesToMate = pv.Eval().MovesToWinOrLoss();
         snprintf(evalString, sizeof(evalString), "mate %d",
-                 pv->eval.DetectedLoss() ? -movesToMate : movesToMate);
+                 pv.Eval().DetectedLoss() ? -movesToMate : movesToMate);
 
     }
     else
     {
-        snprintf(evalString, sizeof(evalString), "cp %d", pv->eval.LowBound());
+        snprintf(evalString, sizeof(evalString), "cp %d", pv.Eval().LowBound());
     }
 
     // Sending a fairly basic string here.
     printf("info depth %d score %s %s%s%s\n",
-           pv->level + 1, evalString,
+           pv.Level() + 1, evalString,
            buildStatsString(statsString, game, &pvArgs->stats),
            bDisplayPv ? " pv " : "", bDisplayPv ? lanString : "");
 }

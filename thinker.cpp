@@ -66,16 +66,13 @@ typedef struct {
 
 static SearcherGroupT gSG;
 
-// Initialize a given SearchArgsT.
-void SearchArgsInit(SearchArgsT *sa)
+SearchArgsT::SearchArgsT() :
+    alpha(Eval::Loss),
+    beta(Eval::Win),
+    move(MoveNone),
+    pv(0),
+    eval(Eval::Loss, Eval::Win)
 {
-    // sa->localBoard inits itself.
-    sa->alpha = Eval::Loss;
-    sa->beta = Eval::Win;
-    // mvlist has its own constructor.
-    sa->move = MoveNone;
-    PvInit(&sa->pv);
-    sa->eval.Set(Eval::Loss, Eval::Win);
 }
 
 // Initialize a given ThinkContextT.
@@ -92,7 +89,7 @@ void ThinkerInit(ThinkContextT *th)
     th->isThinking = false;
     th->isPondering = false;
     th->isSearching = false;
-    SearchArgsInit(&th->searchArgs);
+    // searchArgs initializes itself.
     th->maxDepth = 0;
     th->depth = 0;
 }
@@ -362,11 +359,9 @@ void ThinkerRspNotifyStats(ThinkContextT *th, CompStatsT *stats)
 void ThinkerRspNotifyPv(ThinkContextT *th, PvRspArgsT *pvArgs)
 {
     compSendRsp(th, eRspPv, pvArgs,
-                sizeof(PvRspArgsT) -
-                // Only bother sending the number of valid moves.
-                sizeof(MoveT) *
-                ((pvArgs->pv.depth + 1)
-                 - MAX_PV_DEPTH));
+                // We (lazily) copy the full struct.  We could have dug into
+                //  the pv and only sent the number of valid moves.
+                sizeof(PvRspArgsT));
 }
 
 
@@ -483,12 +478,11 @@ static int searcherWaitOne(void)
     return -1;
 }
 
-Eval ThinkerSearchersWaitOne(MoveT *move, PvT *pv)
+Eval ThinkerSearchersWaitOne(MoveT *move, SearchPv *pv)
 {
     SearchArgsT *sa = &gSG.th[searcherWaitOne()].searchArgs;
     *move = sa->move;
-    memcpy(pv, &sa->pv,
-           sizeof(PvT) + (sizeof(MoveT) * (sa->pv.depth + 1 - MAX_PV_DEPTH)));
+    *pv = sa->pv;
     return sa->eval;
 }
 

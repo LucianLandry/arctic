@@ -256,12 +256,6 @@ size_t TransTableNumEntries(void)
     return gHash.numEntries;
 }
 
-// Return the current size of the transposition table.
-size_t TransTableSize(void)
-{
-    return gHash.size;
-}
-
 #define QUIESCING (searchDepth < 0)
 
 static inline bool entryMatches(HashPositionT *hp, uint64 zobrist,
@@ -332,7 +326,7 @@ bool TransTableHit(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
 
 #ifdef ENABLE_DEBUG_LOGGING
     char tmpStr[MOVE_STRING_MAX];
-    char peStr[POSITIONEVAL_STRING_MAX];
+    char peStr[kMaxEvalStringLen];
 #endif
 
     lock = &gHash.locks[entry & (NUM_HASH_LOCKS - 1)];
@@ -362,12 +356,17 @@ bool TransTableHit(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
     SpinlockUnlock(lock);
     LOG_DEBUG("hashHit alhbdmz: %d %s %d %d %s 0x%" PRIx64 "\n",
               alpha,
-              PositionEvalToLogString(peStr, hashEval),
+              hashEval->ToLogString(peStr),
               beta, hashDepth,
               MoveToString(tmpStr, *hashMove, &gMoveStyleTT, NULL),
               zobrist);
 
     return true;
+}
+
+size_t TransTableSize(void)
+{
+    return gHash.size;
 }
 
 void TransTablePrefetch(uint64 zobrist)
@@ -389,11 +388,14 @@ bool TransTableQuickHitTest(uint64 zobrist)
 void TransTableConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
                                  int searchDepth, uint16 basePly)
 {
+    if (!TransTableSize())
+        return;
+    
     size_t entry = calcEntry(zobrist);
     HashPositionT *vHp = &gHash.hash[entry];
 #ifdef ENABLE_DEBUG_LOGGING
     char tmpStr[MOVE_STRING_MAX];
-    char peStr[POSITIONEVAL_STRING_MAX];
+    char peStr[kMaxEvalStringLen];
 #endif
 
     // Do we want to update the table?
@@ -435,7 +437,7 @@ void TransTableConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
         SpinlockUnlock(lock);
 
         LOG_DEBUG("hashupdate lhdpmz: %s %d %d %s 0x%" PRIx64 "\n",
-                  PositionEvalToLogString(peStr, &eval),
+                  eval.ToLogString(peStr),
                   searchDepth, basePly,
                   MoveToString(tmpStr, move, &gMoveStyleTT, NULL),
                   zobrist);

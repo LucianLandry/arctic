@@ -22,11 +22,13 @@
 #include "Board.h"
 #include "Eval.h"
 #include "MoveList.h"
-#include "pv.h"
+#include "Pv.h"
 #include "ref.h"
 #include "saveGame.h"
 
-typedef struct {
+struct SearchArgsT {
+    SearchArgsT(); // default constructor.
+    
     // passed-in args.
     Board localBoard;   // (eCmdThink, eCmdPonder, eCmdSearch)
     int alpha;          // (eCmdSearch)
@@ -37,9 +39,9 @@ typedef struct {
     MoveT move;         // (eCmdSearch)
 
     // passed-out args.
-    PvT pv;             // (eCmdSearch ... not used for eRspPv)
+    SearchPv pv;        // (eCmdSearch ... not used for eRspPv)
     Eval eval;          // (eCmdSearch)
-} SearchArgsT;
+};
 
 typedef struct {
     // The masterSock sends commands and receives responses.
@@ -74,10 +76,11 @@ typedef enum {
     eRspSearchDone
 } eThinkMsgT;
 
-typedef struct {
+struct PvRspArgsT
+{
     CompStatsT stats;
-    PvT pv;
-} PvRspArgsT;
+    DisplayPv pv;
+};
 
 void ThinkerInit(ThinkContextT *th);
 eThinkMsgT ThinkerRecvRsp(ThinkContextT *th, void *buffer, int bufLen);
@@ -96,19 +99,19 @@ static inline bool ThinkerCompNeedsToMove(ThinkContextT *th)
 {
     return th->moveNow;
 }
-static inline int ThinkerCompIsThinking(ThinkContextT *th)
+static inline bool ThinkerCompIsThinking(ThinkContextT *th)
 {
     return th->isThinking;
 }
-static inline int ThinkerCompIsPondering(ThinkContextT *th)
+static inline bool ThinkerCompIsPondering(ThinkContextT *th)
 {
     return th->isPondering;
 }
-static inline int ThinkerCompIsSearching(ThinkContextT *th)
+static inline bool ThinkerCompIsSearching(ThinkContextT *th)
 {
     return th->isSearching;
 }
-static inline int ThinkerCompIsBusy(ThinkContextT *th)
+static inline bool ThinkerCompIsBusy(ThinkContextT *th)
 {
     return
         ThinkerCompIsSearching(th) ||
@@ -126,7 +129,7 @@ eThinkMsgT ThinkerCompWaitSearch(ThinkContextT *th);
 
 // Operations on slave threads.
 int ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT move);
-Eval ThinkerSearchersWaitOne(MoveT *move, PvT *pv);
+Eval ThinkerSearchersWaitOne(MoveT *move, SearchPv *pv);
 void ThinkerSearchersBail(void);
 
 void ThinkerSearchersMoveMake(MoveT move);

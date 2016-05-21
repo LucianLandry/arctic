@@ -14,11 +14,13 @@
 //
 //--------------------------------------------------------------------------
 
+#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "Board.h"
+#include "gDynamic.h"
 #include "move.h"
 #include "MoveList.h"
 #include "uiUtil.h"
@@ -60,25 +62,45 @@ static bool moveIsSane(MoveT move)
 // Safely print a move that seems to make no sense.
 static char *moveToStringInsane(char *result, MoveT move)
 {
-    sprintf(result, "(INS! %x.%x.%x.%x)",
-            move.src, move.dst, int(move.promote), move.chk);
+    if (move == MoveNone)
+    {
+        sprintf(result, "(none)");
+    }
+    else
+    {
+        sprintf(result, "(INS! %x.%x.%x.%x)",
+                move.src, move.dst, int(move.promote), move.chk);
+    }
     return result;
 }
 
 static char *moveToStringMnDebug(char *result, MoveT move)
 {
-    sprintf(result, "%c%c%c%c.%d.%c%c",
+    char promoString[2] =
+        {(move.promote != PieceType::Empty ?
+          nativeToAscii(Piece(1, move.promote)) :
+          '\0'), '\0'};
+    char chkString[3] = {0};
+
+    if (move.chk == DOUBLE_CHECK)
+    {
+        chkString[0] = 'D';
+    }
+    else if (move.chk != FLAG)
+    {
+        chkString[0] = AsciiFile(move.chk);
+        chkString[0] = AsciiRank(move.chk);
+    }
+    // (We just keep chkString blank when move.chk == FLAG, since that is
+    //  the default.)
+    
+    sprintf(result, "%c%c%c%c.%s.%s",
             AsciiFile(move.src),
             AsciiRank(move.src),
             AsciiFile(move.dst),
             AsciiRank(move.dst),
-            int(move.promote),
-            (move.chk == FLAG ? 'F' :
-             move.chk == DOUBLE_CHECK ? 'D' :
-             AsciiFile(move.chk)),
-            (move.chk == FLAG ? 'F' :
-             move.chk == DOUBLE_CHECK ? 'D' :
-             AsciiRank(move.chk)));
+            promoString,
+            chkString);
     return result;
 }
 
@@ -323,6 +345,68 @@ char *MoveToString(char *result,
     }
 
     return result;
+}
+
+// Writes out a sequence of moves using style 'moveStyle'.
+// Returns the number of moves successfully converted.
+int MovesToString(char *dstStr, int dstStrSize,
+                  const MoveT *moves, int numMoves,
+                  const MoveStyleT &moveStyle,
+                  const Board &board)
+{
+    char sanStr[MOVE_STRING_MAX];
+    Board tmpBoard(board);
+    int movesWritten = 0;
+
+    if (dstStr == nullptr || dstStrSize <= 0)
+        return 0;
+
+    dstStr[0] = '\0';
+    int dstStrLen = 0;
+    
+    for (int i = 0; i < numMoves; i++)
+    {
+        MoveToString(sanStr, moves[i], &moveStyle, &tmpBoard);
+        if (sanStr[0])
+        {
+            // Move was legal, advance to next move so we can check it.
+            tmpBoard.MakeMove(moves[i]);
+        }
+        else
+        {
+            MoveStyleT badMoveStyle = {mnDebug, csOO, false};
+            char tmpStr[MOVE_STRING_MAX];
+
+            // Illegal move found, probably a zobrist collision.  This can
+            //  happen, but not very often.
+            LogPrint(eLogNormal, "%s: game %d: illegal move %s "
+                     "baseply %d depth %d numMoves %d (probably zobrist "
+                     "collision), ignoring\n",
+                     __func__, gVars.gameCount,
+                     MoveToString(tmpStr, moves[i], &badMoveStyle, nullptr),
+                     board.Ply(), i, numMoves);
+            break;
+        }
+
+        if (dstStrLen + strlen(sanStr) +
+            (i == 0 ? 0 : 1) // account for leading space before move
+            >= dstStrSize)
+        {
+            // Not enough space in the result to write the next move.
+            break;
+        }
+        
+        // Build up the result string.
+        dstStrLen += sprintf(&dstStr[dstStrLen], "%s%s",
+                             // Do not use leading space before first move.
+                             i == 0 ? "" : " ",
+                             sanStr);
+        
+        assert(dstStrLen < (int) dstStrSize);
+        movesWritten++;
+    }
+
+    return movesWritten;
 }
 
 // Syntactic sugar.
