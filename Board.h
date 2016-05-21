@@ -270,12 +270,4 @@ inline int Board::RepeatPly() const
     return repeatPly;
 }
 
-#if 0 // bldbg: out, until I figure out where I want these to go.
-
-// This does a full positions check instead of just a zobrist check, so it is
-// slightly slower.
-bool BoardPositionsSame(BoardT *b1, BoardT *b2);
-
-#endif // 0
-
 #endif // BOARD_H

@@ -129,12 +129,6 @@ static void notifyNewPv(const SearchPv &goodPv, Eval eval)
 
     // Update the tracked principal variation.
     gVars.pv.Update(pvArgs.pv);
-
-#if 1 // bldbg
-    LOG_NORMAL("%s: hint pv now: ", __func__);
-    gVars.pv.Log(eLogNormal);
-    LOG_NORMAL("\n");
-#endif
 }
 
 static Eval tryMove(Board *board, MoveT move,
@@ -513,15 +507,6 @@ static Eval minimax(Board *board, int alpha, int beta,
     {
         // This doesn't work well, perhaps poor interaction w/history table:
         // mvlist->SortByCapWorth(board);
-#if 1 // bldbg
-        if (th->depth == 0)
-        {
-            char tmpStr[MOVE_STRING_MAX];
-            const MoveStyleT style = {mnDebug, csOO, false};
-            LOG_NORMAL("%s: use as first move: %s\n", __func__,
-                       MoveToString(tmpStr, gVars.pv.Hint(0), &style, nullptr));
-        }
-#endif
         
         // Try the principal variation move (if applicable) first.
         mvlist.UseAsFirstMove(gVars.pv.Hint(th->depth));
@@ -798,7 +783,7 @@ static void computermove(ThinkContextT *th, bool bPonder)
     // Clear stats.
     memset(&gStats, 0, sizeof(gStats));
 
-    // If we can claim a draw, do so w/out thinking.
+    // If we can claim a draw without moving, do so w/out thinking.
     if (canClaimDraw(board))
     {
         ThinkerRspDraw(th, move);
@@ -811,24 +796,23 @@ static void computermove(ThinkContextT *th, bool bPonder)
     }
 
     board->GenerateLegalMoves(mvlist, false);
-    
-    if (!bPonder &&
 
-        // only one move to make -- do not think about it.
-        (mvlist.NumMoves() == 1 ||
+    // Use the principal variation move (if it exists) if we run out of
+    // time before we figure out a move to recommend.
+    mvlist.UseAsFirstMove(gVars.pv.Hint(0));
+
+    // Use this move if we cannot (or choose not to) come up with a better one.
+    move = mvlist.Moves(0);
+    
+    if (bPonder ||
+
+        // do not think, if we only have one move to make.
+        (mvlist.NumMoves() != 1 &&
 
          // Special case optimization (normal game, 1st move).
          // The move is not worth thinking about any further.
-         board->IsNormalStartingPosition()))
+         !board->IsNormalStartingPosition()))
     {
-        move = mvlist.Moves(0); // struct assign
-    }
-    else
-    {
-        // Use the principal variation move (if it exists) if we run out of
-        // time before we figure out a move to recommend.
-        mvlist.UseAsFirstMove(gVars.pv.Hint(0));
-        
         // setup known search parameters across the slaves.
         ThinkerSearchersBoardSet(board);
 
@@ -849,6 +833,17 @@ static void computermove(ThinkContextT *th, bool bPonder)
                              // Try to find the shortest mates possible.
                              Eval::Win - (th->maxDepth + 1),
                              &pv, th, NULL);
+
+            // minimax() might find MoveNone if it has to bail before it can fully
+            //  think about the first move.
+            if (pv.Moves(0) != MoveNone)
+            {
+                move = pv.Moves(0);
+            }
+
+            if (ThinkerCompNeedsToMove(th))
+                break;
+
 #ifdef ENABLE_DEBUG_LOGGING
             {
                 char tmpStr[kMaxEvalStringLen];
@@ -859,11 +854,6 @@ static void computermove(ThinkContextT *th, bool bPonder)
             }
 #endif
             
-            if (ThinkerCompNeedsToMove(th))
-            {
-                break;
-            }
-
             gVars.pv.CompletedSearch();
 
             if (gVars.canResign && shouldResign(board, myEval, bPonder))
@@ -888,7 +878,6 @@ static void computermove(ThinkContextT *th, bool bPonder)
         }
 
         th->maxDepth = 0; // reset th->maxDepth
-        move = pv.Moves(0);
     }
 
     ThinkerRspNotifyStats(th, &gStats);
@@ -899,28 +888,15 @@ static void computermove(ThinkContextT *th, bool bPonder)
         return;
     }
 
-    // We may not actually have found any decent move (forced to move, or
-    // pondering and side to move is about to be checkmated, for instance)
-    // For the former, we cannot assume we are in a lost position.
-    // In either case, just use the first move.
-    if (move == MoveNone)
-    {
-        move = mvlist.Moves(0); // struct assign
-    }
-
     // If we can draw after this move, do so.
     board->MakeMove(move);
     bWillDraw = canClaimDraw(board);
     board->UnmakeMove();
 
     if (bWillDraw)
-    {
         ThinkerRspDraw(th, move);
-    }
     else
-    {
         ThinkerRspMove(th, move);
-    }
 }
 
 
