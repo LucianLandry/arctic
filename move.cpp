@@ -448,13 +448,13 @@ bool MoveT::IsPromote(const Board &board) const
 }
 
 // This is only a partial move creation routine as it does not fill in
-//  'move->chk', and in fact, clobbers it.
-void MoveCreateFromCastle(MoveT &move, bool castleOO, int turn)
+//  'chk', and in fact, clobbers it.
+void MoveT::CreateFromCastle(bool castleOO, int turn)
 {
-    move.src = castleOO ? turn : (1 << NUM_PLAYERS_BITS) | turn;
-    move.dst = move.src;
-    move.promote = PieceType::Empty;
-    move.chk = FLAG;
+    src = castleOO ? turn : (1 << NUM_PLAYERS_BITS) | turn;
+    dst = src;
+    promote = PieceType::Empty;
+    chk = FLAG;
 }
 
 // Attempt to take a king-moves-2 or KxR-style move and convert it
@@ -464,14 +464,14 @@ void MoveCreateFromCastle(MoveT &move, bool castleOO, int turn)
 //  king capturing its own rook one space to the right could be confused with
 //  just moving the king one space to the right.
 // Assumes we are 'unmangling' a move from the players whose turn it is.
-void MoveUnmangleCastle(MoveT &move, const Board &board)
+void MoveT::UnmangleCastle(const Board &board)
 {
     CastleStartCoordsT start; // shorthand
-    cell_t dst = move.dst, src = move.src, rookOO, rookOOO;
+    cell_t rookOO, rookOOO;
     bool isCastleOO;
     int turn = board.Turn();
 
-    if (move.IsCastle())
+    if (IsCastle())
         return; // do not unmangle if this move is already a castle request
 
     start = Variant::Current()->Castling(turn).start;
@@ -496,8 +496,8 @@ void MoveUnmangleCastle(MoveT &move, const Board &board)
             return;
 
         isCastleOO =
-            (File(rookOO) > File(rookOOO) && dst > move.src) ||
-            (File(rookOO) < File(rookOOO) && dst < move.src);
+            (File(rookOO) > File(rookOOO) && dst > src) ||
+            (File(rookOO) < File(rookOOO) && dst < src);
     }
     else
     {
@@ -507,6 +507,6 @@ void MoveUnmangleCastle(MoveT &move, const Board &board)
     if ((isCastleOO && board.CanCastleOO(turn)) ||
         (!isCastleOO && board.CanCastleOOO(turn)))
     {
-        MoveCreateFromCastle(move, isCastleOO, turn);
+        CreateFromCastle(isCastleOO, turn);
     }
 }

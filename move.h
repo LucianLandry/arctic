@@ -105,6 +105,19 @@ struct /* alignas(uint32) makes things slower */ MoveT
     inline bool IsCastleOOO() const;
     bool IsPromote(const Board &board) const;
     bool IsLegal(const Board &board) const;
+
+    // This is only a partial move creation routine as it does not fill in
+    //  'chk', and in fact, clobbers it.
+    void CreateFromCastle(bool castleOO, int turn);
+
+    // Attempt to take a king-moves-2 or KxR-style move and convert it
+    //  to the correct format.  Does nothing if the move is not actually
+    //  detected as a castle.
+    // We need a 'board' arg (or at least cbyte) because otherwise (for example)
+    //  a king capturing its own rook one space to the right could be confused
+    //  with just moving the king one space to the right.
+    // Assumes we are 'unmangling' a move from the players whose turn it is.
+    void UnmangleCastle(const Board &board);
 };
 
 static_assert(sizeof(uint32) == sizeof(MoveT),
@@ -155,18 +168,5 @@ inline bool MoveT::IsCastleOOO() const
 {
     return IsCastle() && (src >> NUM_PLAYERS_BITS) == 1;
 }
-
-// This is only a partial move creation routine as it does not fill in
-//  'move.chk', and in fact, clobbers it.
-void MoveCreateFromCastle(MoveT &move, bool castleOO, int turn);
-
-// Attempt to take a king-moves-2 or KxR-style move and convert it
-//  to the correct format.  Does nothing if the move is not actually detected
-//  as a castle.
-// We need a 'board' arg (or at least cbyte) because otherwise (for example) a
-//  king capturing its own rook one space to the right could be confused with
-//  just moving the king one space to the right.
-// Assumes we are 'unmangling' a move from the players whose turn it is.
-void MoveUnmangleCastle(MoveT &move, const Board &board);
 
 #endif // MOVE_H

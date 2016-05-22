@@ -1209,7 +1209,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     // Suppose we have a valid move.  Can we find it in the movelist?
     myMove.src = comstr[0];
     myMove.dst = comstr[1];
-    MoveUnmangleCastle(myMove, *board);
+    myMove.UnmangleCastle(*board);
 
     /* search movelist for comstr */
     if ((foundMove = movelist.SearchSrcDst(myMove)) == NULL)
