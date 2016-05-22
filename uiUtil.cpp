@@ -408,19 +408,19 @@ bool isMove(char *inputStr, MoveT *resultMove, Board *board)
 
     if (!strcasecmp(moveStr, "O-O") || !strcasecmp(moveStr, "0-0"))
     {
-        MoveCreateFromCastle(resultMove, true, board->Turn());
+        MoveCreateFromCastle(*resultMove, true, board->Turn());
         return true;
     }
     if (!strcasecmp(moveStr, "O-O-O") || !strcasecmp(moveStr, "0-0-0"))
     {
-        MoveCreateFromCastle(resultMove, false, board->Turn());
+        MoveCreateFromCastle(*resultMove, false, board->Turn());
         return true;
     }
     else if (asciiToCoord(moveStr) != FLAG && asciiToCoord(&moveStr[2]) != FLAG)
     {
         resultMove->src = asciiToCoord(moveStr);
         resultMove->dst = asciiToCoord(&moveStr[2]);
-        MoveUnmangleCastle(resultMove, *board);
+        MoveUnmangleCastle(*resultMove, *board);
         return true;
     }
     return false;
@@ -451,7 +451,7 @@ bool isLegalMove(char *inputStr, MoveT *resultMove, Board *board)
     }
 
     // Do we need to promote?
-    if (MoveIsPromote(*resultMove, *board))
+    if (resultMove->IsPromote(*board))
     {
         chr = inputStr[4];
         if (chr != 'q' && chr != 'r' && chr != 'n' && chr != 'b')

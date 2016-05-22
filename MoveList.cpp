@@ -316,12 +316,12 @@ void MoveList::Log(LogLevelT level)
     if (level > LogLevel())
 	return; // no-op.
 
-    LogPrint(level, "{(mvlist) NumMoves %d insrt %d ",
+    LogPrint(level, "{(MoveList) NumMoves %d insrt %d ",
              // Log the private member variables.
 	     NumMoves(), insrt);
 
     for (int i = 0; i < NumMoves(); i++)
-	LogPrint(level, "%s ", MoveToString(tmpStr, moves[i], &style, NULL));
+	LogPrint(level, "%s ", moves[i].ToString(tmpStr, &style, NULL));
 
     LogPrint(level, "}\n");
 }

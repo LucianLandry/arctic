@@ -89,18 +89,31 @@ static char *moveToStringMnDebug(char *result, MoveT move)
     else if (move.chk != FLAG)
     {
         chkString[0] = AsciiFile(move.chk);
-        chkString[0] = AsciiRank(move.chk);
+        chkString[1] = AsciiRank(move.chk);
     }
     // (We just keep chkString blank when move.chk == FLAG, since that is
     //  the default.)
+
+    if (move.IsCastle() &&
+        // No real castle would fail this condition:
+        !(move.src >> (NUM_PLAYERS_BITS + 1)))
+    {
+        sprintf(result, "%s.%s.%s",
+                move.IsCastleOO() ? "O-O" : "O-O-O",
+                promoString,
+                chkString);
+    }
+    else
+    {
+        sprintf(result, "%c%c%c%c.%s.%s",
+                AsciiFile(move.src),
+                AsciiRank(move.src),
+                AsciiFile(move.dst),
+                AsciiRank(move.dst),
+                promoString,
+                chkString);
+    }
     
-    sprintf(result, "%c%c%c%c.%s.%s",
-            AsciiFile(move.src),
-            AsciiRank(move.src),
-            AsciiFile(move.dst),
-            AsciiRank(move.dst),
-            promoString,
-            chkString);
     return result;
 }
 
@@ -120,29 +133,40 @@ static int moveToStringMnCAN(char *result, MoveT move)
                    promoString);
 }
 
-static bool canUseK2Notation(CastleStartCoordsT start, cell_t dst)
+// We basically allow this conversion if we could reliably 'unmangle' the same
+//  move from a standard drag-and-drop UI.  The allowance is per-player, but we
+//  must be able to castle in both directions.
+static bool canUseK2Notation(CastleStartCoordsT start)
 {
-    cell_t rookOO, rookOOO, king;
+    // We could forbid this notation when the "rooks" were not on the same rank
+    //  as the king (diagonal castling in some variant??), or when the rooks
+    //  were on the same side of the king.
+    // But when those scenarios are unambiguous, so we currently do not.
+    // We might regret that later if it proves to be confusing or error-prone.
 
-    rookOO = start.rookOO;
-    rookOOO = start.rookOOO;
-    king = start.king;
+    cell_t
+        rookOO = start.rookOO,   // these are all shorthand.
+        rookOOO = start.rookOOO,
+        king = start.king;
 
-    if (rookOO != rookOOO &&
-        ((rookOO <= king && rookOOO <= king) ||
-         (rookOO >= king && rookOOO >= king)))
-    {
-        // Cannot use king-moves-2 notation when both rooks are different,
-        // but on the same side of the king (although this does not occur in
-        // any variations I am aware of); because the move would be ambiguous.
+    if (File(rookOO) == File(rookOOO)) // Degenerate, and ambiguous
         return false;
+
+    if (File(rookOOO) > File(rookOO))
+    {
+        // force rookOO > rookOOO (simplifies algorithm; should not affect
+        //  correctness)
+        std::swap(rookOO, rookOOO);
     }
 
-    // Can only use king-moves-2 notation if the destination is on the same
-    // rank.
     return
-        Rank(king) == Rank(dst) &&
-        abs(dst - king) == 2;
+        // Can only use king-moves-2 notation if the destination is on the same
+        // rank.
+        Rank(king) == Rank(king + 2) &&
+        Rank(king) == Rank(king - 2) &&
+        // Avoid situations where king-moves-2 could be confused with a
+        //  conflicting KxR.
+        king + 2 != rookOOO && king - 2 != rookOO;
 }
 
 // Attempt to transmute our normal castle style to a king-moves-2 style
@@ -150,18 +174,19 @@ static bool canUseK2Notation(CastleStartCoordsT start, cell_t dst)
 static bool moveMangleCsK2(MoveT &move)
 {
     CastleStartCoordsT start;
-    bool castleOO = MoveIsCastleOO(move);
-    cell_t rook, king, dst;
+    bool castleOO = move.IsCastleOO();
+    cell_t king, dst;
 
     start = Variant::Current()->Castling(moveCastleToTurn(move)).start;
-    king = start.king;
-    rook = castleOO ? start.rookOO : start.rookOOO;
-    dst = king + (rook > king ? 2 : -2);
-
-    if (!canUseK2Notation(start, dst))
-    {
+    if (!canUseK2Notation(start))
         return false;
-    }
+
+    king = start.king;
+
+    if (File(start.rookOO) > File(start.rookOOO))
+        dst = king + (castleOO ? 2 : -2);
+    else
+        dst = king + (castleOO ? -2 : 2);
 
     move.src = king;
     move.dst = dst;
@@ -173,7 +198,7 @@ static bool moveMangleCsK2(MoveT &move)
 static void moveMangleCsKxR(MoveT &move)
 {
     CastleStartCoordsT start;
-    bool castleOO = MoveIsCastleOO(move);
+    bool castleOO = move.IsCastleOO();
     cell_t king, dst;
 
     start = Variant::Current()->Castling(moveCastleToTurn(move)).start;
@@ -251,92 +276,86 @@ static int moveToStringMnSAN(char *result, MoveT move, const Board &board)
     return sanStr - result; // return number of non-NULL bytes written
 }
 
-static bool moveIsLegal(MoveT move, const Board &board)
+bool MoveT::IsLegal(const Board &board) const
 {
     MoveList moveList;
 
     board.GenerateLegalMoves(moveList, false);
-    return moveList.Search(move) != NULL;
+    return moveList.Search(*this) != nullptr;
 }
 
-char *MoveToString(char *result,
-                   MoveT move,
-                   const MoveStyleT *style,
-                   // Used for disambiguation and legality checks, when !NULL.
-                   const Board *board)
+char *MoveT::ToString(char *result,
+                      const MoveStyleT *style,
+                      // Used for disambiguation + legality checks, when !NULL.
+                      const Board *board) const
 {
     // These shorthand copies may be modified.
     MoveNotationT notation = style->notation;
     MoveCastleStyleT castleStyle = style->castleStyle;
     bool showCheck = style->showCheck;
     char *moveStr = result;
-
-    if (!moveIsSane(move))
+    
+    if (!moveIsSane(*this))
     {
         // With our hashing scheme, we may end up with moves that are not
         //  legal, but we should never end up with moves that are not sane
         //  (except possibly MoveNone).
         // We still may want to print such a move before we assert (or
         //  whatever).
-        return moveToStringInsane(result, move);
+        return moveToStringInsane(result, *this);
     }
-    if (board != NULL && !moveIsLegal(move, *board))
+    if (board != nullptr && !IsLegal(*board))
     {
         result[0] = '\0';
         return result;
     }
     if (notation == mnDebug)
     {
-        return moveToStringMnDebug(result, move);
+        return moveToStringMnDebug(result, *this);
     }
-    if (MoveIsCastle(move))
+
+    MoveT tmpMove(*this); // modifiable form of 'this'
+
+    if (IsCastle())
     {
         // Transmute the move if we need to (and can); otherwise fall back to
         //  our default.
         if (castleStyle == csKxR)
-        {
-            moveMangleCsKxR(move);
-        }
-        else if (castleStyle == csK2 && !moveMangleCsK2(move))
-        {
+            moveMangleCsKxR(tmpMove);
+        else if (castleStyle == csK2 && !moveMangleCsK2(tmpMove))
             castleStyle = csOO;
-        }
     }
-    if (MoveIsCastle(move))
+
+    if (tmpMove.IsCastle()) // (that is, a standard castle, not a mangled one)
     {
         if (castleStyle == csOO)
-        {
-            sprintf(result, MoveIsCastleOO(move) ? "O-O" : "O-O-O");
-            return result;
-        }
-        if (castleStyle == csFIDE)
-        {
-            sprintf(result, MoveIsCastleOO(move) ? "0-0" : "0-0-0");
-            return result;
-        }
+            moveStr += sprintf(moveStr, IsCastleOO() ? "O-O" : "O-O-O");
+        else if (castleStyle == csFIDE)
+            moveStr += sprintf(moveStr, IsCastleOO() ? "0-0" : "0-0-0");
     }
-    if (notation == mnSAN && board == NULL)
+    else
     {
         // Cannot use SAN with no board context.
-        notation = mnCAN;
+        if (notation == mnSAN && board == nullptr)
+            notation = mnCAN;
+
+        moveStr +=
+            notation == mnSAN ? moveToStringMnSAN(result, tmpMove, *board) :
+            // Assume mnCAN at this point.
+            moveToStringMnCAN(result, tmpMove);
     }
-
-    moveStr +=
-        notation == mnSAN ? moveToStringMnSAN(result, move, *board) :
-        // Assume mnCAN at this point.
-        moveToStringMnCAN(result, move);
-
-    if (showCheck && move.chk != FLAG)
+    
+    if (showCheck && chk != FLAG)
     {
         bool isMate = false;
 
-        if (board != NULL)
+        if (board != nullptr)
         {
             Board tmpBoard(*board);
             MoveList mvlist;
 
             // Piece in check.  Is this checkmate?
-            tmpBoard.MakeMove(move);
+            tmpBoard.MakeMove(*this);
             tmpBoard.GenerateLegalMoves(mvlist, false);
             isMate = (mvlist.NumMoves() == 0);
         }
@@ -366,7 +385,7 @@ int MovesToString(char *dstStr, int dstStrSize,
     
     for (int i = 0; i < numMoves; i++)
     {
-        MoveToString(sanStr, moves[i], &moveStyle, &tmpBoard);
+        moves[i].ToString(sanStr, &moveStyle, &tmpBoard);
         if (sanStr[0])
         {
             // Move was legal, advance to next move so we can check it.
@@ -383,7 +402,7 @@ int MovesToString(char *dstStr, int dstStrSize,
                      "baseply %d depth %d numMoves %d (probably zobrist "
                      "collision), ignoring\n",
                      __func__, gVars.gameCount,
-                     MoveToString(tmpStr, moves[i], &badMoveStyle, nullptr),
+                     moves[i].ToString(tmpStr, &badMoveStyle, nullptr),
                      board.Ply(), i, numMoves);
             break;
         }
@@ -420,22 +439,22 @@ void MoveStyleSet(MoveStyleT *style,
     style->showCheck = showCheck;
 }
 
-bool MoveIsPromote(MoveT move, const Board &board)
+bool MoveT::IsPromote(const Board &board) const
 {
     return
-        !MoveIsCastle(move) &&
-        board.PieceAt(move.src).IsPawn() &&
-        (move.dst > 55 || move.dst < 8);
+        !IsCastle() &&
+        board.PieceAt(src).IsPawn() &&
+        (dst > 55 || dst < 8);
 }
 
 // This is only a partial move creation routine as it does not fill in
 //  'move->chk', and in fact, clobbers it.
-void MoveCreateFromCastle(MoveT *move, bool castleOO, int turn)
+void MoveCreateFromCastle(MoveT &move, bool castleOO, int turn)
 {
-    move->src = castleOO ? turn : (1 << NUM_PLAYERS_BITS) | turn;
-    move->dst = move->src;
-    move->promote = PieceType::Empty;
-    move->chk = 0;
+    move.src = castleOO ? turn : (1 << NUM_PLAYERS_BITS) | turn;
+    move.dst = move.src;
+    move.promote = PieceType::Empty;
+    move.chk = FLAG;
 }
 
 // Attempt to take a king-moves-2 or KxR-style move and convert it
@@ -445,43 +464,40 @@ void MoveCreateFromCastle(MoveT *move, bool castleOO, int turn)
 //  king capturing its own rook one space to the right could be confused with
 //  just moving the king one space to the right.
 // Assumes we are 'unmangling' a move from the players whose turn it is.
-void MoveUnmangleCastle(MoveT *move, const Board &board)
+void MoveUnmangleCastle(MoveT &move, const Board &board)
 {
     CastleStartCoordsT start; // shorthand
-    cell_t dst = move->dst, src = move->src, rookOO;
+    cell_t dst = move.dst, src = move.src, rookOO, rookOOO;
     bool isCastleOO;
     int turn = board.Turn();
 
-    if (MoveIsCastle(*move))
-    {
+    if (move.IsCastle())
         return; // do not unmangle if this move is already a castle request
-    }
 
     start = Variant::Current()->Castling(turn).start;
     rookOO = start.rookOO;
-
-    if (src != start.king ||
-        !board.CanCastle(turn))
-    {
+    rookOOO = start.rookOOO;
+    
+    if (src != start.king || !board.CanCastle(turn))
         return;
-    }
 
     // We know now we're at least trying to move a 'king' that can castle.
-    if (dst == rookOO || dst == start.rookOOO)
+    if ((dst == rookOO || dst == rookOOO) &&
+        board.PieceAt(dst).Player() == turn)
     {
-        // Attempting KxR.
+        // Attempting KxR (or at least Kx"something of its own color"; we are
+        //  trying to be flexible here for possible variants.)
         isCastleOO = (dst == rookOO);
     }
     else if (abs(dst - src) == 2)
     {
         // Attempting K moves 2.
-        if (!canUseK2Notation(start, dst))
-        {
+        if (!canUseK2Notation(start))
             return;
-        }
+
         isCastleOO =
-            (rookOO > src && dst > move->src) ||
-            (rookOO < src && dst < move->src);
+            (File(rookOO) > File(rookOOO) && dst > move.src) ||
+            (File(rookOO) < File(rookOOO) && dst < move.src);
     }
     else
     {

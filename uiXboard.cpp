@@ -620,7 +620,7 @@ static void xboardNotifyMove(MoveT move)
     // This should switch on the fly to csOO if we ever implement chess960.
     static const MoveStyleT ms = { mnCAN, csK2, false };
 
-    printf("move %s\n", MoveToString(tmpStr, move, &ms, NULL));
+    printf("move %s\n", move.ToString(tmpStr, &ms, NULL));
 }
 
 

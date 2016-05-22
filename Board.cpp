@@ -471,7 +471,7 @@ uint64 PrivBoard::calcZobristFromMove(MoveT move) const
         result ^= gPreCalc.zobrist.ebyte[ebyte];
     }
 
-    if (MoveIsCastle(move))
+    if (move.IsCastle())
     {
         // Castling case, handle this specially (it can be relatively
         //  inefficient).
@@ -480,8 +480,8 @@ uint64 PrivBoard::calcZobristFromMove(MoveT move) const
         Piece kPiece(turn, PieceType::King);
         Piece rPiece(turn, PieceType::Rook);
 
-        populateCastleCoords(MoveIsCastleOO(move),
-                                   kSrc, kDst, rSrc, rDst);
+        populateCastleCoords(move.IsCastleOO(),
+                             kSrc, kDst, rSrc, rDst);
 
         newcbyte = calcCByteFromCastle(cbyte, turn);
 
@@ -557,7 +557,7 @@ void Board::MakeMove(MoveT move)
     bool promote = !(move.promote == PieceType::Empty || enpass);
     uint8 src = move.src;
     uint8 dst = move.dst;
-    bool isCastle = MoveIsCastle(move);
+    bool isCastle = move.IsCastle();
     Piece capPiece;
     uint8 newebyte, newcbyte;
     uint64 origZobrist = zobrist;
@@ -605,7 +605,7 @@ void Board::MakeMove(MoveT move)
 
         repeatableMove = false;
         
-        priv->populateCastleCoords(MoveIsCastleOO(move),
+        priv->populateCastleCoords(move.IsCastleOO(),
                                    kSrc, kDst, rSrc, rDst);
 
         priv->doCastleMove(kSrc, kDst, rSrc, rDst);
@@ -722,11 +722,11 @@ void Board::UnmakeMove()
     unmakes.pop_back();
     
     // King castling move?
-    if (MoveIsCastle(move))
+    if (move.IsCastle())
     {
         cell_t kSrc, kDst, rSrc, rDst;
 
-        priv->populateCastleCoords(MoveIsCastleOO(move),
+        priv->populateCastleCoords(move.IsCastleOO(),
                                    kSrc, kDst, rSrc, rDst);
 
         // (swapping the src and dst coordinates)
@@ -943,7 +943,7 @@ bool Board::IsDrawThreefoldRepetition() const
 // Calculates (roughly) how 'valuable' a move is.
 int Board::CalcCapWorth(MoveT move) const
 {
-    if (MoveIsCastle(move))
+    if (move.IsCastle())
         return 0;
 
     Piece capPiece(PieceAt(move.dst));

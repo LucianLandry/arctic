@@ -503,7 +503,7 @@ void PrivBoard::addMoveCalcChk(MoveList &mvlist, cell_t from, cell_t to,
         chk = FLAG; // Kings cannot give check.
         break;
     }
-    MoveT move = ToMove(from, to, promote, mergeChk(chk, dc));
+    MoveT move(from, to, promote, mergeChk(chk, dc));
     mvlist.AddMove(move, *this);
 }
 
@@ -511,8 +511,8 @@ void PrivBoard::addMoveCalcChk(MoveList &mvlist, cell_t from, cell_t to,
 void PrivBoard::promo(MoveList &mvlist, cell_t from, cell_t to, cell_t dc) const
 {
     cell_t ekcoord = PieceCoords(Piece(Turn() ^ 1, PieceType::King))[0];
-    MoveT move = ToMove(from, to, PieceType::Queen,
-                        mergeChk(dc, QUEENCHK(to, from, ekcoord)));
+    MoveT move(from, to, PieceType::Queen,
+               mergeChk(dc, QUEENCHK(to, from, ekcoord)));
     mvlist.AddMove(move, *this);
 
     move.promote = PieceType::Knight;

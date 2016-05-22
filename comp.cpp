@@ -711,7 +711,7 @@ static Eval minimax(Board *board, int alpha, int beta,
         // up from a chess alg site.  It does seem to help our speed
         // (slightly).
         bestMove.promote == PieceType::Empty &&
-        (MoveIsCastle(bestMove) || // castling is not currently preferred
+        (bestMove.IsCastle() || // castling is not currently preferred
          board->PieceAt(bestMove.dst).IsEmpty()))
     {
         assert(bestMove != MoveNone);

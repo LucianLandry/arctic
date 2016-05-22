@@ -244,7 +244,7 @@ static void finishMoves(GameT *game, Board *fenBoard, MoveT *move, char *pToken,
     printf("info string %s: diverged move was: %s\n",
            __func__,
            (move && *move != MoveNone ?
-            MoveToString(tmpStr, *move, &gMoveStyleUCI, NULL) :
+            move->ToString(tmpStr, &gMoveStyleUCI, NULL) :
             "0000"));
     if (move != NULL)
     {
@@ -858,11 +858,11 @@ static void uciNotifyMove(MoveT move)
 
     printf("bestmove %s%s%s\n",
            (move != MoveNone ?
-            MoveToString(tmpStr, move, &gMoveStyleUCI, NULL) :
+            move.ToString(tmpStr, &gMoveStyleUCI, NULL) :
             "0000"),
            bShowPonderMove ? " ponder " : "",
            (bShowPonderMove ?
-            MoveToString(tmpStr2, ponderMove, &gMoveStyleUCI, NULL) : ""));
+            ponderMove.ToString(tmpStr2, &gMoveStyleUCI, NULL) : ""));
     gUciState.bSearching = false;
 }
 

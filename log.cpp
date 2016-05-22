@@ -110,7 +110,7 @@ void LogMove(LogLevelT level, const Board *board, MoveT move, int searchDepth)
     }
     LogPrint(level, "%s%s%s%s%s\n",
              levelstr,
-             MoveToString(tmpStr, move, &gMoveStyleLog, NULL),
+             move.ToString(tmpStr, &gMoveStyleLog, NULL),
              capstr, promostr, chkstr);
 }
 
@@ -119,7 +119,8 @@ void LogMoveShow(LogLevelT level, const Board *board, MoveT move, const char *ca
     int ascii, i, j;
     char tmpStr[MOVE_STRING_MAX];
 
-    LogPrint(level, "%s:\nMove was %s\n", caption, MoveToString(tmpStr, move, &gMoveStyleLog, NULL));
+    LogPrint(level, "%s:\nMove was %s\n", caption,
+             move.ToString(tmpStr, &gMoveStyleLog, NULL));
 
     for (i = 7; i >= 0; i--)
     {

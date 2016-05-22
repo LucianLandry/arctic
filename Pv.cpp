@@ -103,7 +103,7 @@ void SearchPv::Log(LogLevelT logLevel) const
 
         LogPrint(logLevel, "%s%s",
                  i ? " " : "",
-                 MoveToString(tmpStr, moves[i], &style, nullptr));
+                 moves[i].ToString(tmpStr, &style, nullptr));
     }
     LogPrint(logLevel, "}}");
 }
@@ -236,7 +236,7 @@ void HintPv::Log(LogLevelT logLevel) const
             LogPrint(logLevel, "%s%d: %s",
                      printedFirstMove ? " " : "",
                      i,
-                     MoveToString(tmpStr, moves[i], &style, nullptr));
+                     moves[i].ToString(tmpStr, &style, nullptr));
             printedFirstMove = true;
         }
     }

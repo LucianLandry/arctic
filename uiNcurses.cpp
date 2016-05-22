@@ -1017,7 +1017,7 @@ static void UIMovelistShow(MoveList *mvlist, Board *board)
 
     for (i = 0; i < mvlist->NumMoves(); i++)
     {
-        cprintf("%s ", MoveToString(result, mvlist->Moves(i), &msUI, board));
+        cprintf("%s ", mvlist->Moves(i).ToString(result, &msUI, board));
     }
     UIBarf("possible moves.");
 }
@@ -1209,7 +1209,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     // Suppose we have a valid move.  Can we find it in the movelist?
     myMove.src = comstr[0];
     myMove.dst = comstr[1];
-    MoveUnmangleCastle(&myMove, *board);
+    MoveUnmangleCastle(myMove, *board);
 
     /* search movelist for comstr */
     if ((foundMove = movelist.SearchSrcDst(myMove)) == NULL)
@@ -1223,7 +1223,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     ThinkerCmdBail(th);
 
     /* Do we need to promote? */
-    if (MoveIsPromote(myMove, *board))
+    if (myMove.IsPromote(*board))
     {
         while ((chr = UIBarf("Promote piece to (q, r, b, n)? >")) != 'q' &&
                chr != 'r' && chr != 'b' && chr != 'n')
