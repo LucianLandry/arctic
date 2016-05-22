@@ -428,17 +428,6 @@ int MovesToString(char *dstStr, int dstStrSize,
     return movesWritten;
 }
 
-// Syntactic sugar.
-void MoveStyleSet(MoveStyleT *style,
-                  MoveNotationT notation,
-                  MoveCastleStyleT castleStyle,
-                  bool showCheck)
-{
-    style->notation = notation;
-    style->castleStyle = castleStyle;
-    style->showCheck = showCheck;
-}
-
 bool MoveT::IsPromote(const Board &board) const
 {
     return

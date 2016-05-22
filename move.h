@@ -24,7 +24,8 @@
 
 // Various ways to represent a move as a string.
 // See http://en.wikipedia.org/wiki/Chess_notation
-enum MoveNotationT {
+enum MoveNotationT
+{
     mnSAN,  // Standard algebraic notation (most human-readable.  Example:
             //  "bxa8Q")
 
@@ -36,7 +37,8 @@ enum MoveNotationT {
             //  showCheck.
 };
 
-enum MoveCastleStyleT {
+enum MoveCastleStyleT
+{
     csOO,     // Use (PGN) "O-O" and "O-O-O" (even for mnCAN).  This is our
               //  preferred internal string representation.
     csFIDE,   // Like above, but use zeros ("0-0") instead of letter Os.
@@ -48,7 +50,9 @@ enum MoveCastleStyleT {
 
 // Obviously the code implements a limited range of move styles.  It can be
 // expanded if necessary.
-struct MoveStyleT {
+struct MoveStyleT
+{
+    MoveStyleT(MoveNotationT notation, MoveCastleStyleT castleStyle, bool showCheck);
     MoveNotationT notation;
     MoveCastleStyleT castleStyle;
     bool showCheck; // Append '+' and '#' (when known) to moves?
@@ -126,6 +130,11 @@ static_assert(sizeof(uint32) == sizeof(MoveT),
 // "No" move (fails moveIsSane(), so do not try to print it)
 const MoveT MoveNone(FLAG, 0, PieceType::Empty, FLAG);
 
+inline MoveStyleT::MoveStyleT(MoveNotationT notation,
+                              MoveCastleStyleT castleStyle,
+                              bool showCheck) :
+    notation(notation), castleStyle(castleStyle), showCheck(showCheck) {}
+
 inline MoveT::MoveT(cell_t from, cell_t to, PieceType promote, cell_t chk) :
     src(from), dst(to), promote(promote), chk(chk) {}
 
@@ -140,12 +149,6 @@ inline bool MoveT::operator!=(const MoveT &other) const
 {
     return !(*this == other);
 }
-
-// Syntactic sugar.
-void MoveStyleSet(MoveStyleT *style,
-                  MoveNotationT notation,
-                  MoveCastleStyleT castleStyle,
-                  bool showCheck);
 
 // Writes out a sequence of moves using style 'moveStyle'.
 // Returns the number of moves successfully converted.
