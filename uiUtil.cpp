@@ -449,7 +449,7 @@ bool isLegalMove(char *inputStr, MoveT *resultMove, Board *board)
     }
 
     // Do we need to promote?
-    if (foundMove->IsPromote(*board))
+    if (foundMove->IsPromote())
     {
         chr = inputStr[4];
         if (chr != 'q' && chr != 'r' && chr != 'n' && chr != 'b')

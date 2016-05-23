@@ -1050,7 +1050,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     uint8 chr;
     MoveList movelist;
     uint8 comstr[2] = {FLAG, FLAG};
-    MoveT myMove;
+    MoveT myMove = MoveNone;
     int myLevel;
     int myHiswin;
     int player;
@@ -1211,7 +1211,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     myMove.dst = comstr[1];
     myMove.UnmangleCastle(*board);
 
-    /* search movelist for comstr */
+    // Search movelist for move.
     if ((foundMove = movelist.SearchSrcDst(myMove)) == NULL)
     {
         UIBarf("Sorry, invalid move.");
@@ -1219,11 +1219,11 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
         return;
     }
 
-    /* At this point, we must have a valid move. */
+    // At this point, we must have a valid move.
     ThinkerCmdBail(th);
 
-    /* Do we need to promote? */
-    if (myMove.IsPromote(*board))
+    // Do we need to promote?
+    if (foundMove->IsPromote())
     {
         while ((chr = UIBarf("Promote piece to (q, r, b, n)? >")) != 'q' &&
                chr != 'r' && chr != 'b' && chr != 'n')
@@ -1236,11 +1236,8 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
         foundMove = movelist.SearchSrcDstPromote(myMove);
         assert(foundMove != NULL);
     }
-    else
-    {
-        myMove.promote = foundMove->promote;
-    }
-    myMove.chk = foundMove->chk;
+
+    myMove = *foundMove;
     GameMoveCommit(game, &myMove, th, 0);
 }
 

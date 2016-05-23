@@ -293,7 +293,7 @@ static void finishMoves(GameT *game, Board *fenBoard, MoveT *move, char *pToken,
             gUciState.bBadPosition = true;
             return;
         }
-        gUciState.ponderMove = myMove; // struct copy
+        gUciState.ponderMove = myMove;
         GameMoveMake(game, &myMove);
     }
 }
@@ -384,7 +384,7 @@ static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
             gUciState.bBadPosition = true;
             return;
         }
-        gUciState.ponderMove = myMove; // struct copy
+        gUciState.ponderMove = myMove;
         fenBoard.MakeMove(myMove);
         if (SaveGameGotoPly(&game->sgame, fenBoard.Ply(), board, NULL) < 0 ||
             board->Position() != fenBoard.Position())

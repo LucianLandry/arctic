@@ -107,7 +107,7 @@ struct /* alignas(uint32) makes things slower */ MoveT
     inline bool IsCastle() const;
     inline bool IsCastleOO() const;
     inline bool IsCastleOOO() const;
-    bool IsPromote(const Board &board) const;
+    inline bool IsPromote() const;
     bool IsLegal(const Board &board) const;
 
     // This is only a partial move creation routine as it does not fill in
@@ -170,6 +170,11 @@ inline bool MoveT::IsCastleOO() const
 inline bool MoveT::IsCastleOOO() const
 {
     return IsCastle() && (src >> NUM_PLAYERS_BITS) == 1;
+}
+
+inline bool MoveT::IsPromote() const
+{
+    return promote != PieceType::Empty && promote != PieceType::Pawn;
 }
 
 #endif // MOVE_H

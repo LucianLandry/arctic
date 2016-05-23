@@ -35,7 +35,6 @@ Version 1.2:
 Refactored Pv into its own (3) classes.
 Refactored MoveT class.
 Bugfix: fixed csOO + csFIDE-style strings never showing check(mate).
-Bugfix: made isLegalMove() work properly for underpromotions
 
 Version 1.1:
 Build improvements: use Git for version control, cmake for building

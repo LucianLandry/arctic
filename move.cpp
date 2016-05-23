@@ -122,7 +122,7 @@ static char *moveToStringMnDebug(char *result, MoveT move)
 static int moveToStringMnCAN(char *result, MoveT move)
 {
     char promoString[2] =
-        {(move.promote != PieceType::Empty && move.promote != PieceType::Pawn ?
+        {(move.IsPromote() ?
           (char) tolower(nativeToAscii(Piece(0, move.promote))) :
           '\0'), '\0'};
     return sprintf(result, "%c%c%c%c%s",
@@ -221,11 +221,10 @@ static int moveToStringMnSAN(char *result, MoveT move, const Board &board)
     Piece myPiece = board.PieceAt(src);
     char *sanStr = result;
     int i;
-    bool isCastle = src == dst;
+    bool isCastle = move.IsCastle();
     bool isCapture = !isCastle &&
         (!board.PieceAt(dst).IsEmpty() || move.promote == PieceType::Pawn);
-    bool isPromote =
-        move.promote != PieceType::Empty && move.promote != PieceType::Pawn;
+    bool isPromote = move.IsPromote();
     bool sameFile = true, sameRank = true;
     MoveList mvlist;
 
@@ -426,14 +425,6 @@ int MovesToString(char *dstStr, int dstStrSize,
     }
 
     return movesWritten;
-}
-
-bool MoveT::IsPromote(const Board &board) const
-{
-    return
-        !IsCastle() &&
-        board.PieceAt(src).IsPawn() &&
-        (dst > 55 || dst < 8);
 }
 
 // This is only a partial move creation routine as it does not fill in
