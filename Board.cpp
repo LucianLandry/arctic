@@ -455,8 +455,8 @@ Board &Board::operator=(const Board &other)
 // a new zobrist.
 uint64 PrivBoard::calcZobristFromMove(MoveT move) const
 {
-    bool enpass = move.promote == PieceType::Pawn; // en passant capture?
-    bool promote = !(move.promote == PieceType::Empty || enpass);
+    bool enpass = move.IsEnPassant(); // en passant capture?
+    bool promote = move.IsPromote();
     cell_t src = move.src;
     cell_t dst = move.dst;
     Piece myPiece(PieceAt(src));
@@ -553,8 +553,8 @@ void PrivBoard::doCastleMove(uint8 kSrc, uint8 kDst,
 
 void Board::MakeMove(MoveT move)
 {
-    bool enpass = move.promote == PieceType::Pawn;
-    bool promote = !(move.promote == PieceType::Empty || enpass);
+    bool enpass = move.IsEnPassant();
+    bool promote = move.IsPromote();
     uint8 src = move.src;
     uint8 dst = move.dst;
     bool isCastle = move.IsCastle();
@@ -693,8 +693,8 @@ void Board::UnmakeMove()
 {
     UnMakeT &unmake = unmakes.back();
     MoveT move = unmake.move;
-    bool enpass = move.promote == PieceType::Pawn;
-    bool promote = !(move.promote == PieceType::Empty || enpass);
+    bool enpass = move.IsEnPassant();
+    bool promote = move.IsPromote();
     uint8 src = move.src;
     uint8 dst = move.dst;
     Piece capPiece;

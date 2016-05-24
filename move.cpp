@@ -223,7 +223,7 @@ static int moveToStringMnSAN(char *result, MoveT move, const Board &board)
     int i;
     bool isCastle = move.IsCastle();
     bool isCapture = !isCastle &&
-        (!board.PieceAt(dst).IsEmpty() || move.promote == PieceType::Pawn);
+        (!board.PieceAt(dst).IsEmpty() || move.IsEnPassant());
     bool isPromote = move.IsPromote();
     bool sameFile = true, sameRank = true;
     MoveList mvlist;

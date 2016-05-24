@@ -99,7 +99,7 @@ void LogMove(LogLevelT level, const Board *board, MoveT move, int searchDepth)
     {
         sprintf(capstr, "(x%c)", nativeToAscii(capPiece));
     }
-    if (move.promote != PieceType::Empty && move.promote != PieceType::Pawn)
+    if (move.IsPromote())
     {
         sprintf(promostr, "(->%c)", nativeToAscii(Piece(0, move.promote)));
     }
