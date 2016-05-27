@@ -680,7 +680,7 @@ static bool xboardShouldCommitMoves(void)
     return true;
 }
 
-static void xboardNotifyComputerStats(GameT *game, CompStatsT *stats) { }
+static void xboardNotifyComputerStats(GameT *game, ThinkerStatsT *stats) { }
 static void xboardPositionRefresh(const Position &position) { }
 static void xboardNoop(void) { }
 static void xboardStatusDraw(GameT *game) { }

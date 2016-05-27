@@ -978,7 +978,7 @@ static void UINotifyReady(void)
     UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
 }
 
-static void UINotifyComputerStats(GameT *game, CompStatsT *stats)
+static void UINotifyComputerStats(GameT *game, ThinkerStatsT *stats)
 {
     gotoxy(1, 1);
     textcolor(SYSTEMCOL);

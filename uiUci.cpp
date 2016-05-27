@@ -893,7 +893,7 @@ static void uciNotifyResign(int turn)
 
 // Assumes "result" is long enough to hold the actual result (say 80 chars to
 // be safe).  Returns "result".
-static char *buildStatsString(char *result, GameT *game, CompStatsT *stats)
+static char *buildStatsString(char *result, GameT *game, ThinkerStatsT *stats)
 {
     int nodes = stats->nodes;
     // (Convert bigtime_t to milliseconds)
@@ -988,7 +988,7 @@ static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
 }
 
 
-static void uciNotifyComputerStats(GameT *game, CompStatsT *stats)
+static void uciNotifyComputerStats(GameT *game, ThinkerStatsT *stats)
 {
     char statsString[80];
 

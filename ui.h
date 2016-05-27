@@ -19,9 +19,8 @@
 
 #include "aTypes.h"
 #include "Board.h"
-#include "thinker.h"
 #include "game.h"
-#include "ref.h"
+#include "thinker.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,7 +39,7 @@ typedef struct {
     void (*notifyThinking)(void);
     void (*notifyPonder)(void);
     void (*notifyReady)(void);
-    void (*notifyComputerStats)(GameT *game, CompStatsT *stats);
+    void (*notifyComputerStats)(GameT *game, ThinkerStatsT *stats);
     void (*notifyDraw)(const char *reason, MoveT *move);
     void (*notifyCheckmated)(int turn);
     void (*notifyResign)(int turn);

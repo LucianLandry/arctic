@@ -25,6 +25,7 @@
 #include "Pv.h"
 #include "ref.h"
 #include "saveGame.h"
+#include "ThinkerTypes.h"
 
 struct SearchArgsT {
     SearchArgsT(); // default constructor.
@@ -78,7 +79,7 @@ typedef enum {
 
 struct PvRspArgsT
 {
-    CompStatsT stats;
+    ThinkerStatsT stats;
     DisplayPv pv;
 };
 
@@ -122,7 +123,7 @@ void ThinkerRspDraw(ThinkContextT *th, MoveT move);
 void ThinkerRspMove(ThinkContextT *th, MoveT move);
 void ThinkerRspResign(ThinkContextT *th);
 void ThinkerRspSearchDone(ThinkContextT *th);
-void ThinkerRspNotifyStats(ThinkContextT *th, CompStatsT *stats);
+void ThinkerRspNotifyStats(ThinkContextT *th, ThinkerStatsT *stats);
 void ThinkerRspNotifyPv(ThinkContextT *th, PvRspArgsT *pvArgs);
 eThinkMsgT ThinkerCompWaitThinkOrPonder(ThinkContextT *th);
 eThinkMsgT ThinkerCompWaitSearch(ThinkContextT *th);

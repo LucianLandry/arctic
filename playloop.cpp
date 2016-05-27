@@ -31,8 +31,8 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
 {
     // For this to work, 'stats', 'pvArgs', and 'move' must be trivially
     //  copyable.
-    alignas(sizeof(void *)) char rspBuf[MAX3(sizeof(CompStatsT), sizeof(PvRspArgsT), sizeof(MoveT))];
-    CompStatsT *stats = (CompStatsT *)rspBuf;
+    alignas(sizeof(void *)) char rspBuf[MAX3(sizeof(ThinkerStatsT), sizeof(PvRspArgsT), sizeof(MoveT))];
+    ThinkerStatsT *stats = (ThinkerStatsT *)rspBuf;
     PvRspArgsT *pvArgs = (PvRspArgsT *)rspBuf;
     MoveT *move = (MoveT *)rspBuf;
 

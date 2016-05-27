@@ -19,6 +19,7 @@
 
 #include "aTypes.h"
 #include "Eval.h"
+#include "ThinkerTypes.h"
 
 // Pass this to TransTable(Lazy)Init() to let it pick a semi-sensible default.
 #define TRANSTABLE_DEFAULT_SIZE (-1)
@@ -55,9 +56,11 @@ bool TransTableQuickHitTest(uint64 zobrist);
 // Fills in 'hashEval' and 'hashMove' iff we had a successful hit.
 // Assumes a non-zero-size hash.
 bool TransTableHit(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
-                   int searchDepth, uint16 basePly, int alpha, int beta);
+                   int searchDepth, uint16 basePly, int alpha, int beta,
+                   ThinkerStatsT *stats);
 
 void TransTableConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
-                                 int searchDepth, uint16 basePly);
+                                 int searchDepth, uint16 basePly,
+                                 ThinkerStatsT *stats);
 
 #endif // TRANSTABLE_H

@@ -83,7 +83,7 @@
 // but I'm trying to avoid passing around extra args to updatePv().
 static ThinkContextT *gThinker;
 // same argument for gStats, but it affects minimax() and trymove() as well!
-CompStatsT gStats;
+static ThinkerStatsT gStats;
 
 #define HASH_MISS 1
 #define HASH_HIT 0
@@ -424,7 +424,7 @@ static Eval minimax(Board *board, int alpha, int beta,
     if ((!mightDraw || board->NcpPlies() == 0) &&
         TransTableQuickHitTest(board->Zobrist()) &&
         TransTableHit(&hashEval, &hashMove, board->Zobrist(), searchDepth,
-                      basePly, alpha, beta))
+                      basePly, alpha, beta, &gStats))
     {
         // record the move (if there is one).
         if (goodPv->Update(hashMove))
@@ -477,7 +477,7 @@ static Eval minimax(Board *board, int alpha, int beta,
 
         // Update the transposition table entry if needed.
         TransTableConditionalUpdate(retVal, MoveNone, board->Zobrist(),
-                                    searchDepth, basePly);
+                                    searchDepth, basePly, &gStats);
         return retVal;
     }
 
@@ -489,7 +489,7 @@ static Eval minimax(Board *board, int alpha, int beta,
             retVal.Set(strgh, Eval::Win);
             // Update the transposition table entry if needed.
             TransTableConditionalUpdate(retVal, MoveNone, board->Zobrist(),
-                                        searchDepth, basePly);
+                                        searchDepth, basePly, &gStats);
             return retVal;
         }
 
@@ -721,7 +721,7 @@ static Eval minimax(Board *board, int alpha, int beta,
 
     // Update the transposition table entry if needed.
     TransTableConditionalUpdate(retVal, bestMove, board->Zobrist(),
-                                searchDepth, basePly);
+                                searchDepth, basePly, &gStats);
 
     return retVal;
 }

@@ -27,9 +27,6 @@ void CompThreadInit(ThinkContextT *th);
 // Returns current search level for main board.
 int CompCurrentLevel(void);
 
-// Exposing this externally so transposition-table code can update it.
-extern CompStatsT gStats;
-
 #ifdef __cplusplus
 }
 #endif

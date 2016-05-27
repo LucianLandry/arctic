@@ -83,7 +83,7 @@ static void juceNotifyReady(void)
 {
 }
 
-static void juceNotifyComputerStats(GameT *game, CompStatsT *stats)
+static void juceNotifyComputerStats(GameT *game, ThinkerStatsT *stats)
 {
 }
 

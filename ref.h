@@ -48,20 +48,6 @@ typedef uint8 cell_t;
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MIN3(a, b, c) (MIN((a), (MIN((b), (c)))))
 
-// NOTE: these are not exact counts, since we do not want the speed hit that
-// comes from updating these atomically.  We could have the child threads
-// maintain their own stats while they are searching, but this still does not
-// work for moveCount because the children need to quickly know when maxNodes
-// has been met.
-typedef struct {
-    int nodes;        // node count (how many times was 'minimax' invoked)
-    int nonQNodes;    // non-quiesce node count
-    int moveGenNodes; // how many times was mListGenerate() called
-    int hashHitGood;  // hashtable hits that returned immediately.
-    int hashWroteNew; // how many times (in this ply) we wrote to a unique
-                      // hash entry.  Used for UCI hashfull stats.
-} CompStatsT;
-
 // bits which define ability to castle.  There is one set of these per-player
 // in 'cbyte'.
 #define CASTLEOO 0x1

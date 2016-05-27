@@ -1,3 +1,22 @@
+NCURSES UI WASHED-OUT COLORS
+(especially, dark gray background instead of black)
+You are likely using gnome-terminal.  This terminal supports a configurable
+color "pallete" that is used for ncurses programs.  Unfortunately the default
+(custom) pallete as shipped with Debian effectively seems to give the behavior
+"don't give programs a true black when they request COLOR_BLACK".  Which isn't
+a bug because, hey, it's part of the pallete :P
+can_change_color() also returns false for gnome-terminal, and
+use_default_colors() (as expected) has only deleterious effects, so the issue
+cannot be worked around from arctic's side.  To "fix" gnome-terminal, do
+"Edit -> Profile Preferences -> Colors", and change "Built-in schemes" to "Linux
+console" or (slightly brighter, but reduces contrast) "Rxvt".  Alternative: just
+change the first color in the "Color pallete" to the darkest color you can
+find.  To avoid clobbering the original custom profile, you might want to
+create a new one.
+Or, of course, you could use a terminal with sane color defaults.
+
+-------------------------------------------------------------------------------
+
 USING GIT:
 
 history of everything: git log

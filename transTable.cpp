@@ -317,7 +317,8 @@ static inline size_t calcEntry(uint64 zobrist)
 // Fills in 'hashEval' and 'hashMove' iff we had a successful hit.
 // Assumes TransTableQuickHitTest() returned true.
 bool TransTableHit(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
-                   int searchDepth, uint16 basePly, int alpha, int beta)
+                   int searchDepth, uint16 basePly, int alpha, int beta,
+                   ThinkerStatsT *stats)
 {
     size_t entry = calcEntry(zobrist);
     HashPositionT *vHp = &gHash.hash[entry];
@@ -342,14 +343,14 @@ bool TransTableHit(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
     // 1) base ply for this move.
     if (vHp->basePly != basePly)
     {
-        gStats.hashWroteNew++;
+        stats->hashWroteNew++;
         vHp->basePly = basePly;
     }
     // 2) search depth (in case of checkmate, it might go up.  Not
     //    proven to be better.)
     hashDepth = MAX(vHp->depth, searchDepth);
     vHp->depth = hashDepth;
-    gStats.hashHitGood++;
+    stats->hashHitGood++;
     *hashEval = vHp->eval;
     *hashMove = vHp->move;
 
@@ -386,7 +387,8 @@ bool TransTableQuickHitTest(uint64 zobrist)
 }
 
 void TransTableConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
-                                 int searchDepth, uint16 basePly)
+                                 int searchDepth, uint16 basePly,
+                                 ThinkerStatsT *stats)
 {
     if (!TransTableSize())
         return;
@@ -428,7 +430,7 @@ void TransTableConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
 
         if (((volatile HashPositionT *)vHp)->basePly != basePly)
         {
-            gStats.hashWroteNew++;
+            stats->hashWroteNew++;
             vHp->basePly = basePly;
         }
 

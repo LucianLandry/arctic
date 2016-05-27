@@ -47,7 +47,7 @@
    eRspDraw<move, FLAG if none>
    eRspMove<move>
    eRspResign
-   eRspStats<CompStatsT>
+   eRspStats<ThinkerStatsT>
    eRspPv<PvRspArgsT>
 
    Extended this for multiple computer threads:
@@ -348,9 +348,9 @@ void ThinkerRspSearchDone(ThinkContextT *th)
 }
 
 
-void ThinkerRspNotifyStats(ThinkContextT *th, CompStatsT *stats)
+void ThinkerRspNotifyStats(ThinkContextT *th, ThinkerStatsT *stats)
 {
-    compSendRsp(th, eRspStats, stats, sizeof(CompStatsT));
+    compSendRsp(th, eRspStats, stats, sizeof(ThinkerStatsT));
 }
 
 
