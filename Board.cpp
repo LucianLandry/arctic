@@ -25,7 +25,7 @@
 #include "ref.h"
 #include "ui.h"
 #include "uiUtil.h"
-#include "transTable.h"
+#include "TransTable.h"
 #include "Variant.h"
 
 using arctic::File;
@@ -581,7 +581,7 @@ void Board::MakeMove(MoveT move)
     // depth-10 search) to do this calculation ahead of time just so we can
     // prefetch it sooner, even when BoardZobristCalcFromMove() is not static.
     zobrist = priv->calcZobristFromMove(move);
-    TransTablePrefetch(zobrist);
+    gTransTable.Prefetch(zobrist);
 
     assert(move != MoveNone); // This seems to happen too often.
 

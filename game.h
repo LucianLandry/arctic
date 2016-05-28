@@ -64,8 +64,8 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
                     int declaredDraw);
 // Handle a change in computer control or pondering.
 void GameCompRefresh(GameT *game, ThinkContextT *th);
-void GameNewEx(GameT *game, ThinkContextT *th, Board *board, int resetClocks,
-               int resetHash);
+void GameNewEx(GameT *game, ThinkContextT *th, Board *board, bool resetClocks,
+               bool resetHash);
 void GameNew(GameT *game, ThinkContextT *th);
 
 int GameGotoPly(GameT *game, int ply, ThinkContextT *th);

@@ -22,7 +22,7 @@
 #include "log.h"
 #include "MoveList.h"
 #include "switcher.h"
-#include "transTable.h"
+#include "TransTable.h"
 #include "ui.h"
 #include "Variant.h"
 
@@ -200,8 +200,8 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
 }
 
 
-void GameNewEx(GameT *game, ThinkContextT *th, Board *board, int resetClocks,
-               int resetHash)
+void GameNewEx(GameT *game, ThinkContextT *th, Board *board, bool resetClocks,
+               bool resetHash)
 {
     assert(board->Position().IsLegal());
     game->savedBoard = *board;
@@ -218,7 +218,7 @@ void GameNewEx(GameT *game, ThinkContextT *th, Board *board, int resetClocks,
     // hash hits re-ordering our moves, but that should not be a huge issue.
     if (resetHash)
     {
-        TransTableReset();
+        gTransTable.Reset();
         gHistInit();
     }
     gVars.pv.Clear();
@@ -229,7 +229,7 @@ void GameNewEx(GameT *game, ThinkContextT *th, Board *board, int resetClocks,
 void GameNew(GameT *game, ThinkContextT *th)
 {
     Board myBoard;
-    GameNewEx(game, th, &myBoard, 1, 1);
+    GameNewEx(game, th, &myBoard, true, true);
 }
 
 
@@ -245,7 +245,7 @@ int GameGotoPly(GameT *game, int ply, ThinkContextT *th)
     ThinkerCmdBail(th);
     gVars.pv.FastForward(plyDiff);
 
-    // We could TransTableReset()/gHistInit() here, but if the user tracks
+    // We could gTransTable.Reset()/gHistInit() here, but if the user tracks
     // back and forth through the history, we might not diverge that much.
     SaveGameGotoPly(&game->sgame, ply, &game->savedBoard, game->clocks);
     GameMoveCommit(game, NULL, th, 0);

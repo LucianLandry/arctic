@@ -125,8 +125,7 @@ struct /* alignas(uint32) makes things slower */ MoveT
     void UnmangleCastle(const Board &board);
 };
 
-static_assert(sizeof(uint32) == sizeof(MoveT),
-              "MoveT.operator== is broken");
+static_assert(sizeof(uint32) == sizeof(MoveT), "MoveT.operator== is broken");
 
 // "No" move (fails moveIsSane(), so do not try to print it)
 const MoveT MoveNone(FLAG, 0, PieceType::Empty, FLAG);

@@ -32,7 +32,7 @@
 #include "log.h"
 #include "Pv.h"
 #include "saveGame.h"
-#include "transTable.h"
+#include "TransTable.h"
 #include "ui.h"
 #include "uiUtil.h"
 #include "Variant.h"
@@ -1133,7 +1133,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
             {
                 ThinkerCmdBail(th);
                 UIBarf("Game restore succeeded.");
-                TransTableReset();
+                gTransTable.Reset();
                 gHistInit();
                 // Could goto current ply instead of numPlies.  I'm assuming
                 // here the user is absent-minded and might forget (or might not
@@ -1170,7 +1170,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
 
             UIOptionsDraw(game);
 
-            GameNewEx(game, th, board, 0, 1);
+            GameNewEx(game, th, board, false, true);
             return;
         }
         case 'A': /* toggle randomize moves. */

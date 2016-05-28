@@ -79,7 +79,7 @@
 #include "log.h"
 #include "MoveList.h"
 #include "playloop.h"
-#include "transTable.h"
+#include "TransTable.h"
 #include "ui.h"
 #include "uiUtil.h"
 
@@ -205,8 +205,8 @@ void processUciCommand(void)
     rv = snprintf(hashString, sizeof(hashString),
                   "option name Hash type spin default %" PRId64
                   " min 0 max %" PRId64 "\n",
-                  (int64) TransTableDefaultSize() / (1024 * 1024),
-                  (int64) TransTableMaxSize() / (1024 * 1024));
+                  (int64) gTransTable.DefaultSize() / (1024 * 1024),
+                  (int64) gTransTable.MaxSize() / (1024 * 1024));
     assert(rv >= 0 && (uint) rv < sizeof(hashString)); // bail on truncated string
 
     // Respond appropriately to the "uci" command.
@@ -270,7 +270,7 @@ static void finishMoves(GameT *game, Board *fenBoard, MoveT *move, char *pToken,
             // Assume the boards have diverged too much to preserve the hash
             // table, history window, etc.  This should be large enough to
             // not trigger in a normal case (ponder miss etc.)
-            TransTableReset();
+            gTransTable.Reset();
             gHistInit();
         }
     }
@@ -278,7 +278,7 @@ static void finishMoves(GameT *game, Board *fenBoard, MoveT *move, char *pToken,
     {
         // First position was different.  We always have to blow the hash
         // etc. away because we do not know exactly how different things were.
-        GameNewEx(game, th, fenBoard, 0, 1);
+        GameNewEx(game, th, fenBoard, false, true);
     }
 
     for (;
@@ -467,9 +467,9 @@ static void processSetOptionCommand(char *inputStr)
              matchesNoCase((pToken = findNextToken(inputStr)), "Hash") &&
              matches((pToken = findNextToken(pToken)), "value") &&
              convertNextInteger64(&pToken, &hashSizeMB, 0, "Hash") == 0 &&
-             hashSizeMB <= (int64) TransTableMaxSize() / (1024 * 1024))
+             hashSizeMB <= (int64) gTransTable.MaxSize() / (1024 * 1024))
     {
-        TransTableInit((int64) hashSizeMB * 1024 * 1024);
+        gTransTable.Reset((int64) hashSizeMB * 1024 * 1024);
     }
     else if (matches(inputStr, "name") &&
              matchesNoCase((pToken = findNextToken(inputStr)), "Ponder") &&
@@ -904,11 +904,11 @@ static char *buildStatsString(char *result, GameT *game, ThinkerStatsT *stats)
 
     charsWritten = sprintf(result, "time %d nodes %d nps %d",
                            timeTaken, nodes, nps);
-    if (TransTableNumEntries())
+    if (gTransTable.NumEntries())
     {
         sprintf(&result[charsWritten], " hashfull %d",
                 (int) (((uint64) stats->hashWroteNew) * 1000 /
-                       TransTableNumEntries()));
+                       gTransTable.NumEntries()));
     }
     return result;
 }

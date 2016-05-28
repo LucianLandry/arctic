@@ -27,7 +27,7 @@
 #include "log.h"
 #include "ref.h"
 #include "thinker.h"
-#include "transTable.h"
+#include "TransTable.h"
 #include "uiUtil.h"
 
 // Since I spent a lot of time trying to do it, here is a treatise on why
@@ -422,9 +422,8 @@ static Eval minimax(Board *board, int alpha, int beta,
 
     // Is there a suitable hit in the transposition table?
     if ((!mightDraw || board->NcpPlies() == 0) &&
-        TransTableQuickHitTest(board->Zobrist()) &&
-        TransTableHit(&hashEval, &hashMove, board->Zobrist(), searchDepth,
-                      basePly, alpha, beta, &gStats))
+        gTransTable.IsHit(&hashEval, &hashMove, board->Zobrist(), searchDepth,
+                          basePly, alpha, beta, &gStats))
     {
         // record the move (if there is one).
         if (goodPv->Update(hashMove))
@@ -476,8 +475,8 @@ static Eval minimax(Board *board, int alpha, int beta,
                    strgh);
 
         // Update the transposition table entry if needed.
-        TransTableConditionalUpdate(retVal, MoveNone, board->Zobrist(),
-                                    searchDepth, basePly, &gStats);
+        gTransTable.ConditionalUpdate(retVal, MoveNone, board->Zobrist(),
+                                      searchDepth, basePly, &gStats);
         return retVal;
     }
 
@@ -488,8 +487,8 @@ static Eval minimax(Board *board, int alpha, int beta,
         {
             retVal.Set(strgh, Eval::Win);
             // Update the transposition table entry if needed.
-            TransTableConditionalUpdate(retVal, MoveNone, board->Zobrist(),
-                                        searchDepth, basePly, &gStats);
+            gTransTable.ConditionalUpdate(retVal, MoveNone, board->Zobrist(),
+                                          searchDepth, basePly, &gStats);
             return retVal;
         }
 
@@ -720,8 +719,8 @@ static Eval minimax(Board *board, int alpha, int beta,
     }
 
     // Update the transposition table entry if needed.
-    TransTableConditionalUpdate(retVal, bestMove, board->Zobrist(),
-                                searchDepth, basePly, &gStats);
+    gTransTable.ConditionalUpdate(retVal, bestMove, board->Zobrist(),
+                                  searchDepth, basePly, &gStats);
 
     return retVal;
 }
@@ -843,7 +842,7 @@ static void computermove(ThinkContextT *th, bool bPonder)
 
             if (ThinkerCompNeedsToMove(th))
                 break;
-
+                
 #ifdef ENABLE_DEBUG_LOGGING
             {
                 char tmpStr[kMaxEvalStringLen];

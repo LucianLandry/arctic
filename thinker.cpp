@@ -86,6 +86,7 @@ void ThinkerInit(ThinkContextT *th)
 
     th->masterSock = socks[0];
     th->slaveSock = socks[1];
+    th->moveNow = false;
     th->isThinking = false;
     th->isPondering = false;
     th->isSearching = false;

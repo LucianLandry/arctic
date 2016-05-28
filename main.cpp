@@ -30,7 +30,7 @@
 #include "log.h"
 #include "playloop.h"
 #include "thinker.h"
-#include "transTable.h"
+#include "TransTable.h"
 #include "ui.h"
 #include "uiUtil.h"
 
@@ -43,7 +43,7 @@ static void usage(char *programName)
     printf("arctic %s.%s-%s\n"
            "usage: %s [-h=<hashtablesize>] [-p=<numcputhreads>] [--ui=<console,juce,uci,xboard>]\n"
            "\t'hashtablesize' examples: 200000, 100k, 0M, 1G\n"
-           // as picked by TransTableDefaultSize()
+           // as picked by TransTable::DefaultSize()
            "\t'hashtablesize' default == MIN(1/3 total memory, 512M)\n"
            "\t(specifying 'hashtablesize' overrides any xboard/uci option)\n\n"
            "\t'numcputhreads' in range 1-%d\n"
@@ -125,12 +125,13 @@ static void startupSanityCheck(void)
 
 int main(int argc, char *argv[])
 {
-    int hashTableSize = TRANSTABLE_DEFAULT_SIZE;
+    int hashTableSize = gTransTable.DefaultSize();
     char hashTableSizeString[40];
     int numCpuThreads = -1;
     int i;
     char uiString[80] = "";
-
+    bool userSpecifiedHashSize = false;
+    
     startupSanityCheck();
 
     LogInit();
@@ -147,6 +148,7 @@ int main(int argc, char *argv[])
             {
                 usage(argv[0]);
             }
+            userSpecifiedHashSize = true;
         }
         else if (!strncmp(argv[i], "-p=", 3))
         {
@@ -175,12 +177,12 @@ int main(int argc, char *argv[])
 
     // Must be done before seeding, if we want reproducable results.  Also must
     //  be done before any Boards (or anything that depends on it) are declared.
-    gPreCalcInit(hashTableSize != TRANSTABLE_DEFAULT_SIZE, numCpuThreads);
+    gPreCalcInit(userSpecifiedHashSize, numCpuThreads);
 
     ThinkContextT th;
     GameT game;
     
-    TransTableLazyInit(hashTableSize);
+    gTransTable.SetDesiredSize(hashTableSize);
 
     srandom(getBigTime() / 1000000);
 

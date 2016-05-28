@@ -41,7 +41,7 @@
 #include "playloop.h"
 #include "ui.h"
 #include "uiUtil.h"
-#include "transTable.h"
+#include "TransTable.h"
 
 #define MAXBUFLEN 160
 
@@ -448,7 +448,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
             // We could attempt to detect if we are more or less in the
             // same game and not clear the hash, like we do w/uci "position"
             // command.
-            GameNewEx(game, th, &tmpBoard, 0, 1);
+            GameNewEx(game, th, &tmpBoard, false, true);
         }
     }
 
@@ -464,7 +464,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
         if (tmpPosition.IsLegal(errString))
         {
             tmpBoard.SetPosition(tmpPosition);
-            GameNewEx(game, th, &tmpBoard, 0, 1);
+            GameNewEx(game, th, &tmpBoard, false, true);
         }
         else
         {
@@ -551,7 +551,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
         }
         else
         {
-            TransTableInit(i64 * 1024 * 1024); // MB -> bytes
+            gTransTable.Reset(i64 * 1024 * 1024); // MB -> bytes
         }
     }
 

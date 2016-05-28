@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                 transTable.cpp - Transposition table support.
+//                TransTable.cpp - Transposition table support.
 //                           -------------------
 //  copyright            : (C) 2012 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -22,44 +22,16 @@
 #include "aTypes.h"
 #include "comp.h"
 #include "log.h"
-#include "transTable.h"
+#include "TransTable.h"
 #include "uiUtil.h"
 
-typedef struct {
-    uint64 zobrist;
-    Eval eval;
-    MoveT move;       // stores preferred move for this position.
-    uint16 basePly;   // lets us evaluate if this entry is 'too old'.
-    int8 depth;       // needs to be plys from quiescing, due to incremental
-                      // search.
-    int8 pad;         // unused
-} HashPositionT;
-
-#define NUM_HASH_LOCKS (1024)
-
-// The below entries are size_t because it does not make sense to try to
-// force a 64-bit size on a 32-bit platform.  (realloc() would fail)  I would
-// use 'long' but that is defined to 32 bits on win64.
-static struct {
-    bool locksInitialized;
-    SpinlockT locks[NUM_HASH_LOCKS];
-    size_t numEntries;
-    size_t size; // in bytes, current size of hash table
-    size_t nextSize; // in bytes, takes effect on next reset
-    HashPositionT *hash; // transposition table.
-
-    // Support for quick(er) hash entry calculation:
-    size_t hashMask; // could be 'int' if needed
-    size_t shiftedNumEntries; // could be 'int' if needed
-    int shiftCount;
-    int numLeadingZeros;
-} gHash;
+TransTable gTransTable; // Global transposition table instantiation.
 
 #ifdef ENABLE_DEBUG_LOGGING
 static const MoveStyleT gMoveStyleTT = { mnCAN, csOO, true };
 #endif
 
-int calcNumLeadingZeros(size_t numEntries)
+static int calcNumLeadingZeros(size_t numEntries)
 {
     int shiftCount = 0;
 
@@ -76,7 +48,7 @@ int calcNumLeadingZeros(size_t numEntries)
 }
 
 // This turns (for example) 3 leading zeros into a hash mask of '111b'.
-size_t calcHashMask(size_t numEntries)
+static size_t calcHashMask(size_t numEntries)
 {
     int leadingZeros = calcNumLeadingZeros(numEntries);
     size_t result = 0;
@@ -90,7 +62,7 @@ size_t calcHashMask(size_t numEntries)
     return result;
 }
 
-static size_t normalizeNumEntries(size_t numEntries)
+size_t TransTable::normalizeNumEntries(size_t numEntries)
 {
     int shiftCount = 0;
 
@@ -99,9 +71,9 @@ static size_t normalizeNumEntries(size_t numEntries)
         return 0;
     }
 
-    // numEntries should be a mult of NUM_HASH_LOCKS
-    numEntries /= NUM_HASH_LOCKS;
-    numEntries *= NUM_HASH_LOCKS;
+    // numEntries should be a mult of kNumHashLocks
+    numEntries /= kNumHashLocks;
+    numEntries *= kNumHashLocks;
 
 #if 0    
     // A version that forces 'numEntries' to be a power of 2.
@@ -114,7 +86,7 @@ static size_t normalizeNumEntries(size_t numEntries)
 #endif
 
     // This version makes sure that numEntries looks like:
-    // 0000xxxxxxxx0000 (binary)
+    // 0000xxxxxxxx0000 (binary size_t)
     // where "xxxxxxxx" can be up to 22 bits wide,
     // but is (optionally) preceded by and (optionally) followed by filler 0s
     // to make a total of 64 bits.  Also, the last set of filler 0s cannot
@@ -135,23 +107,26 @@ static int64 constrainSize(int64 size)
     return size;
 }
 
-static int64 normalizeSize(int64 size)
+int64 TransTable::normalizeSize(int64 size)
 {
     int64 result = constrainSize(size) / sizeof(HashPositionT); // calc numEntries
     result = normalizeNumEntries(result);
     return result * sizeof(HashPositionT);
 }
 
-// Return the maximum possible size of the transposition table.
-size_t TransTableMaxSize(void)
+// Returns the maximum *possible* size you could configure the transposition
+//  table to (in bytes).  SetDesiredSize() and Reset() requests are capped
+//  to this size.
+size_t TransTable::MaxSize()
 {
     // Refuse to go over (total detected system memory - 32M)
     int64 result = SystemTotalMemory() - 32 * 1024 * 1024;
     return normalizeSize(result);
 }
 
-// Return the default size of the transposition table.
-size_t TransTableDefaultSize(void)
+// Returns the default size (in bytes) of the transposition table (ie, what
+//  size is used if you Reset(void) the table at startup).
+size_t TransTable::DefaultSize() const
 {
     // As a convenience, pick MIN(1/3 total memory, 512M).
     int64 size = SystemTotalMemory() / 3;
@@ -159,134 +134,112 @@ size_t TransTableDefaultSize(void)
     return normalizeSize(size);
 }
 
-static size_t sanitizeSize(int64 size)
+size_t TransTable::sanitizeSize(int64 size)
 {
     return
-        size == TRANSTABLE_DEFAULT_SIZE ? TransTableDefaultSize() :
         size < -1 ? 0 : // bad parameter
-        MIN((uint64) normalizeSize(size), TransTableMaxSize());
+        MIN((uint64) normalizeSize(size), MaxSize());
 }
 
-static void sanityCheck(void)
-{
-    assert(sizeof(HashPositionT) == 24);
-}
-
-static void resetEntries(void)
+void TransTable::resetEntries()
 {
     HashPositionT newHashEntry;
-    uint64 i;
 
     memset(&newHashEntry, 0, sizeof(newHashEntry));
     newHashEntry.depth = HASH_NOENTRY;
     newHashEntry.move = MoveNone;
 
-    for (i = 0; i < gHash.numEntries; i++)
-    {
-        gHash.hash[i] = newHashEntry; // struct assign
-    }
+    std::fill(hash.begin(), hash.end(), newHashEntry);
+}
+
+// (re-)initialize everything calcEntry() needs to work properly.
+void TransTable::prepCalcEntry()
+{
+    int numEntries = hash.size();
+    int numLeadingZeros = calcNumLeadingZeros(numEntries);
+
+    hashMask = calcHashMask(numEntries);
+    shiftedNumEntries = numEntries >> numLeadingZeros;
+    shiftCount = 32 - numLeadingZeros;
 }
 
 // Initialize the global transposition table to size 'size'.
-void TransTableInit(int64 size)
+TransTable::TransTable()
 {
-    HashPositionT *newHash;
-    int i;
-    sanityCheck();
+    for (auto &lock : locks)
+        SpinlockInit(&lock);
 
-    size = sanitizeSize(size);
-
-    if (!gHash.locksInitialized)
-    {
-        for (i = 0; i < NUM_HASH_LOCKS; i++)
-        {
-            SpinlockInit(&gHash.locks[i]);
-        }
-        gHash.locksInitialized = true;
-    }
-
-    if ((uint64) size != gHash.size)
-    {
-        newHash = (HashPositionT *) realloc(gHash.hash, size);
-        if (size == 0 || newHash != NULL)
-        {
-            gHash.size = size;
-            gHash.nextSize = size;
-            gHash.hash = newHash;
-            gHash.numEntries = size / sizeof(HashPositionT);
-            gHash.numLeadingZeros = calcNumLeadingZeros(gHash.numEntries);
-            gHash.hashMask = calcHashMask(gHash.numEntries);
-            gHash.shiftedNumEntries = gHash.numEntries >> gHash.numLeadingZeros;
-            gHash.shiftCount = 32 - gHash.numLeadingZeros;
-        }
-        else
-        {
-            LOG_EMERG("Failed to init hash (size %" PRId64 ")\n", size);
-            exit(0);
-        }
-    }
-
-    resetEntries();
+    size = 0;
+    nextSize = DefaultSize();
+    prepCalcEntry();
 }
 
-// As above, but postpone the actual initialization until the next
-// TransTableReset() call.
-void TransTableLazyInit(int64 size)
+// Sets desired size of the transposition table.  Does not take effect until
+//  the next 'Reset(void)' call.  (used for lazy initialization)
+void TransTable::SetDesiredSize(int64 sizeInBytes)
 {
-    sanityCheck();
-    gHash.nextSize = sanitizeSize(size);
+    nextSize = sanitizeSize(sizeInBytes);
 }
 
 // Clear the global transposition table.
-void TransTableReset(void)
+void TransTable::Reset()
 {
-    if (!gHash.locksInitialized || gHash.nextSize != gHash.size)
+    if (nextSize != size)
     {
-        TransTableInit(gHash.nextSize);
-        return;
+        // Resizing to 0 first since I'd hate to have the new memory allocated
+        //  at the same time as the old memory (and there is no need to preserve
+        //  the old memory).
+        hash.resize(0);
+        hash.shrink_to_fit();
+        hash.resize(nextSize / sizeof(HashPositionT));
+        size = nextSize;
+        prepCalcEntry();
     }
 
     resetEntries();
 }
 
-// Return the number of unique entries that can be stored in the transposition
-// table.
-size_t TransTableNumEntries(void)
+// Clears the transposition table, and sets its size to 'sizeInBytes'.
+void TransTable::Reset(int64 sizeInBytes)
 {
-    return gHash.numEntries;
+    SetDesiredSize(sizeInBytes);
+    Reset();
 }
 
 #define QUIESCING (searchDepth < 0)
 
-static inline bool entryMatches(HashPositionT *hp, uint64 zobrist,
-                                int alpha, int beta, int searchDepth)
+// If this shows up during profiling, we could put it in a private namespace.
+//  (I think that would preclude making it a HashPositionT member function,
+//   though.)
+bool TransTable::entryMatches(const HashPositionT &hp, uint64 zobrist,
+                              int alpha, int beta, int searchDepth)
 {
     return
-        hp->zobrist == zobrist &&
+        hp.zobrist == zobrist &&
         // Should not need since we blank the zobrist at reset time.
-        // hp->depth != HASH_NOENTRY &&
+        // hp.depth != HASH_NOENTRY &&
 
         // know eval exactly?
-        (hp->eval.IsExactVal() ||
+        (hp.eval.IsExactVal() ||
          // know it's good enough?
-         hp->eval >= beta ||
+         hp.eval >= beta ||
          // know it's bad enough?
-         hp->eval <= alpha) &&
+         hp.eval <= alpha) &&
 
         // is the hashed search deep enough?
-        (QUIESCING || searchDepth <= hp->depth ||
+        (QUIESCING || searchDepth <= hp.depth ||
          // For detected win/loss, depth does not matter.
-         hp->eval.DetectedWinOrLoss());
+         hp.eval.DetectedWinOrLoss());
 }
 
-static inline size_t calcEntry(uint64 zobrist)
+size_t TransTable::calcEntry(uint64 zobrist) const
 {
     // slow (although AMD is better than intel in this regard):
-    // return zobrist % gHash.numEntries;
+    // return zobrist % hash.size();
 
     // fastest, but only does good distribution for tables of size
     // (numEntries * 2^n):
-    // return zobrist & (gHash.numEntries - 1);
+    // return zobrist & (hash.size() - 1);
 
     // The basic idea here is that we want to map a number in the range
     // (0 .. 2^32) to a number in the range (0 .. numEntries - 1).  One way to
@@ -295,8 +248,9 @@ static inline size_t calcEntry(uint64 zobrist)
     // (ie right-shift 32 bits) to achieve this result.
     //
     // We can't use the entire 64-bits of the zobrist key for the multiplication
-    // because we can't get at the top 64 bits of the 128-bit result (in C ...
-    // although some CPU architectures probably support doing this in assembly).
+    // because we can't get at the top 64 bits of the 128-bit result (in 32-bit
+    // C++ ... although some CPU architectures probably support doing this in
+    // assembly).
     //
     // Due to that limitation, and the fact that we might be working w/a 64-bit
     // 'numEntries', we restrict numEntries to 22 consecutive "really"
@@ -308,110 +262,91 @@ static inline size_t calcEntry(uint64 zobrist)
     // bits.
 #if 1
     return
-        (((zobrist & 0xffffffffUL) * gHash.shiftedNumEntries) >>
-         gHash.shiftCount) ^
-        ((zobrist >> 32) & gHash.hashMask);
+        (((zobrist & 0xffffffffUL) * shiftedNumEntries) >> shiftCount) ^
+        ((zobrist >> 32) & hashMask);
 #endif
 }
 
 // Fills in 'hashEval' and 'hashMove' iff we had a successful hit.
-// Assumes TransTableQuickHitTest() returned true.
-bool TransTableHit(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
-                   int searchDepth, uint16 basePly, int alpha, int beta,
-                   ThinkerStatsT *stats)
+// Should only be called by IsHit(), which does some pre-checks.
+bool TransTable::hitTest(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
+                         int searchDepth, uint16 basePly, int alpha, int beta,
+                         ThinkerStatsT *stats, size_t entry)
 {
-    size_t entry = calcEntry(zobrist);
-    HashPositionT *vHp = &gHash.hash[entry];
+    HashPositionT &vHp = hash[entry];
     int8 hashDepth;
-    SpinlockT *lock;
 
-#ifdef ENABLE_DEBUG_LOGGING
-    char tmpStr[MOVE_STRING_MAX];
-    char peStr[kMaxEvalStringLen];
-#endif
+    SpinlockT &lock = locks[entry & (kNumHashLocks - 1)];
+    SpinlockLock(&lock);
 
-    lock = &gHash.locks[entry & (NUM_HASH_LOCKS - 1)];
-    SpinlockLock(lock);
     if (!entryMatches(vHp, zobrist, alpha, beta, searchDepth))
     {
-        SpinlockUnlock(lock);
+        SpinlockUnlock(&lock);
         return false;
     }
 
     // re-record items in the hit hash position to "reinforce" it
     // against future removal:
     // 1) base ply for this move.
-    if (vHp->basePly != basePly)
+    if (vHp.basePly != basePly)
     {
         stats->hashWroteNew++;
-        vHp->basePly = basePly;
+        vHp.basePly = basePly;
     }
     // 2) search depth (in case of checkmate, it might go up.  Not
     //    proven to be better.)
-    hashDepth = MAX(vHp->depth, searchDepth);
-    vHp->depth = hashDepth;
+    hashDepth = MAX(vHp.depth, searchDepth);
+    vHp.depth = hashDepth;
     stats->hashHitGood++;
-    *hashEval = vHp->eval;
-    *hashMove = vHp->move;
+    *hashEval = vHp.eval;
+    *hashMove = vHp.move;
 
-    SpinlockUnlock(lock);
+    SpinlockUnlock(&lock);
+
+#ifdef ENABLE_DEBUG_LOGGING
+    char tmpStr[MOVE_STRING_MAX];
+    char peStr[kMaxEvalStringLen];
     LOG_DEBUG("hashHit alhbdmz: %d %s %d %d %s 0x%" PRIx64 "\n",
               alpha,
               hashEval->ToLogString(peStr),
               beta, hashDepth,
-              MoveToString(tmpStr, *hashMove, &gMoveStyleTT, NULL),
+              hashMove->ToString(tmpStr, &gMoveStyleTT, NULL),
               zobrist);
+#endif
 
     return true;
 }
 
-size_t TransTableSize(void)
+void TransTable::Prefetch(uint64 zobrist) const
 {
-    return gHash.size;
-}
-
-void TransTablePrefetch(uint64 zobrist)
-{
-    if (gHash.size)
+    if (Size())
     {
-        __builtin_prefetch(&gHash.hash[calcEntry(zobrist)]);
+        __builtin_prefetch(&hash[calcEntry(zobrist)]);
     }
 }
 
-// The point of this function is to avoid passing in a bunch of params and
-// locking the hash when we don't need to.
-bool TransTableQuickHitTest(uint64 zobrist)
+void TransTable::ConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
+                                   int searchDepth, uint16 basePly,
+                                   ThinkerStatsT *stats)
 {
-    return gHash.size &&
-        gHash.hash[calcEntry(zobrist)].zobrist == zobrist;
-}
-
-void TransTableConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
-                                 int searchDepth, uint16 basePly,
-                                 ThinkerStatsT *stats)
-{
-    if (!TransTableSize())
+    if (!Size())
         return;
     
     size_t entry = calcEntry(zobrist);
-    HashPositionT *vHp = &gHash.hash[entry];
-#ifdef ENABLE_DEBUG_LOGGING
-    char tmpStr[MOVE_STRING_MAX];
-    char peStr[kMaxEvalStringLen];
-#endif
+    HashPositionT &vHp = hash[entry];
 
     // Do we want to update the table?
     // (HASH_NOENTRY should always trigger here)
-    if (searchDepth > vHp->depth ||
+    if (searchDepth > vHp.depth ||
         // Replacing entries that came before this search is aggressive,
         // but it works better than a 'numPieces' comparison.  We use "!="
         // instead of "<" because we may move backwards in games as well
         // (undoing moves, or setting positions etc.)
-        vHp->basePly != basePly ||
+        vHp.basePly != basePly ||
         // Otherwise, use the position that gives us as much info as
         // possible, and after that the most recently used (ie this move).
-        (searchDepth == vHp->depth &&
-         eval.Range() <= vHp->eval.Range()))
+        (searchDepth == vHp.depth &&
+         eval.Range() <= vHp.eval.Range()))
     {
         // We only lock the hashtable once we know we want to do an update.
         // This lets us do slightly lazier locking.
@@ -421,27 +356,32 @@ void TransTableConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
         // -- it is not blanked for a newgame
         // -- the hash entry might have been overwritten in the meantime
         // (by another thread, or at a different ply).
-        SpinlockT *lock = &gHash.locks[entry & (NUM_HASH_LOCKS - 1)];
-        SpinlockLock(lock);
+        SpinlockT &lock = locks[entry & (kNumHashLocks - 1)];
+        SpinlockLock(&lock);
 
-        vHp->zobrist = zobrist;
-        vHp->eval = eval;
-        vHp->move = move; // may be MoveNone
+        vHp.zobrist = zobrist;
+        vHp.eval = eval;
+        vHp.move = move; // may be MoveNone
 
-        if (((volatile HashPositionT *)vHp)->basePly != basePly)
+        if (((volatile HashPositionT &)vHp).basePly != basePly)
         {
             stats->hashWroteNew++;
-            vHp->basePly = basePly;
+            vHp.basePly = basePly;
         }
 
-        vHp->depth = searchDepth;
+        vHp.depth = searchDepth;
 
-        SpinlockUnlock(lock);
+        SpinlockUnlock(&lock);
 
+#ifdef ENABLE_DEBUG_LOGGING
+        char tmpStr[MOVE_STRING_MAX];
+        char peStr[kMaxEvalStringLen];
+        
         LOG_DEBUG("hashupdate lhdpmz: %s %d %d %s 0x%" PRIx64 "\n",
                   eval.ToLogString(peStr),
                   searchDepth, basePly,
-                  MoveToString(tmpStr, move, &gMoveStyleTT, NULL),
+                  move.ToString(tmpStr, &gMoveStyleTT, NULL),
                   zobrist);
+#endif
     }
 }
