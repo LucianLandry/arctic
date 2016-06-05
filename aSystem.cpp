@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <sys/time.h>     // get+setrlimit(2)
 #include <sys/resource.h>
+#include <thread>         // hardware_concurrency()
 #include <unistd.h>       // sysconf(3)
 
 #include "aSystem.h"
@@ -65,5 +66,8 @@ int64 SystemTotalMemory(void)
 
 int SystemTotalProcessors(void)
 {
-    return sysconf(_SC_NPROCESSORS_ONLN);
+    return
+        // sysconf(_SC_NPROCESSORS_ONLN);
+        // slightly more portable:
+        std::thread::hardware_concurrency();
 }
