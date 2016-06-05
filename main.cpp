@@ -209,7 +209,7 @@ int main(int argc, char *argv[])
         uiNcursesOps() : uiXboardOps();
 
     CompThreadInit(&th);
-    Semaphore readySem(0);
+    Semaphore readySem;
     uiThreadInit(&th, &game, &readySem);
     // Wait for the UI to do some initialization.
     readySem.wait();

@@ -33,7 +33,12 @@ namespace arctic
 class Semaphore
 {
 public:
-    Semaphore(int count = 1);
+    // The default sem value, somewhat arbitrarily chosen (it matches our code
+    //  better, and would appear somewhat "safer"), requires a post() to satisfy
+    //  any initial wait().
+    // If you want a semaphore you can treat as a (heavy-weight) std::mutex,
+    //  pass '1' instead.
+    Semaphore(int count = 0);
 
     void wait();
     bool try_wait();

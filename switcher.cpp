@@ -19,20 +19,14 @@
 
 #include "switcher.h"
 
+using arctic::Semaphore;
+
 void SwitcherInit(SwitcherContextT *sw)
 {
-    int i;
-    int retVal;
-
-    memset(sw, 0, sizeof(SwitcherContextT));
-
-    for (i = 0; i < SWITCHER_MAX_USERS; i++)
-    {
-        retVal = sem_init(&sw->sems[i], 0, 0);
-        assert(retVal == 0);
-    }
+    // Assumes 'sems' have already initialized themselves to 0.
+    sw->currentUser = 0;
+    sw->numUsers = 0;
 }
-
 
 void SwitcherRegister(SwitcherContextT *sw)
 {
@@ -47,7 +41,7 @@ void SwitcherRegister(SwitcherContextT *sw)
     if (numUsers != 0)
     {
         /* Every thread but the 'initial' one blocks, waiting to run. */
-        sem_wait(&sw->sems[numUsers]);
+        sw->sems[numUsers].wait();
     }
 }
 
@@ -55,13 +49,13 @@ void SwitcherRegister(SwitcherContextT *sw)
 /* switch between threads, round-robin style. */
 void SwitcherSwitch(SwitcherContextT *sw)
 {
-    sem_t *mySem = &sw->sems[sw->currentUser];
+    Semaphore *mySem = &sw->sems[sw->currentUser];
 
     /* Goto next user. */
     if (++sw->currentUser == sw->numUsers)
         sw->currentUser = 0;
 
     /* Let any other threads run. */
-    sem_post(&sw->sems[sw->currentUser]);
-    sem_wait(mySem);
+    sw->sems[sw->currentUser].post();
+    mySem->wait();
 }
