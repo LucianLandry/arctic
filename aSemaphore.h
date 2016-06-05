@@ -25,9 +25,12 @@ namespace arctic
 {
     
 // Since the c++ standard library fails to provide a semaphore abstraction, we
-//  do so here.  Since I anticipate this becoming standard in the far future, I
-//  use std's snake_case naming convention.
-// However, it was a deliberate decision to use wait/post instead of
+//  do so here.
+// Technically, this is a counting semaphore; for a definition of that, see:
+//  https://en.wikipedia.org/wiki/Semaphore_%28programming%29
+// Since I anticipate semaphores becoming standard in the far future, I
+//  use std's snake_case naming convention to name the member functions.
+// However, it was a deliberate decision to use wait()/post() instead of
 //  lock()/unlock().  The latter could be used with a std::lock_guard, but the
 //  former's semantics are clearer (and closer to the C versions).
 class Semaphore
