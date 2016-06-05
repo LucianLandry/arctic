@@ -20,8 +20,8 @@
 #include <stdarg.h> // va_list
 #include <stdio.h>  // sprintf()
 #include <stdlib.h> // abs()
+#include <thread>
 
-#include "aThread.h"
 #include "clockUtil.h"
 #include "gDynamic.h"
 #include "log.h"
@@ -30,6 +30,7 @@
 #include "uiUtil.h"
 
 using arctic::ToCoord;
+using arctic::Semaphore;
 
 UIFuncTableT *gUI;
 
@@ -568,32 +569,20 @@ char *getStdinLine(int maxLen, SwitcherContextT *sw)
     return buf;
 }
 
-
-typedef struct {
-    ThreadArgsT args;
-    ThinkContextT *th;
-    GameT *game;
-} UiArgsT;
-
-
-static void uiThread(UiArgsT *args)
+static void uiThread(ThinkContextT *th, GameT *game, Semaphore *readySem)
 {
-    UiArgsT myArgs = *args; // struct copy
+    gUI->init(game);
 
-    gUI->init(myArgs.game);
+    // Let the main thread know it is safe to continue.
+    readySem->post();
 
-    // Prevent main thread from continuing until UI has initialized.
-    ThreadNotifyCreated("uiThread", (ThreadArgsT *) args);
-
-    SwitcherRegister(&myArgs.game->sw);
-    while(1)
-    {
-        gUI->playerMove(myArgs.th, myArgs.game);
-    }    
+    SwitcherRegister(&game->sw);
+    while (1)
+        gUI->playerMove(th, game);
 }
 
-void uiThreadInit(ThinkContextT *th, GameT *game)
+void uiThreadInit(ThinkContextT *th, GameT *game, Semaphore *readySem)
 {
-    UiArgsT args = {gThreadDummyArgs, th, game};
-    ThreadCreate((THREAD_FUNC) uiThread, (ThreadArgsT *) &args);
+    std::thread *mainUiThread = new std::thread(uiThread, th, game, readySem);
+    mainUiThread->detach();
 }

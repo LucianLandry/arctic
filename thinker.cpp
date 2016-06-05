@@ -20,6 +20,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <thread>
 
 #include "gDynamic.h" // PvInit()
 #include "log.h"
@@ -525,10 +526,9 @@ void ThinkerSearchersSetDepthAndLevel(int depth, int level)
     }
 }
 
-void ThinkerSearchersCreate(int numThreads, THREAD_FUNC threadFunc)
+void ThinkerSearchersCreate(int numThreads, SEARCHER_THREAD_FUNC threadFunc)
 {
     int i;
-    SearcherArgsT sargs;
 
     gSG.count = numThreads;
 
@@ -537,13 +537,14 @@ void ThinkerSearchersCreate(int numThreads, THREAD_FUNC threadFunc)
 
     for (i = 0; i < gSG.count; i++)
     {
-        sargs.th = &gSG.th[i];
-        ThinkerInit(sargs.th);
-        ThreadCreate(threadFunc, (ThreadArgsT *) &sargs);
+        ThinkContextT *th = &gSG.th[i];
+        ThinkerInit(th);
+        std::thread *childThread = new std::thread(threadFunc, th);
+        childThread->detach();
 
         // (also initialize the associated poll structures --
         //  it is global so is already zero.)
-        gSG.pfds[i].fd = sargs.th->masterSock;
+        gSG.pfds[i].fd = th->masterSock;
         gSG.pfds[i].events = POLLIN;
     }
 }

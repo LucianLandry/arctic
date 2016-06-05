@@ -17,7 +17,6 @@
 #ifndef THINKER_H
 #define THINKER_H
 
-#include "aThread.h"
 #include "aTypes.h"
 #include "Board.h"
 #include "Eval.h"
@@ -139,11 +138,7 @@ int ThinkerSearchersSearching(void);
 void ThinkerSearchersBoardSet(Board *board);
 void ThinkerSearchersSetDepthAndLevel(int depth, int level);
 
-// Passed as an arg to 'threadFunc'.
-typedef struct {
-    ThreadArgsT args;
-    ThinkContextT *th;
-} SearcherArgsT;
-void ThinkerSearchersCreate(int numThreads, THREAD_FUNC threadFunc);
+typedef void (*SEARCHER_THREAD_FUNC)(ThinkContextT *th);
+void ThinkerSearchersCreate(int numThreads, SEARCHER_THREAD_FUNC threadFunc);
 
 #endif // THINKER_H

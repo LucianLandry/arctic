@@ -36,6 +36,7 @@ Refactored Pv into its own (3) classes.
 Refactored MoveT struct (added methods)
 Bugfix: fixed csOO + csFIDE-style strings never showing check(mate).
 Refactored Trans(Position)Table into a c++ class.
+Converted code to use platform-agnostic std::thread.
 
 Version 1.1:
 Build improvements: use Git for version control, cmake for building

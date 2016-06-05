@@ -17,6 +17,7 @@
 #ifndef UIUTIL_H
 #define UIUTIL_H
 
+#include "aSemaphore.h"
 #include "aTypes.h"
 #include "Board.h"
 #include "game.h"
@@ -29,10 +30,6 @@
 Piece asciiToNative(char ascii);
 char nativeToAscii(Piece piece);
 char nativeToBoardAscii(Piece piece);
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 static inline char AsciiFile(cell_t coord)
 {
@@ -95,10 +92,6 @@ char *getStdinLine(int maxLen, SwitcherContextT *sw);
 // convenience.
 char *ChopBeforeNewLine(char *s);
 
-void uiThreadInit(ThinkContextT *th, GameT *game);
-
-#ifdef __cplusplus
-}
-#endif
+void uiThreadInit(ThinkContextT *th, GameT *game, arctic::Semaphore *readySem);
 
 #endif // UIUTIL_H

@@ -20,6 +20,7 @@
 #include <stdlib.h>       // exit(3)
 #include <unistd.h>       // isatty(3)
 
+#include "aSemaphore.h"
 #include "aSystem.h"
 #include "Board.h"
 #include "clockUtil.h"
@@ -33,6 +34,8 @@
 #include "TransTable.h"
 #include "ui.h"
 #include "uiUtil.h"
+
+using arctic::Semaphore;
 
 #define MAX_NUM_PROCS 1024 // Just use something 'reasonable'.  This is only
                            //  for user input validation now, not static
@@ -206,7 +209,10 @@ int main(int argc, char *argv[])
         uiNcursesOps() : uiXboardOps();
 
     CompThreadInit(&th);
-    uiThreadInit(&th, &game);
+    Semaphore readySem(0);
+    uiThreadInit(&th, &game, &readySem);
+    // Wait for the UI to do some initialization.
+    readySem.wait();
 
     GameNew(&game, &th);
     gUI->notifyReady();

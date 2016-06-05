@@ -17,8 +17,8 @@
 #include <assert.h>
 #include <stddef.h>   // NULL
 #include <string.h>
+#include <thread>
 
-#include "aThread.h"
 #include "Board.h"
 #include "comp.h"
 #include "Eval.h"
@@ -899,12 +899,9 @@ static void computermove(ThinkContextT *th, bool bPonder)
 }
 
 
-static void *searcherThread(SearcherArgsT *args)
+static void searcherThread(ThinkContextT *th)
 {
     Board *board;
-    ThinkContextT *th = args->th;
-
-    ThreadNotifyCreated("searcherThread", (ThreadArgsT *) args);
 
     // Shorthand.
     board = &th->searchArgs.localBoard;
@@ -933,32 +930,20 @@ static void *searcherThread(SearcherArgsT *args)
 
         ThinkerRspSearchDone(th);
     }
-    return NULL; // never get here.
 }
 
-
-
-typedef struct {
-    ThreadArgsT args;
-    ThinkContextT *th;
-} CompArgsT;
-
-
-static void *compThread(CompArgsT *args)
+static void compThread(ThinkContextT *th)
 {
-    CompArgsT myArgs = *args; // struct copy
-    ThreadNotifyCreated("compThread", (ThreadArgsT *) args);
     eThinkMsgT cmd;
-    gThinker = myArgs.th;
+    gThinker = th;
 
-    while(1)
+    while (1)
     {
         /* wait for a think- or ponder-command to come in. */
-        cmd = ThinkerCompWaitThinkOrPonder(myArgs.th);
+        cmd = ThinkerCompWaitThinkOrPonder(th);
         /* Think on it, and recommend either: a move, draw, or resign. */
-        computermove(myArgs.th, cmd == eCmdPonder);
+        computermove(th, cmd == eCmdPonder);
     }
-    return NULL; // never get here.
 }
 
 int CompCurrentLevel(void)
@@ -968,11 +953,10 @@ int CompCurrentLevel(void)
 
 void CompThreadInit(ThinkContextT *th)
 {
-    CompArgsT args = {gThreadDummyArgs, th};
-
     // initialize main compThread.
-    ThreadCreate((THREAD_FUNC) compThread, (ThreadArgsT *) &args);
-
+    std::thread *mainCompThread = new std::thread(compThread, th);
+    mainCompThread->detach();
+    
     // initialize searcher threads.
-    ThinkerSearchersCreate(gPreCalc.numProcs, (THREAD_FUNC) searcherThread);
+    ThinkerSearchersCreate(gPreCalc.numProcs, searcherThread);
 }

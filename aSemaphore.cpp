@@ -47,7 +47,7 @@ void Semaphore::post()
 {
     std::unique_lock<std::mutex> lock(mutex);
 
-    if (++count <= -1)
+    if (++count <= 0)
         cv.notify_one();
 }
 
