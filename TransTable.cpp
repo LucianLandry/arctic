@@ -25,6 +25,8 @@
 #include "TransTable.h"
 #include "uiUtil.h"
 
+using arctic::Spinlock;
+
 TransTable gTransTable; // Global transposition table instantiation.
 
 #ifdef ENABLE_DEBUG_LOGGING
@@ -166,9 +168,7 @@ void TransTable::prepCalcEntry()
 // Initialize the global transposition table to size 'size'.
 TransTable::TransTable()
 {
-    for (auto &lock : locks)
-        SpinlockInit(&lock);
-
+    // 'locks' should already be initialized.
     size = 0;
     nextSize = DefaultSize();
     prepCalcEntry();
@@ -276,12 +276,12 @@ bool TransTable::hitTest(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
     HashPositionT &vHp = hash[entry];
     int8 hashDepth;
 
-    SpinlockT &lock = locks[entry & (kNumHashLocks - 1)];
-    SpinlockLock(&lock);
+    Spinlock &lock = locks[entry & (kNumHashLocks - 1)];
+    lock.lock();
 
     if (!entryMatches(vHp, zobrist, alpha, beta, searchDepth))
     {
-        SpinlockUnlock(&lock);
+        lock.unlock();
         return false;
     }
 
@@ -301,7 +301,7 @@ bool TransTable::hitTest(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
     *hashEval = vHp.eval;
     *hashMove = vHp.move;
 
-    SpinlockUnlock(&lock);
+    lock.unlock();
 
 #ifdef ENABLE_DEBUG_LOGGING
     char tmpStr[MOVE_STRING_MAX];
@@ -356,8 +356,8 @@ void TransTable::ConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
         // -- it is not blanked for a newgame
         // -- the hash entry might have been overwritten in the meantime
         // (by another thread, or at a different ply).
-        SpinlockT &lock = locks[entry & (kNumHashLocks - 1)];
-        SpinlockLock(&lock);
+        Spinlock &lock = locks[entry & (kNumHashLocks - 1)];
+        lock.lock();
 
         vHp.zobrist = zobrist;
         vHp.eval = eval;
@@ -371,7 +371,7 @@ void TransTable::ConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
 
         vHp.depth = searchDepth;
 
-        SpinlockUnlock(&lock);
+        lock.unlock();
 
 #ifdef ENABLE_DEBUG_LOGGING
         char tmpStr[MOVE_STRING_MAX];

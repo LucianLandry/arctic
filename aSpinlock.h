@@ -16,52 +16,42 @@
 //
 //--------------------------------------------------------------------------
 
-// This is meant to be a platform-agnostic simple spinlock interface.
-// Other platforms could be added here as required.  We could also
-// implement fallbacks on platforms that lack spinlock primitives.
+// This bundles up C++11's low-level spinlock functionality as a (slightly)
+//  more accessible class.  For details on implementation, see (for example):
+// http://en.cppreference.com/w/cpp/atomic/atomic_flag
+//
+// Since I suspect this might become standardized in the future (and for use
+//  with std::lock_guard), the public member functions are named 'lock()' and
+//  'unlock()'.
 
 #ifndef ASPINLOCK_H
 #define ASPINLOCK_H
 
-#include <pthread.h>
+#include <atomic>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace arctic
+{
 
-#if 1 // True spinlock implementation.
-typedef pthread_spinlock_t SpinlockT;
-static inline int SpinlockInit(SpinlockT *lock)
+class Spinlock
 {
-    return pthread_spin_init(lock, 0);
-}
-static inline void SpinlockLock(SpinlockT *lock)
+public:
+    void lock();
+    void unlock();
+private:
+    std::atomic_flag flag = ATOMIC_FLAG_INIT;
+};
+
+inline void Spinlock::lock()
 {
-    pthread_spin_lock(lock);
-}
-static inline void SpinlockUnlock(SpinlockT *lock)
-{
-    pthread_spin_unlock(lock);
+    while (flag.test_and_set(std::memory_order_acquire))
+        ;
 }
 
-#else // Mutex implementation.  For comparative/testing purposes only.
-typedef pthread_mutex_t SpinlockT;
-static inline int SpinlockInit(SpinlockT *lock)
+inline void Spinlock::unlock()
 {
-    return pthread_mutex_init(lock, NULL);
+    flag.clear(std::memory_order_release);
 }
-static inline void SpinlockLock(SpinlockT *lock)
-{
-    pthread_mutex_lock(lock);
-}
-static inline void SpinlockUnlock(SpinlockT *lock)
-{
-    pthread_mutex_unlock(lock);
-}
-#endif
 
-#ifdef __cplusplus
-}
-#endif
+} // end namespace 'arctic'
 
 #endif // ASPINLOCK_H

@@ -85,7 +85,7 @@ private:
     static_assert(sizeof(HashPositionT) == 24, "HashPositionT is broken");
     
     static const int kNumHashLocks = 1024;
-    SpinlockT locks[kNumHashLocks];
+    arctic::Spinlock locks[kNumHashLocks];
 
     // The below entries are size_t because it does not make sense to try to
     //  force a 64-bit size on a 32-bit platform.  (realloc() would fail)  I
