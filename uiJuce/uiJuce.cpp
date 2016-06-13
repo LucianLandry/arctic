@@ -39,7 +39,7 @@ static void juceInit(GameT *game)
     exit(0);
 }
 
-static void jucePlayerMove(ThinkContextT *th, GameT *game)
+static void jucePlayerMove(Thinker *th, GameT *game)
 {
 }
 
@@ -67,7 +67,7 @@ static void juceNotifyError(char *reason)
 {
 }
 
-static void juceNotifyPV(GameT *game, PvRspArgsT *pvArgs)
+static void juceNotifyPV(GameT *game, RspPvArgsT *pvArgs)
 {
 }
 

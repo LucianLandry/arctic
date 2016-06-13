@@ -20,7 +20,7 @@
 #include "aTypes.h"
 #include "Board.h"
 #include "game.h"
-#include "thinker.h"
+#include "Thinker.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,14 +28,14 @@ extern "C" {
 
 typedef struct {
     void (*init)(GameT *game);
-    void (*playerMove)(ThinkContextT *th, GameT *game);
+    void (*playerMove)(Thinker *th, GameT *game);
     void (*positionRefresh)(const Position &position);
     void (*exit)(void);
     void (*statusDraw)(GameT *game);
     void (*notifyTick)(GameT *game);
     void (*notifyMove)(MoveT move);
     void (*notifyError)(char *reason);
-    void (*notifyPV)(GameT *game, PvRspArgsT *pvArgs);
+    void (*notifyPV)(GameT *game, RspPvArgsT *pvArgs);
     void (*notifyThinking)(void);
     void (*notifyPonder)(void);
     void (*notifyReady)(void);

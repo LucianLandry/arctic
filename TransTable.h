@@ -17,6 +17,8 @@
 #ifndef TRANSTABLE_H
 #define TRANSTABLE_H
 
+#include <vector>
+
 #include "aSpinlock.h"
 #include "aTypes.h"
 #include "Eval.h"

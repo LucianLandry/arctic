@@ -323,11 +323,11 @@ int fenToBoard(const char *fenString, Board *result)
 
 
 // Stop everything (including clocks) and wait for further input, basically.
-void setForceMode(ThinkContextT *th, GameT *game)
+void setForceMode(Thinker *th, GameT *game)
 {
     int i;
 
-    ThinkerCmdBail(th);
+    th->CmdBail();
     ClocksStop(game);
     for (i = 0; i < NUM_PLAYERS; i++)
     {
@@ -569,7 +569,7 @@ char *getStdinLine(int maxLen, SwitcherContextT *sw)
     return buf;
 }
 
-static void uiThread(ThinkContextT *th, GameT *game, Semaphore *readySem)
+static void uiThread(Thinker *th, GameT *game, Semaphore *readySem)
 {
     gUI->init(game);
 
@@ -581,7 +581,7 @@ static void uiThread(ThinkContextT *th, GameT *game, Semaphore *readySem)
         gUI->playerMove(th, game);
 }
 
-void uiThreadInit(ThinkContextT *th, GameT *game, Semaphore *readySem)
+void uiThreadInit(Thinker *th, GameT *game, Semaphore *readySem)
 {
     std::thread *mainUiThread = new std::thread(uiThread, th, game, readySem);
     mainUiThread->detach();

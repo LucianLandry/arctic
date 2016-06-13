@@ -20,7 +20,6 @@
 #include "aSpinlock.h"
 #include "aSystem.h"
 #include "aTypes.h"
-#include "comp.h"
 #include "log.h"
 #include "TransTable.h"
 #include "uiUtil.h"

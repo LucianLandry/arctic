@@ -18,16 +18,16 @@
 #define PLAYLOOP_H
 
 #include "game.h"
-#include "thinker.h"
+#include "Thinker.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // Synchronous move-now support.
-void PlayloopCompMoveNowAndSync(GameT *game, ThinkContextT *th);
+void PlayloopCompMoveNowAndSync(GameT *game, Thinker *th);
 // Main play loop.
-void PlayloopRun(GameT *game, ThinkContextT *th);
+void PlayloopRun(GameT *game, Thinker *th);
 
 #ifdef __cplusplus
 }

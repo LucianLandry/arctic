@@ -28,28 +28,30 @@
 
 // Helper function.
 // Assume a change in thinking is necessary.
-static void compRefresh(GameT *game, ThinkContextT *th)
+static void compRefresh(GameT *game, Thinker *th)
 {
     uint8 turn = game->savedBoard.Turn(); // shorthand
 
     // Stop anything going on.
     // ThinkerCmd(Think,Ponder) do this for us, but I guess this lets us
     // GoaltimeCalc() and gUI->notify(Thinking,Ponder) faster :P
-    ThinkerCmdBail(th);
+    th->CmdBail();
     
     if (!game->bDone && game->control[turn])
     {
         // Computer needs to make next move; let it do so.
         GoaltimeCalc(game);
         gUI->notifyThinking();
-        ThinkerCmdThink(th, &game->savedBoard);
+        th->CmdSetBoard(game->savedBoard);
+        th->CmdThink();
     }
     else if (!game->bDone && game->control[turn ^ 1] && gVars.ponder)
     {
         // Computer is playing other side (only) and is allowed to ponder.
         // Do so.
         gUI->notifyPonder();
-        ThinkerCmdPonder(th, &game->savedBoard);
+        th->CmdSetBoard(game->savedBoard);
+        th->CmdPonder();
     }
     else
     {
@@ -83,12 +85,12 @@ void GameInit(GameT *game)
 
 
 // Handle a change in computer control or pondering.
-void GameCompRefresh(GameT *game, ThinkContextT *th)
+void GameCompRefresh(GameT *game, Thinker *th)
 {
     uint8 turn = game->savedBoard.Turn(); // shorthand
 
-    if ((!game->bDone && ThinkerCompIsThinking(th) && game->control[turn]) ||
-        (!game->bDone && ThinkerCompIsPondering(th) && gVars.ponder &&
+    if ((!game->bDone && th->CompIsThinking() && game->control[turn]) ||
+        (!game->bDone && th->CompIsPondering() && gVars.ponder &&
          !game->control[turn] && game->control[turn ^ 1]))
     {
         // No change in thinking necessary.  Do not restart think cycle.
@@ -138,7 +140,7 @@ void GameMoveMake(GameT *game, MoveT *move)
 }
 
 
-void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
+void GameMoveCommit(GameT *game, MoveT *move, Thinker *th,
                     int declaredDraw)
 {
     MoveList mvlist;
@@ -200,7 +202,7 @@ void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
 }
 
 
-void GameNewEx(GameT *game, ThinkContextT *th, Board *board, bool resetClocks,
+void GameNewEx(GameT *game, Thinker *th, Board *board, bool resetClocks,
                bool resetHash)
 {
     assert(board->Position().IsLegal());
@@ -226,14 +228,14 @@ void GameNewEx(GameT *game, ThinkContextT *th, Board *board, bool resetClocks,
 }
 
 
-void GameNew(GameT *game, ThinkContextT *th)
+void GameNew(GameT *game, Thinker *th)
 {
     Board myBoard;
     GameNewEx(game, th, &myBoard, true, true);
 }
 
 
-int GameGotoPly(GameT *game, int ply, ThinkContextT *th)
+int GameGotoPly(GameT *game, int ply, Thinker *th)
 {
     int plyDiff = ply - GameCurrentPly(game);
 
@@ -242,7 +244,7 @@ int GameGotoPly(GameT *game, int ply, ThinkContextT *th)
         return -1;
     }
 
-    ThinkerCmdBail(th);
+    th->CmdBail();
     gVars.pv.FastForward(plyDiff);
 
     // We could gTransTable.Reset()/gHistInit() here, but if the user tracks
@@ -252,12 +254,12 @@ int GameGotoPly(GameT *game, int ply, ThinkContextT *th)
     return 0;
 }
 
-int GameRewind(GameT *game, int numPlies, ThinkContextT *th)
+int GameRewind(GameT *game, int numPlies, Thinker *th)
 {
     return GameGotoPly(game, GameCurrentPly(game) - numPlies, th);
 }
 
-int GameFastForward(GameT *game, int numPlies, ThinkContextT *th)
+int GameFastForward(GameT *game, int numPlies, Thinker *th)
 {
     return GameGotoPly(game, GameCurrentPly(game) + numPlies, th);
 }

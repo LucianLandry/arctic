@@ -27,18 +27,18 @@
 #include "ui.h"
 
 
-static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
+static eThinkMsgT PlayloopCompProcessRsp(GameT *game, Thinker *th)
 {
     // For this to work, 'stats', 'pvArgs', and 'move' must be trivially
     //  copyable.
-    alignas(sizeof(void *)) char rspBuf[MAX3(sizeof(ThinkerStatsT), sizeof(PvRspArgsT), sizeof(MoveT))];
+    alignas(sizeof(void *)) char rspBuf[MAX3(sizeof(ThinkerStatsT), sizeof(RspPvArgsT), sizeof(MoveT))];
     ThinkerStatsT *stats = (ThinkerStatsT *)rspBuf;
-    PvRspArgsT *pvArgs = (PvRspArgsT *)rspBuf;
+    RspPvArgsT *pvArgs = (RspPvArgsT *)rspBuf;
     MoveT *move = (MoveT *)rspBuf;
 
     int turn;
     Board *board = &game->savedBoard; // shorthand.
-    eThinkMsgT rsp = ThinkerRecvRsp(th, &rspBuf, sizeof(rspBuf));
+    eThinkMsgT rsp = th->RecvRsp(&rspBuf, sizeof(rspBuf));
 
     if (!gVars.ponder && !game->control[board->Turn()])
     {
@@ -125,17 +125,17 @@ static eThinkMsgT PlayloopCompProcessRsp(GameT *game, ThinkContextT *th)
 }
 
 
-void PlayloopCompMoveNowAndSync(GameT *game, ThinkContextT *th)
+void PlayloopCompMoveNowAndSync(GameT *game, Thinker *th)
 {
     eThinkMsgT rsp;
-    if (!ThinkerCompIsBusy(th))
+    if (!th->CompIsBusy())
     {
         return;
     }
 
     // At this point, even if the computer moved in the meantime, we
     // know we haven't processed its response yet ...
-    ThinkerCmdMoveNow(th);
+    th->CmdMoveNow();
 
     do
     {
@@ -147,7 +147,7 @@ void PlayloopCompMoveNowAndSync(GameT *game, ThinkContextT *th)
 
 
 // Main play loop.
-void PlayloopRun(GameT *game, ThinkContextT *th)
+void PlayloopRun(GameT *game, Thinker *th)
 {
     struct pollfd pfds[2];
     int res;
@@ -160,7 +160,7 @@ void PlayloopRun(GameT *game, ThinkContextT *th)
     // Setup the pollfd array.
     pfds[0].fd = fileno(stdin);
     pfds[0].events = POLLIN;
-    pfds[1].fd = th->masterSock;
+    pfds[1].fd = th->MasterSock();
     pfds[1].events = POLLIN;
 
     while (1)
@@ -224,7 +224,7 @@ void PlayloopRun(GameT *game, ThinkContextT *th)
             {
                 // So we do not trigger again
                 game->goalTime[turn] = CLOCK_TIME_INFINITE;
-                ThinkerCmdMoveNow(th);
+                th->CmdMoveNow();
             }
             else
             {

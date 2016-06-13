@@ -234,7 +234,7 @@ void processUciCommand(void)
 // started to diverge from the game proper.
 // 'move', if !NULL, was the move that diverged.  Otherwise, the original
 // position changed and we should probably blow away everything.
-static void finishMoves(GameT *game, Board *fenBoard, MoveT *move, char *pToken, ThinkContextT *th)
+static void finishMoves(GameT *game, Board *fenBoard, MoveT *move, char *pToken, Thinker *th)
 {
     int lastPly, lastCommonPly;
     MoveT myMove;
@@ -298,7 +298,7 @@ static void finishMoves(GameT *game, Board *fenBoard, MoveT *move, char *pToken,
     }
 }
 
-static void processPositionCommand(ThinkContextT *th, GameT *game, char *pToken)
+static void processPositionCommand(Thinker *th, GameT *game, char *pToken)
 {
     Board fenBoard;
     bool bFen;
@@ -488,7 +488,7 @@ static void processSetOptionCommand(char *inputStr)
     }
 }
 
-static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
+static void processGoCommand(Thinker *th, GameT *game, char *pToken)
 {
     MoveT myMove;
     Board *board = &game->savedBoard; // shorthand.
@@ -721,14 +721,16 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
         gVars.ponder = true;
         game->control[board->Turn() ^ 1] = 1;
         game->clocks[board->Turn() ^ 1]->Start();
-        ThinkerCmdPonderEx(th, board, &searchList);
+        th->CmdSetBoard(*board);
+        th->CmdPonder(searchList);
     }
     else
     {
         game->control[board->Turn()] = 1;
         game->clocks[board->Turn()]->Start();
         GoaltimeCalc(game);
-        ThinkerCmdThinkEx(th, board, &searchList);
+        th->CmdSetBoard(*board);
+        th->CmdThink(searchList);
     }
 
     gUciState.bSearching = true;
@@ -740,7 +742,7 @@ static void processGoCommand(ThinkContextT *th, GameT *game, char *pToken)
 // One possibility if we set a bad position or otherwise get into a bad
 // state is to just let the computer play null moves until a good position
 // is set.
-static void uciPlayerMove(ThinkContextT *th, GameT *game)
+static void uciPlayerMove(Thinker *th, GameT *game)
 {
     char *inputStr;
     Board *board = &game->savedBoard; // shorthand.
@@ -811,7 +813,7 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
     }
     else if (matches(inputStr, "ponderhit") && gUciState.bPonder)
     {
-        ThinkerCmdBail(th);
+        th->CmdBail();
         // We preserve the rest of our state (bInfinite, mate, etc)
         gUciState.bPonder = false;
         // GameFastForward(game, 1, th) does not work here, since the clock
@@ -822,7 +824,8 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
         }
         game->clocks[board->Turn()]->Start();
         GoaltimeCalc(game);
-        ThinkerCmdThinkEx(th, board, &gUciState.searchList);
+        th->CmdSetBoard(*board);
+        th->CmdThink(gUciState.searchList);
     }
     else if (matches(inputStr, "stop") && gUciState.bSearching)
     {
@@ -834,7 +837,7 @@ static void uciPlayerMove(ThinkContextT *th, GameT *game)
     }
     else if (matches(inputStr, "quit"))
     {
-        ThinkerCmdBail(th);
+        th->CmdBail();
         exit(0);
     }
 
@@ -925,7 +928,7 @@ static bool chopFirstMove(char *moveString)
     return false;
 }
 
-static void uciNotifyPV(GameT *game, PvRspArgsT *pvArgs)
+static void uciNotifyPV(GameT *game, RspPvArgsT *pvArgs)
 {
     char lanString[65];
     char evalString[20];

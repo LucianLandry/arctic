@@ -24,7 +24,7 @@
 #include "Piece.h"
 #include "ref.h"       // Rank(), File()
 #include "switcher.h"
-#include "thinker.h"
+#include "Thinker.h"
 
 // Piece conversion routines.
 Piece asciiToNative(char ascii);
@@ -61,7 +61,7 @@ int reportError(bool silent, const char *errorFormatStr, ...)
     __attribute__ ((format (printf, 2, 3)));
 
 // Stop everything (including clocks) and wait for further input, basically.
-void setForceMode(ThinkContextT *th, GameT *game);
+void setForceMode(Thinker *th, GameT *game);
 
 // Token support routines.
 char *findNextNonWhiteSpace(char *pStr);
@@ -92,6 +92,6 @@ char *getStdinLine(int maxLen, SwitcherContextT *sw);
 // convenience.
 char *ChopBeforeNewLine(char *s);
 
-void uiThreadInit(ThinkContextT *th, GameT *game, arctic::Semaphore *readySem);
+void uiThreadInit(Thinker *th, GameT *game, arctic::Semaphore *readySem);
 
 #endif // UIUTIL_H

@@ -25,7 +25,6 @@
 
 #include "Clock.h"
 #include "clockUtil.h"
-#include "comp.h" // CompCurrentLevel()
 #include "conio.h"
 #include "gDynamic.h"
 #include "gPreCalc.h"
@@ -167,7 +166,7 @@ static void UIStatusDraw(GameT *game)
 
 
 // prints out expected move sequence at the bottom of the screen.
-static void UINotifyPV(GameT *game, PvRspArgsT *pvArgs)
+static void UINotifyPV(GameT *game, RspPvArgsT *pvArgs)
 {
     char spaces[80];
     char mySanString[79 - 18];
@@ -1044,7 +1043,7 @@ static void UIInit(GameT *game)
 }
 
 // This function intended to get player input and adjust variables accordingly.
-static void UIPlayerMove(ThinkContextT *th, GameT *game)
+static void UIPlayerMove(Thinker *th, GameT *game)
 {
     MoveT *foundMove;
     uint8 chr;
@@ -1062,37 +1061,38 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     
     switch(comstr[0])
     {
-        case 'Q':    /* bail */
-            ThinkerCmdBail(th);
+        case 'Q':    // bail
+            th->CmdBail();
             UIExit();
             printf("bye.\n");
             exit(0);
             break;
-        case 'N':     /* new game */
+        case 'N':     // new game
             gVars.gameCount++;
-            ThinkerCmdBail(th);
+            th->CmdBail();
             GameNew(game, th);
             return;
-        case 'L':     /* switch computer level */
+        case 'L':     // switch computer level
             do
             {
                 UIBarfString(myStr, 3, "0123456789", "Set level to? >");
             } while (sscanf(myStr, "%d", &myLevel) < 1);
 
-            if (CompCurrentLevel() > (gVars.maxLevel = myLevel))
-            {
-                ThinkerCmdMoveNow(th);
-            }
+            if (th->Context().maxDepth > (gVars.maxLevel = myLevel))
+                th->CmdMoveNow();
+
             UIOptionsDraw(game);
             return;
-        case 'H':     /* change history window */
+        case 'H':     // change history window
             while ((myHiswin = UIBarf("Set to x moves (0-9)? >") - '0') < 0 ||
                    myHiswin > 9)
-                ;   /* do nothing */
-            gVars.hiswin = myHiswin << 1;   /* convert moves to plies. */
+            {
+                ; // noop
+            }
+            gVars.hiswin = myHiswin << 1;   // convert moves to plies.
             UIOptionsDraw(game);
             return;
-        case 'W':     /* toggle computer control */
+        case 'W':     // toggle computer control
         case 'B':
             player = (comstr[0] == 'B');
             game->control[player] ^= 1;
@@ -1107,16 +1107,16 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
             UIOptionsDraw(game);
             return;
         case 'M':
-            ThinkerCmdMoveNow(th);
+            th->CmdMoveNow();
             return;
-        case 'C':     /* change w/b colors */
+        case 'C':     // change w/b colors
             UIPlayerColorChange();
             UIPositionRefresh(board->Position());
             return;
-        case 'F':     /* flip board. */
+        case 'F':     // flip board.
             UIBoardFlip(board);
             return;
-        case 'D':     /* change debug logging level. */
+        case 'D':     // change debug logging level.
             UISetDebugLoggingLevel();
             return;
         case 'S':
@@ -1131,7 +1131,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
             }
             else
             {
-                ThinkerCmdBail(th);
+                th->CmdBail();
                 UIBarf("Game restore succeeded.");
                 gTransTable.Reset();
                 gHistInit();
@@ -1155,7 +1155,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
             return;
         case 'E':
         {
-            ThinkerCmdBail(th);
+            th->CmdBail();
             ClocksStop(game);
 
             Position position = board->Position();
@@ -1173,14 +1173,14 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
             GameNewEx(game, th, board, false, true);
             return;
         }
-        case 'A': /* toggle randomize moves. */
+        case 'A': // toggle randomization of moves.
             gVars.randomMoves = !gVars.randomMoves;
             UIOptionsDraw(game);
             return;
         case 'T':
             // I'm pretty sure I want the computer to stop thinking, if I'm
             //  swiping the time out from under it.
-            ThinkerCmdBail(th);
+            th->CmdBail();
             ClocksStop(game);
             UITimeMenu(game);
             UIOptionsDraw(game);
@@ -1220,7 +1220,7 @@ static void UIPlayerMove(ThinkContextT *th, GameT *game)
     }
 
     // At this point, we must have a valid move.
-    ThinkerCmdBail(th);
+    th->CmdBail();
 
     // Do we need to promote?
     if (foundMove->IsPromote())

@@ -33,7 +33,6 @@
 #include <string.h>
 
 #include "clockUtil.h"
-#include "comp.h"      // CompCurrentLevel()
 #include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
@@ -182,7 +181,7 @@ void processXboardCommand(void)
 
 // This runs as a coroutine with the main thread, and can switch off to it
 // at any time.  If it simply exits, it will immediately be called again.
-static void xboardPlayerMove(ThinkContextT *th, GameT *game)
+static void xboardPlayerMove(Thinker *th, GameT *game)
 {
     char *inputStr;
     int protoVersion, myLevel, turn;
@@ -287,7 +286,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 
     else if (matches(inputStr, "quit"))
     {
-        ThinkerCmdBail(th);
+        th->CmdBail();
         exit(0);
     }
 
@@ -379,7 +378,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
         // depth 5000, okay ...
         if (myLevel > 0)
         {
-            if (CompCurrentLevel() > (gVars.maxLevel = myLevel - 1))
+            if (th->Context().maxDepth > (gVars.maxLevel = myLevel - 1))
             {
                 PlayloopCompMoveNowAndSync(game, th);
             }
@@ -420,7 +419,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
         // xboard docs say we should never get 'ping' while moving...
         // "however, if you do..." so here we just force any outstanding
         // move (not including pondering) to be completed before we return.
-        if (ThinkerCompIsThinking(th))
+        if (th->CompIsThinking())
         {
             PlayloopCompMoveNowAndSync(game, th);
         }
@@ -430,14 +429,14 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
 
     else if (matches(inputStr, "result"))
     {
-        /* We don't care if we won, lost, or drew.  Just stop thinking. */
-        ThinkerCmdBail(th);
+        // We don't care if we won, lost, or drew.  Just stop thinking.
+        th->CmdBail();
     }
 
     else if (matches(inputStr, "setboard"))
     {
         gXboardState.badPosition = false; // hope for the best.
-        ThinkerCmdBail(th);
+        th->CmdBail();
 
         if (fenToBoard(inputStr + strlen("setboard "), &tmpBoard) < 0)
         {
@@ -455,7 +454,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
     else if (matches(inputStr, "edit"))
     {
         gXboardState.badPosition = false; // hope for the best.
-        ThinkerCmdBail(th);
+        th->CmdBail();
 
         Position tmpPosition = board->Position();
         std::string errString;
@@ -545,7 +544,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
         {
             printf("Error (unimplemented command): %s", inputStr);
         }
-        else if (ThinkerCompIsThinking(th))
+        else if (th->CompIsThinking())
         {
             printf("Error (command received while thinking): %s", inputStr);
         }
@@ -576,7 +575,8 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
         ENGINE_CLOCK->Start();
         // ClocksPrint(game, "go");
         GoaltimeCalc(game);
-        ThinkerCmdThink(th, board);
+        th->CmdSetBoard(*board);
+        th->CmdThink();
     }
 
     else if (isMove(inputStr, &myMove, board))
@@ -588,7 +588,7 @@ static void xboardPlayerMove(ThinkContextT *th, GameT *game)
         }
 
         // At this point, we must have a valid move.
-        ThinkerCmdBail(th);
+        th->CmdBail();
 
         gXboardState.newgame = false;
         gVars.ponder = gXboardState.ponder;
@@ -654,7 +654,7 @@ static void xboardNotifyCheckmated(int turn)
 }
 
 
-static void xboardNotifyPV(GameT *game, PvRspArgsT *pvArgs)
+static void xboardNotifyPV(GameT *game, RspPvArgsT *pvArgs)
 {
     char mySanString[65];
     const DisplayPv &pv = pvArgs->pv; // shorthand

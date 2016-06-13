@@ -18,7 +18,6 @@
 #include <stdlib.h> // exit(3)
 #include <assert.h>
 
-#include "comp.h"
 #include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"

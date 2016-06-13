@@ -20,13 +20,12 @@
 #include <thread>
 
 #include "Board.h"
-#include "comp.h"
 #include "Eval.h"
 #include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
 #include "ref.h"
-#include "thinker.h"
+#include "Thinker.h"
 #include "TransTable.h"
 #include "uiUtil.h"
 
@@ -79,26 +78,24 @@
 
 
 // Globals.
-// FIXME 'gThinker' should maybe not be a global ...
-// but I'm trying to avoid passing around extra args to updatePv().
-static ThinkContextT *gThinker;
-// same argument for gStats, but it affects minimax() and trymove() as well!
+// FIXME 'gStats' should maybe not be a global ...
+// but I'm trying to avoid passing extra args to updatePv(), minimax(), and trymove().
 static ThinkerStatsT gStats;
 
 #define HASH_MISS 1
 #define HASH_HIT 0
 
 // Forward declarations.
-static Eval minimax(Board *board, int alpha, int beta,
-                    SearchPv *goodPv, ThinkContextT *th, int *hashHitOnly);
+static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
+                    int *hashHitOnly);
 
 // Assumes neither side has any pawns.
-static int endGameEval(Board *board, int turn)
+static int endGameEval(const Board &board, int turn)
 {
     cell_t ekcoord =
-        board->PieceCoords(Piece(turn ^ 1, PieceType::King))[0];
+        board.PieceCoords(Piece(turn ^ 1, PieceType::King))[0];
     cell_t kcoord =
-        board->PieceCoords(Piece(turn, PieceType::King))[0];
+        board.PieceCoords(Piece(turn, PieceType::King))[0];
 
     return
         // enemy king needs to be as close to a corner as possible.
@@ -119,28 +116,28 @@ static int endGameEval(Board *board, int turn)
 // 'lowBound' and 'highBound' are the possible limits of the best 'move' found
 // so far.
 
-static void notifyNewPv(const SearchPv &goodPv, Eval eval)
+static void notifyNewPv(Thinker *th, const SearchPv &goodPv, Eval eval)
 {
     // Searching at root level, so let user know the updated line.
-    PvRspArgsT pvArgs;
-    pvArgs.stats = gStats;
-    pvArgs.pv.Set(gThinker->maxDepth, eval, goodPv);
-    ThinkerRspNotifyPv(gThinker, &pvArgs);
+    DisplayPv pv;
+    pv.Set(th->Context().maxDepth, eval, goodPv);
+    th->RspNotifyPv(gStats, pv);
 
     // Update the tracked principal variation.
-    gVars.pv.Update(pvArgs.pv);
+    gVars.pv.Update(pv);
 }
 
-static Eval tryMove(Board *board, MoveT move,
-                    int alpha, int beta, SearchPv *newPv,
-                    ThinkContextT *th, int *hashHitOnly)
+static Eval tryMove(Thinker *th, MoveT move, int alpha, int beta,
+                    SearchPv *newPv, int *hashHitOnly)
 {
     Eval myEval;
+    int &curDepth = th->Context().depth;
+    Board &board = th->Context().board;
+    
+    LOGMOVE_DEBUG(&board, move, curDepth);
+    board.MakeMove(move); // switches sides
 
-    LOGMOVE_DEBUG(board, move, th->depth);
-    board->MakeMove(move); // switches sides
-
-    th->depth++;
+    curDepth++;
 
     // massage alpha/beta for mate detection so that we can "un-massage" the
     // returned bounds later w/out violating our alpha/beta.
@@ -168,12 +165,12 @@ static Eval tryMove(Board *board, MoveT move,
         beta--;
     }
 
-    myEval = minimax(board, -beta, -alpha, newPv, th, hashHitOnly).Invert();
+    myEval = minimax(th, -beta, -alpha, newPv, hashHitOnly).Invert();
 
-    th->depth--;
+    curDepth--;
 
     // restore the current board position.
-    board->UnmakeMove();
+    board.UnmakeMove();
 
     // Enable calculation of plies to win/loss by tweaking the eval.
     // Slightly hacky.
@@ -264,10 +261,8 @@ static int potentialImprovement(const Board &board)
 // Returns the evaluation of the found move
 // (if no move found, 'cookie' is set to -1).
 // Side effect: removes the move from the list.
-static Eval tryNextHashMove(Board *board, int alpha, int beta,
-                            SearchPv *newPv, ThinkContextT *th,
-                            MoveList *mvlist, int *cookie,
-                            MoveT *hashMove)
+static Eval tryNextHashMove(Thinker *th, int alpha, int beta, SearchPv *newPv,
+                            MoveList *mvlist, int *cookie, MoveT *hashMove)
 {
     Eval myEval(EvalLoss);
     int hashHitOnly = HASH_MISS;
@@ -279,8 +274,7 @@ static Eval tryNextHashMove(Board *board, int alpha, int beta,
         move = mvlist->Moves(i);
 
         hashHitOnly = HASH_HIT; // assume the best case
-        myEval = tryMove(board, move,
-                         alpha, beta, newPv, th, &hashHitOnly);
+        myEval = tryMove(th, move, alpha, beta, newPv, &hashHitOnly);
         if (hashHitOnly == HASH_HIT)
             break;
     }
@@ -316,14 +310,9 @@ static int biasDraw(int strgh, int depth)
         1;
 }
 
-// Note: a simple lock/unlock of the hashLock is good for about a 6% slowdown
-// ... even using spinlocks.  It could be advantageous to check for
-// SMP before actually doing it.  But that has a measurable slowdown of its own,
-// so we optimize for the multithread case.
-
 // Evaluates a given board position from {board->turn}'s point of view.
-static Eval minimax(Board *board, int alpha, int beta,
-                    SearchPv *goodPv, ThinkContextT *th, int *hashHitOnly)
+static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
+                    int *hashHitOnly)
 {
     // Trying to order the declared variables by their struct size, to
     // increase cache hits, does not work.  Trying instead by functionality.
@@ -339,9 +328,11 @@ static Eval minimax(Board *board, int alpha, int beta,
     int preEval, improvement, i, secondBestVal;
     int cookie;
     Eval myEval;
-    uint16 basePly = board->Ply() - th->depth;
-    int strgh = board->RelativeMaterialStrength();
-    int searchDepth = th->maxDepth - th->depth;
+    Board &board = th->Context().board;
+    int &curDepth = th->Context().depth;
+    int searchDepth = th->Context().maxDepth - curDepth;
+    uint16 basePly = board.Ply() - curDepth;
+    int strgh = board.RelativeMaterialStrength();
 #define QUIESCING (searchDepth < 0)
 
     // I'm trying to use lazy initialization for this function.
@@ -352,20 +343,20 @@ static Eval minimax(Board *board, int alpha, int beta,
     }
     goodPv->Clear();
 
-    if (board->IsDrawInsufficientMaterial() ||
-        board->IsDrawFiftyMove() ||
-        board->IsDrawThreefoldRepetitionFast())
+    if (board.IsDrawInsufficientMaterial() ||
+        board.IsDrawFiftyMove() ||
+        board.IsDrawThreefoldRepetitionFast())
     {
         // Draw detected.
         // Skew the eval a bit: If we have equal or better material, try not to
         // draw.  Otherwise, try to draw.
-        return Eval(biasDraw(strgh, th->depth));
+        return Eval(biasDraw(strgh, curDepth));
     }
 
-    bool inCheck = board->IsInCheck();
-    uint8 turn   = board->Turn();
+    bool inCheck = board.IsInCheck();
+    uint8 turn   = board.Turn();
     
-    if (board->RepeatPly() != -1)
+    if (board.RepeatPly() != -1)
     {
         // Detected repeated position.  Fudge things a bit and (again) try to
         // avoid this situation when we are winning or even.  This also may
@@ -376,7 +367,7 @@ static Eval minimax(Board *board, int alpha, int beta,
         // cuts down on the search tree, but this screws up the eval of losing
         // positions -- thanks to back-propagation, we could mistakenly
         // prefer the position over a move that won or kept material.
-        improvement = -biasDraw(strgh, th->depth);
+        improvement = -biasDraw(strgh, curDepth);
         strgh -= improvement;
     }
     else
@@ -390,8 +381,8 @@ static Eval minimax(Board *board, int alpha, int beta,
         // possible if opponent only has king (unless we have pawns), so movgen
         // is not needed.  Also, (currently) don't bother with hashing since
         // usually ncpPlies will be too high.
-        if (board->MaterialStrength(turn ^ 1) == 0 &&
-            !board->PieceExists(Piece(turn, PieceType::Pawn)))
+        if (board.MaterialStrength(turn ^ 1) == 0 &&
+            !board.PieceExists(Piece(turn, PieceType::Pawn)))
         {
             return Eval(strgh + endGameEval(board, turn)); // (oh good.)
         }
@@ -415,19 +406,19 @@ static Eval minimax(Board *board, int alpha, int beta,
        handle check in quiesce, but I think that is not worth the computational
        cost of detecting. */
     mightDraw =
-        board->RepeatPly() == -1 ? // no repeats upto this position ?
-        (searchDepth >= MAX(5, 7 - board->NcpPlies())) :
+        board.RepeatPly() == -1 ? // no repeats upto this position ?
+        (searchDepth >= MAX(5, 7 - board.NcpPlies())) :
         // (7 - ncpPlies below would work, but this should be better:)
-        (searchDepth >= 3 - (board->Ply() - board->RepeatPly()));
+        (searchDepth >= 3 - (board.Ply() - board.RepeatPly()));
 
     // Is there a suitable hit in the transposition table?
-    if ((!mightDraw || board->NcpPlies() == 0) &&
-        gTransTable.IsHit(&hashEval, &hashMove, board->Zobrist(), searchDepth,
+    if ((!mightDraw || board.NcpPlies() == 0) &&
+        gTransTable.IsHit(&hashEval, &hashMove, board.Zobrist(), searchDepth,
                           basePly, alpha, beta, &gStats))
     {
         // record the move (if there is one).
         if (goodPv->Update(hashMove))
-            notifyNewPv(*goodPv, hashEval);
+            notifyNewPv(th, *goodPv, hashEval);
 
         return hashEval;
     }
@@ -438,23 +429,23 @@ static Eval minimax(Board *board, int alpha, int beta,
         return Eval(Eval::Loss, Eval::Win);
     }
 
-    // At this point, (expensive) move generation is required.
-    gStats.moveGenNodes++;
     MoveList mvlist;
 
-    if (th->depth || !th->searchArgs.mvlist.NumMoves())
+    if (curDepth || !th->Context().mvlist.NumMoves())
     {
-        board->GenerateLegalMoves(mvlist, QUIESCING && !inCheck);
+        // At this point, (expensive) move generation is required.
+        gStats.moveGenNodes++;
+        board.GenerateLegalMoves(mvlist, QUIESCING && !inCheck);
     }
     else
     {
-        mvlist = th->searchArgs.mvlist;
+        mvlist = th->Context().mvlist;
     }
     MOVELIST_LOGDEBUG(mvlist);
 
     if (QUIESCING &&
-        !board->PieceExists(Piece(0, PieceType::Pawn)) &&
-        !board->PieceExists(Piece(1, PieceType::Pawn)))
+        !board.PieceExists(Piece(0, PieceType::Pawn)) &&
+        !board.PieceExists(Piece(1, PieceType::Pawn)))
     {
         // Endgame.  Add some intelligence to the eval.  This allows us to
         // win scenarios like KQ vs KN.
@@ -475,7 +466,7 @@ static Eval minimax(Board *board, int alpha, int beta,
                    strgh);
 
         // Update the transposition table entry if needed.
-        gTransTable.ConditionalUpdate(retVal, MoveNone, board->Zobrist(),
+        gTransTable.ConditionalUpdate(retVal, MoveNone, board.Zobrist(),
                                       searchDepth, basePly, &gStats);
         return retVal;
     }
@@ -487,7 +478,7 @@ static Eval minimax(Board *board, int alpha, int beta,
         {
             retVal.Set(strgh, Eval::Win);
             // Update the transposition table entry if needed.
-            gTransTable.ConditionalUpdate(retVal, MoveNone, board->Zobrist(),
+            gTransTable.ConditionalUpdate(retVal, MoveNone, board.Zobrist(),
                                           searchDepth, basePly, &gStats);
             return retVal;
         }
@@ -495,7 +486,7 @@ static Eval minimax(Board *board, int alpha, int beta,
         alpha = MAX(strgh, alpha);
         if (mvlist.NumMoves() > 1)
         {
-            mvlist.SortByCapWorth(*board);
+            mvlist.SortByCapWorth(board);
             MOVELIST_LOGDEBUG(mvlist);
         }
 
@@ -508,14 +499,14 @@ static Eval minimax(Board *board, int alpha, int beta,
         // mvlist->SortByCapWorth(board);
         
         // Try the principal variation move (if applicable) first.
-        mvlist.UseAsFirstMove(gVars.pv.Hint(th->depth));
+        mvlist.UseAsFirstMove(gVars.pv.Hint(curDepth));
 
         // If we find no better moves ...
         retVal.Set(Eval::Loss, alpha);
     }
 
 #if 1
-    masterNode = (th == gThinker && // master node
+    masterNode = (th->IsRootThinker() &&
                   searchDepth > 1); // not subject to futility pruning
 #else // disables move delegation.
     masterNode = false;
@@ -525,7 +516,7 @@ static Eval minimax(Board *board, int alpha, int beta,
 
     if (searchDepth == 1)
     {
-        improvement += potentialImprovement(*board);
+        improvement += potentialImprovement(board);
     }
 
 #if 1
@@ -533,17 +524,18 @@ static Eval minimax(Board *board, int alpha, int beta,
         /* Needed to avoid scenarios where we pick a crappy hashed move,
            and then run out of time before evaluating the good move we meant
            to pick. */
-        th->depth != 0 &&
+        curDepth != 0 &&
         mvlist.NumMoves() > 1 ? 0 : -1;
 #else // disables trying hashed moves first.
     cookie = -1;
 #endif
 
-    SearchPv childPv(th->depth + 1);
+    SearchPv childPv(curDepth + 1);
     MoveT bestMove = MoveNone;
     
     for (i = 0, secondBestVal = alpha;
-         i < mvlist.NumMoves() || (masterNode && ThinkerSearchersSearching());
+         (i < mvlist.NumMoves() ||
+          (masterNode && ThinkerSearchersAreSearching()));
          i++)
     {
         assert(i <= mvlist.NumMoves());
@@ -552,7 +544,7 @@ static Eval minimax(Board *board, int alpha, int beta,
         {
             i--; // this counters i++
 
-            myEval = tryNextHashMove(board, alpha, beta, &childPv, th,
+            myEval = tryNextHashMove(th, alpha, beta, &childPv,
                                      &mvlist, &cookie, &hashMove);
             if (cookie == -1) /* no move found? */
                 continue;
@@ -571,9 +563,9 @@ static Eval minimax(Board *board, int alpha, int beta,
                 // First move is special (for PV).  We process it (almost)
                 // normally.
                 move = mvlist.Moves(i);
-                ThinkerSearchersMoveMake(move);
-                myEval = tryMove(board, move, alpha, beta, &childPv, th, NULL);
-                ThinkerSearchersMoveUnmake();
+                ThinkerSearchersMakeMove(move);
+                myEval = tryMove(th, move, alpha, beta, &childPv, nullptr);
+                ThinkerSearchersUnmakeMove();
             }
             else if (i < mvlist.NumMoves() &&  // have a move to search?
                      // have someone to delegate it to?
@@ -590,7 +582,7 @@ static Eval minimax(Board *board, int alpha, int beta,
                 // nobody to search on it.  Wait for an eval to become
                 // available.
                 // LOG_DEBUG("bldbg: comp3.5\n");
-                myEval = ThinkerSearchersWaitOne(&move, &childPv);
+                myEval = ThinkerSearchersWaitOne(move, childPv);
                 i--; // this counters i++
             }
         }
@@ -602,7 +594,7 @@ static Eval minimax(Board *board, int alpha, int beta,
             if ((QUIESCING || (searchDepth < 2 && !mightDraw)) &&
                 move.chk == FLAG &&
                 ((preEval =
-                  board->CalcCapWorth(move) + strgh + improvement)
+                  board.CalcCapWorth(move) + strgh + improvement)
                  <= alpha))
             {
                 /* Last level + no possibility to draw, or quiescing;
@@ -631,12 +623,12 @@ static Eval minimax(Board *board, int alpha, int beta,
                 continue;
             }
 
-            myEval = tryMove(board, move, alpha, beta, &childPv, th, NULL);
+            myEval = tryMove(th, move, alpha, beta, &childPv, nullptr);
         }
 
         // If we need to move, we cannot trust (and should not hash) 'myEval'.
         // We must go with the best value/move we already had ... if any.
-        if (ThinkerCompNeedsToMove(gThinker) ||
+        if (th->CompNeedsToMove() ||
             (gVars.maxNodes != NO_LIMIT && gStats.nodes >= gVars.maxNodes))
         {
             if (masterNode)
@@ -667,12 +659,12 @@ static Eval minimax(Board *board, int alpha, int beta,
             alpha = newLowBound;
 
             if (goodPv->UpdateFromChildPv(bestMove, childPv))
-                notifyNewPv(*goodPv, myEval);
+                notifyNewPv(th, *goodPv, myEval);
             
             if (newLowBound >= beta) // ie, will leave other side just as bad
                                      // off (if not worse)
             {
-                if (masterNode && ThinkerSearchersSearching())
+                if (masterNode && ThinkerSearchersAreSearching())
                 {
                     ThinkerSearchersBail();
                     retVal.BumpHighBoundToWin();
@@ -711,30 +703,30 @@ static Eval minimax(Board *board, int alpha, int beta,
         // (slightly).
         bestMove.promote == PieceType::Empty &&
         (bestMove.IsCastle() || // castling is not currently preferred
-         board->PieceAt(bestMove.dst).IsEmpty()))
+         board.PieceAt(bestMove.dst).IsEmpty()))
     {
         assert(bestMove != MoveNone);
         // move is at least one point better than others.
-        gVars.hist[turn] [bestMove.src] [bestMove.dst] = board->Ply();
+        gVars.hist[turn] [bestMove.src] [bestMove.dst] = board.Ply();
     }
 
     // Update the transposition table entry if needed.
-    gTransTable.ConditionalUpdate(retVal, bestMove, board->Zobrist(),
+    gTransTable.ConditionalUpdate(retVal, bestMove, board.Zobrist(),
                                   searchDepth, basePly, &gStats);
 
     return retVal;
 }
 
 // These draws are claimed, not automatic.  Other draws are automatic.
-static bool canClaimDraw(Board *board)
+static bool canClaimDraw(const Board &board)
 {
     // Testing only.  The whole point of b->IDTR() is that it might properly
     // catch (or not catch) draws that b->IDTRF() won't.
     // assert(board->IsDrawThreefoldRepetition() ==
     //        board->IsDrawThreefoldRepetitionFast());
     return
-        board->IsDrawFiftyMove() ||
-        board->IsDrawThreefoldRepetition();
+        board.IsDrawFiftyMove() ||
+        board.IsDrawThreefoldRepetition();
 }
 
 // This (currently hard-coded) routine tries to find a balance between trying
@@ -745,7 +737,7 @@ static bool canClaimDraw(Board *board)
 // or something to avoid mate as long as possible, only to turn around and
 // resign on the next move.
 // Assumes the 'board' passed in is set to our turn.
-static bool shouldResign(Board *board, Eval myEval, bool bPonder)
+static bool shouldResign(const Board &board, Eval myEval, bool bPonder)
 {
     return
         // do not resign while pondering; let opponent make move
@@ -754,18 +746,17 @@ static bool shouldResign(Board *board, Eval myEval, bool bPonder)
         // opponent has a clear mating strategy
         myEval <= Eval::LossThreshold &&
         // We are down by at least a rook's worth of material
-        board->RelativeMaterialStrength() <= -Eval::Rook &&
+        board.RelativeMaterialStrength() <= -Eval::Rook &&
         // We do not have a queen (the theory being that things could quickly
         // turn around if the opponent makes a mistake)
-        !board->PieceExists(Piece(board->Turn(), PieceType::Queen));
+        !board.PieceExists(Piece(board.Turn(), PieceType::Queen));
 }
 
-
-static void computermove(ThinkContextT *th, bool bPonder)
+static void computermove(Thinker *th, bool bPonder)
 {
     Eval myEval;
     SearchPv pv(0);
-    Board *board = &th->searchArgs.localBoard;
+    Board &board = th->Context().board;
     int resigned = 0;
     MoveList mvlist;
     MoveT move = MoveNone;
@@ -777,7 +768,7 @@ static void computermove(ThinkContextT *th, bool bPonder)
     // searches would be futile, I would implement it.
     int maxSearchDepth = gVars.maxLevel == NO_LIMIT ? 100 : gVars.maxLevel;
 
-    th->depth = 0;   // start search from root depth.
+    th->Context().depth = 0; // start search from root depth.
 
     // Clear stats.
     memset(&gStats, 0, sizeof(gStats));
@@ -785,16 +776,16 @@ static void computermove(ThinkContextT *th, bool bPonder)
     // If we can claim a draw without moving, do so w/out thinking.
     if (canClaimDraw(board))
     {
-        ThinkerRspDraw(th, move);
+        th->RspDraw(move);
         return;
     }
 
     if (gVars.randomMoves)
     {
-        board->Randomize();
+        board.Randomize();
     }
 
-    board->GenerateLegalMoves(mvlist, false);
+    board.GenerateLegalMoves(mvlist, false);
 
     // Use the principal variation move (if it exists) if we run out of
     // time before we figure out a move to recommend.
@@ -810,28 +801,29 @@ static void computermove(ThinkContextT *th, bool bPonder)
 
          // Special case optimization (normal game, 1st move).
          // The move is not worth thinking about any further.
-         !board->IsNormalStartingPosition()))
+         !board.IsNormalStartingPosition()))
     {
         // setup known search parameters across the slaves.
-        ThinkerSearchersBoardSet(board);
+        ThinkerSearchersSetBoard(board);
 
-        for (th->maxDepth = gVars.pv.SuggestSearchStartLevel();
-             th->maxDepth <= maxSearchDepth;
-             th->maxDepth++)
+        int &maxDepth = th->Context().maxDepth;
+        
+        for (maxDepth = gVars.pv.SuggestSearchStartLevel();
+             maxDepth <= maxSearchDepth;
+             maxDepth++)
         {
             // Setup known search parameters across the slaves.
-            ThinkerSearchersSetDepthAndLevel(th->depth, th->maxDepth);
+            ThinkerSearchersSetDepthAndLevel(th->Context().depth, maxDepth);
 
-            LOG_DEBUG("ply %d searching level %d\n",
-                      board->Ply(), th->maxDepth);
-            myEval = minimax(board,
+            LOG_DEBUG("ply %d searching level %d\n", board.Ply(), maxDepth);
+            myEval = minimax(th,
                              // Could use Eval::LossThreshold here w/a
                              // different resign strategy, but right now we
                              // prefer the most accurate score possible.
-                             Eval::Loss + th->maxDepth,
+                             Eval::Loss + maxDepth,
                              // Try to find the shortest mates possible.
-                             Eval::Win - (th->maxDepth + 1),
-                             &pv, th, NULL);
+                             Eval::Win - (maxDepth + 1),
+                             &pv, nullptr);
 
             // minimax() might find MoveNone if it has to bail before it can fully
             //  think about the first move.
@@ -840,16 +832,16 @@ static void computermove(ThinkContextT *th, bool bPonder)
                 move = pv.Moves(0);
             }
 
-            if (ThinkerCompNeedsToMove(th))
+            if (th->CompNeedsToMove())
                 break;
                 
 #ifdef ENABLE_DEBUG_LOGGING
             {
                 char tmpStr[kMaxEvalStringLen];
                 LOG_DEBUG("top-level eval: %d %s %d\n",
-                          Eval::Loss + th->maxDepth,
+                          Eval::Loss + maxDepth,
                           myEval.ToLogString(tmpStr),
-                          Eval::Win - (th->maxDepth + 1));
+                          Eval::Win - (maxDepth + 1));
             }
 #endif
             
@@ -863,100 +855,79 @@ static void computermove(ThinkContextT *th, bool bPonder)
             }
             if (
                 // We could stop at (for example) Eval::WinThreshold instead of
-                //  'Eval::Win - th->maxDepth' here, but that triggers an
+                //  'Eval::Win - maxDepth' here, but that triggers an
                 //  interesting issue where we might jump between 2 mating
                 //  positions (because other mating positions have been flushed
                 //  from the transposition table) until the opponent can draw by
                 //  repetition.
                 // The logic here should work whether or not we are pondering.
-                myEval <= Eval::Loss + th->maxDepth ||
-                myEval >= Eval::Win - (th->maxDepth + 1))
+                myEval <= Eval::Loss + maxDepth ||
+                myEval >= Eval::Win - (maxDepth + 1))
             {
                 break;
             }
         }
 
-        th->maxDepth = 0; // reset th->maxDepth
+        th->Context().maxDepth = 0; // reset this
     }
 
-    ThinkerRspNotifyStats(th, &gStats);
+    th->RspNotifyStats(gStats);
 
     if (resigned)
     {
-        ThinkerRspResign(th);
+        th->RspResign();
         return;
     }
 
     // If we can draw after this move, do so.
-    board->MakeMove(move);
+    board.MakeMove(move);
     bWillDraw = canClaimDraw(board);
-    board->UnmakeMove();
+    board.UnmakeMove();
 
     if (bWillDraw)
-        ThinkerRspDraw(th, move);
+        th->RspDraw(move);
     else
-        ThinkerRspMove(th, move);
+        th->RspMove(move);
 }
 
-
-static void searcherThread(ThinkContextT *th)
+void Thinker::threadFunc()
 {
-    Board *board;
-
-    // Shorthand.
-    board = &th->searchArgs.localBoard;
-
-    // We cycle, basically:
-    // -- waiting on a board position/move combo from the compThread
-    // -- searching the move
-    // -- returning the return parameters (early, if NeedsToMove).
-    //
-    // We end up doing a lot of stuff in the searcherThread instead of
-    // compThread since we want things to be as multi-threaded as possible.
-    while (1)
+    if (IsRootThinker())
     {
-        ThinkerCompWaitSearch(th);
-        th->searchArgs.pv.SetStartDepth(th->depth + 1);
+        while (1)
+        {
+            // wait for a think- or ponder-command to come in.
+            eThinkMsgT cmd = CompWaitThinkOrPonder();
+            // Think on it, and recommend either: a move, draw, or resign.
+            computermove(this, cmd == eCmdPonder);
+        }
+    }
+    else
+    {
+        // We cycle, basically:
+        // -- waiting on a board position/move combo from the compThread
+        // -- searching the move
+        // -- returning the return parameters (early, if NeedsToMove).
+        //
+        // We end up doing a lot of stuff in the searcherThread instead of
+        // compThread since we want things to be as multi-threaded as possible.
+        while (1)
+        {
+            CompWaitSearch();
+            // If we make the constructor use a memory pool, we should probably
+            //  still micro-optimize this.
+            SearchPv pv(Context().depth + 1);
         
-        // Make the appropriate move, bump depth etc.
-        th->searchArgs.eval =
-            tryMove(board,
-                    th->searchArgs.move,
-                    th->searchArgs.alpha,
-                    th->searchArgs.beta,
-                    &th->searchArgs.pv,
-                    th,
-                    NULL);
+            // Make the appropriate move, bump depth etc.
+            searchArgs.eval =
+                tryMove(this,
+                        searchArgs.move,
+                        searchArgs.alpha,
+                        searchArgs.beta,
+                        &pv,
+                        nullptr);
 
-        ThinkerRspSearchDone(th);
+            RspSearchDone(searchArgs.move, searchArgs.eval, pv);
+        }
     }
-}
-
-static void compThread(ThinkContextT *th)
-{
-    eThinkMsgT cmd;
-    gThinker = th;
-
-    while (1)
-    {
-        /* wait for a think- or ponder-command to come in. */
-        cmd = ThinkerCompWaitThinkOrPonder(th);
-        /* Think on it, and recommend either: a move, draw, or resign. */
-        computermove(th, cmd == eCmdPonder);
-    }
-}
-
-int CompCurrentLevel(void)
-{
-    return gThinker->maxDepth;
-}
-
-void CompThreadInit(ThinkContextT *th)
-{
-    // initialize main compThread.
-    std::thread *mainCompThread = new std::thread(compThread, th);
-    mainCompThread->detach();
-    
-    // initialize searcher threads.
-    ThinkerSearchersCreate(gPreCalc.numProcs, searcherThread);
 }

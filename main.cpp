@@ -24,13 +24,12 @@
 #include "aSystem.h"
 #include "Board.h"
 #include "clockUtil.h"
-#include "comp.h"
 #include "game.h"
 #include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
 #include "playloop.h"
-#include "thinker.h"
+#include "Thinker.h"
 #include "TransTable.h"
 #include "ui.h"
 #include "uiUtil.h"
@@ -182,14 +181,9 @@ int main(int argc, char *argv[])
     //  be done before any Boards (or anything that depends on it) are declared.
     gPreCalcInit(userSpecifiedHashSize, numCpuThreads);
 
-    ThinkContextT th;
-    GameT game;
-    
     gTransTable.SetDesiredSize(hashTableSize);
 
     srandom(getBigTime() / 1000000);
-
-    ThinkerInit(&th);
 
     gVars.maxLevel = 0; // (these are not really necessary as gVars is static)
     gVars.ponder = false;
@@ -198,6 +192,7 @@ int main(int argc, char *argv[])
     gVars.hiswin = 2;   // set for killer move heuristic
     gVars.canResign = true;
 
+    GameT game;
     GameInit(&game);
     
     gUI =
@@ -208,8 +203,10 @@ int main(int argc, char *argv[])
         isatty(fileno(stdin)) && isatty(fileno(stdout)) ?
         uiNcursesOps() : uiXboardOps();
 
-    CompThreadInit(&th);
     Semaphore readySem;
+    Thinker th;
+
+    ThinkerSearchersCreate(gPreCalc.numProcs);
     uiThreadInit(&th, &game, &readySem);
     // Wait for the UI to do some initialization.
     readySem.wait();

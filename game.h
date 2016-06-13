@@ -22,7 +22,7 @@
 #include "Clock.h"
 #include "saveGame.h"
 #include "switcher.h"
-#include "thinker.h"
+#include "Thinker.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -60,17 +60,17 @@ void GameInit(GameT *game);
 
 void GameMoveMake(GameT *game, MoveT *move);
 // Like GameMoveMake(), but also kick off UI and thinker state updates.
-void GameMoveCommit(GameT *game, MoveT *move, ThinkContextT *th,
+void GameMoveCommit(GameT *game, MoveT *move, Thinker *th,
                     int declaredDraw);
 // Handle a change in computer control or pondering.
-void GameCompRefresh(GameT *game, ThinkContextT *th);
-void GameNewEx(GameT *game, ThinkContextT *th, Board *board, bool resetClocks,
+void GameCompRefresh(GameT *game, Thinker *th);
+void GameNewEx(GameT *game, Thinker *th, Board *board, bool resetClocks,
                bool resetHash);
-void GameNew(GameT *game, ThinkContextT *th);
+void GameNew(GameT *game, Thinker *th);
 
-int GameGotoPly(GameT *game, int ply, ThinkContextT *th);
-int GameRewind(GameT *game, int numPlies, ThinkContextT *th);
-int GameFastForward(GameT *game, int numPlies, ThinkContextT *th);
+int GameGotoPly(GameT *game, int ply, Thinker *th);
+int GameRewind(GameT *game, int numPlies, Thinker *th);
+int GameFastForward(GameT *game, int numPlies, Thinker *th);
 
 // These are wrappers for SaveGameT.
 static inline int GameCurrentPly(GameT *game)
