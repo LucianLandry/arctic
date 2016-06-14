@@ -133,10 +133,17 @@ private:
     // The masterSock sends commands and receives responses.
     // The slaveSock receives commands and sends responses.
     int masterSock, slaveSock;
+
+    enum class State : uint8
+    {
+        Idle,
+        Pondering,
+        Thinking,
+        Searching
+    };
+
+    State state;
     volatile bool moveNow;
-    bool isThinking;
-    bool isPondering;
-    bool isSearching;
 
     struct SearchArgsT
     {
@@ -176,22 +183,22 @@ inline bool Thinker::CompNeedsToMove() const
 
 inline bool Thinker::CompIsThinking() const
 {
-    return isThinking;
+    return state == State::Thinking;
 }
 
 inline bool Thinker::CompIsPondering() const
 {
-    return isPondering;
+    return state == State::Pondering;
 }
 
 inline bool Thinker::CompIsSearching() const
 {
-    return isSearching;
+    return state == State::Searching;
 }
 
 inline bool Thinker::CompIsBusy() const
 {
-    return CompIsSearching() || CompIsThinking() || CompIsPondering();
+    return state != State::Idle;
 }
 
 inline int Thinker::MasterSock() const

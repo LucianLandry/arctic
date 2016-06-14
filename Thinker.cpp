@@ -95,9 +95,7 @@ Thinker::Thinker()
     masterSock = socks[0];
     slaveSock = socks[1];
     moveNow = false;
-    isThinking = false;
-    isPondering = false;
-    isSearching = false;
+    state = State::Idle;
     // 'searchArgs' and 'context' initialize themselves.
 
     // Assume the first Thinker created is the rootThinker.
@@ -223,9 +221,7 @@ eThinkMsgT Thinker::RecvRsp(void *buffer, int bufLen)
     if (msg == eRspDraw || msg == eRspMove || msg == eRspResign ||
         msg == eRspSearchDone)
     {
-        isThinking = false;
-        isPondering = false;
-        isSearching = false;
+        state = State::Idle;
         moveNow = false;
     }
     return msg;
@@ -248,7 +244,7 @@ void Thinker::CmdSearch(int alpha, int beta, MoveT move)
     searchArgs.alpha = alpha;
     searchArgs.beta = beta;
     searchArgs.move = move;
-    isSearching = true;
+    state = State::Searching;
 
     compSendCmd(eCmdSearch);
 }
@@ -290,12 +286,12 @@ void Thinker::doThink(eThinkMsgT cmd, const MoveList *mvlist)
     
     if (cmd == eCmdThink)
     {
-        isThinking = true;
+        state = State::Thinking;
     }
     else
     {
         assert(cmd == eCmdPonder);
-        isPondering = true;
+        state = State::Pondering;
     }
     compSendCmd(cmd);
 }
