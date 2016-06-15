@@ -21,11 +21,13 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <thread>
-#include <unistd.h>   // close(2)
+#include <unistd.h>     // close(2)
 
-#include "gDynamic.h" // PvInit()
+#include "gDynamic.h"   // PvInit()
 #include "log.h"
 #include "Thinker.h"
+#include "TransTable.h" // gTransTable
+#include "Variant.h"
 
 // bldbg
 #undef LOG_DEBUG
@@ -235,18 +237,14 @@ eThinkMsgT Thinker::recvCmd(void *buffer, int bufLen) const
     return msg;
 }
 
-void Thinker::CmdSearch(int alpha, int beta, MoveT move)
+void Thinker::CmdNewGame()
 {
-    // If we were previously thinking, just start over.
     CmdBail();
-
-    // Copy over search args.
-    searchArgs.alpha = alpha;
-    searchArgs.beta = beta;
-    searchArgs.move = move;
-    state = State::Searching;
-
-    compSendCmd(eCmdSearch);
+    gTransTable.Reset();
+    gHistInit();
+    gVars.pv.Clear();
+    if (!context.board.SetPosition(Variant::Current()->StartingPosition()))
+        assert(0);
 }
 
 void Thinker::CmdSetBoard(const Board &board)
@@ -298,28 +296,40 @@ void Thinker::doThink(eThinkMsgT cmd, const MoveList *mvlist)
 
 void Thinker::CmdThink(const MoveList &mvlist)
 {
-    return doThink(eCmdThink, &mvlist);
+    doThink(eCmdThink, &mvlist);
 }
 
 void Thinker::CmdThink()
 {
-    return doThink(eCmdThink, nullptr);
+    doThink(eCmdThink, nullptr);
 }
 
 void Thinker::CmdPonder(const MoveList &mvlist)
 {
-    return doThink(eCmdPonder, &mvlist);
+    doThink(eCmdPonder, &mvlist);
 }
 
 void Thinker::CmdPonder()
 {
-    return doThink(eCmdPonder, nullptr);
+    doThink(eCmdPonder, nullptr);
 }
 
-/* Force the computer to move in the very near future.
-   This is asynchronous.  For a synchronous analogue, see
-   PlayloopCompMoveNowAndSync().
- */
+void Thinker::CmdSearch(int alpha, int beta, MoveT move)
+{
+    // If we were previously thinking, just start over.
+    CmdBail();
+
+    // Copy over search args.
+    searchArgs.alpha = alpha;
+    searchArgs.beta = beta;
+    searchArgs.move = move;
+    state = State::Searching;
+
+    compSendCmd(eCmdSearch);
+}
+
+// Force the computer to move in the very near future.  This is asynchronous.
+// For a synchronous analogue, see PlayloopCompMoveNowAndSync().
 void Thinker::CmdMoveNow()
 {
     if (CompIsBusy())

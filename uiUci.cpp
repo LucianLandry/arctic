@@ -270,15 +270,14 @@ static void finishMoves(GameT *game, Board *fenBoard, MoveT *move, char *pToken,
             // Assume the boards have diverged too much to preserve the hash
             // table, history window, etc.  This should be large enough to
             // not trigger in a normal case (ponder miss etc.)
-            gTransTable.Reset();
-            gHistInit();
+            th->CmdNewGame();
         }
     }
     else
     {
         // First position was different.  We always have to blow the hash
         // etc. away because we do not know exactly how different things were.
-        GameNewEx(game, th, fenBoard, false, true);
+        GameNewEx(game, th, fenBoard, false);
     }
 
     for (;

@@ -72,18 +72,17 @@ public:
     // Client/proxy-side methods:
 
     eThinkMsgT RecvRsp(void *buffer, int bufLen);
-    void CmdSearch(int alpha, int beta, MoveT move);
+    void CmdNewGame();
     void CmdSetBoard(const Board &board);
     void CmdMakeMove(MoveT move);
     void CmdUnmakeMove();
     
-    // FIXME for think/ponder: Clients must SetBoard() first instead of passing
-    // a 'board' argument!
     void CmdThink(const MoveList &mvlist);
     void CmdThink();
     void CmdPonder(const MoveList &mvlist);
     void CmdPonder();
-
+    void CmdSearch(int alpha, int beta, MoveT move);
+    
     void CmdMoveNow();
     void CmdBail();
 

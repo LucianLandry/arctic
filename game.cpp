@@ -22,9 +22,7 @@
 #include "log.h"
 #include "MoveList.h"
 #include "switcher.h"
-#include "TransTable.h"
 #include "ui.h"
-#include "Variant.h"
 
 // Helper function.
 // Assume a change in thinking is necessary.
@@ -202,28 +200,14 @@ void GameMoveCommit(GameT *game, MoveT *move, Thinker *th,
 }
 
 
-void GameNewEx(GameT *game, Thinker *th, Board *board, bool resetClocks,
-               bool resetHash)
+void GameNewEx(GameT *game, Thinker *th, Board *board, bool resetClocks)
 {
     assert(board->Position().IsLegal());
     game->savedBoard = *board;
     SaveGamePositionSet(&game->sgame, board);
     if (resetClocks)
-    {
         ClocksReset(game);
-    }
-    // It might be possible to put logic in here to make the hash-resetting
-    // option useless.  For instance, if board != game->savedBoard, gotoply()
-    // on the savedboard to the same ply as the board.  Then if we have a
-    // position hit, and we are w/in x (5?) plies of the original ply, do not
-    // clear the hash.  Random moves might not work quite as intended due to
-    // hash hits re-ordering our moves, but that should not be a huge issue.
-    if (resetHash)
-    {
-        gTransTable.Reset();
-        gHistInit();
-    }
-    gVars.pv.Clear();
+    th->CmdNewGame();
     GameMoveCommit(game, NULL, th, 0);
 }
 
@@ -231,7 +215,7 @@ void GameNewEx(GameT *game, Thinker *th, Board *board, bool resetClocks,
 void GameNew(GameT *game, Thinker *th)
 {
     Board myBoard;
-    GameNewEx(game, th, &myBoard, true, true);
+    GameNewEx(game, th, &myBoard, true);
 }
 
 
@@ -247,8 +231,9 @@ int GameGotoPly(GameT *game, int ply, Thinker *th)
     th->CmdBail();
     gVars.pv.FastForward(plyDiff);
 
-    // We could gTransTable.Reset()/gHistInit() here, but if the user tracks
-    // back and forth through the history, we might not diverge that much.
+    // We could th->NewGame() (which would reset the transposition table and
+    //  other state), but if the user tracks back and forth through the history,
+    //  we might not diverge that much.
     SaveGameGotoPly(&game->sgame, ply, &game->savedBoard, game->clocks);
     GameMoveCommit(game, NULL, th, 0);
     return 0;

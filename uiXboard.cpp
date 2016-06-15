@@ -447,7 +447,7 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
             // We could attempt to detect if we are more or less in the
             // same game and not clear the hash, like we do w/uci "position"
             // command.
-            GameNewEx(game, th, &tmpBoard, false, true);
+            GameNewEx(game, th, &tmpBoard, false);
         }
     }
 
@@ -463,7 +463,7 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
         if (tmpPosition.IsLegal(errString))
         {
             tmpBoard.SetPosition(tmpPosition);
-            GameNewEx(game, th, &tmpBoard, false, true);
+            GameNewEx(game, th, &tmpBoard, false);
         }
         else
         {

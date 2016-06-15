@@ -31,7 +31,6 @@
 #include "log.h"
 #include "Pv.h"
 #include "saveGame.h"
-#include "TransTable.h"
 #include "ui.h"
 #include "uiUtil.h"
 #include "Variant.h"
@@ -1131,10 +1130,8 @@ static void UIPlayerMove(Thinker *th, GameT *game)
             }
             else
             {
-                th->CmdBail();
+                th->CmdNewGame();
                 UIBarf("Game restore succeeded.");
-                gTransTable.Reset();
-                gHistInit();
                 // Could goto current ply instead of numPlies.  I'm assuming
                 // here the user is absent-minded and might forget (or might not
                 // know) the current ply is persistent.
@@ -1170,7 +1167,7 @@ static void UIPlayerMove(Thinker *th, GameT *game)
 
             UIOptionsDraw(game);
 
-            GameNewEx(game, th, board, false, true);
+            GameNewEx(game, th, board, false);
             return;
         }
         case 'A': // toggle randomization of moves.
