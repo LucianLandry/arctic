@@ -39,7 +39,7 @@ static const int kMaxPvMoves = 16;
 class SearchPv
 {
 public:
-    SearchPv(int startDepth);
+    explicit SearchPv(int startDepth);
     SearchPv &operator=(const SearchPv &other);
 
     void Clear();

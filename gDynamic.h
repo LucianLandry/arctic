@@ -27,9 +27,6 @@ extern "C" {
 #define NO_LIMIT (-1)
 
 typedef struct {
-//    short hist[NUM_PLAYERS] [NUM_SQUARES] [NUM_SQUARES]; // History table.
-//    int hiswin;       // Tells us how many plies we can check backwards or
-                      //  forwards, and still be a valid 'history' entry.
     int maxLevel;     // Max depth we are authorized to search at.
                       //  NO_LIMIT indicates no (external) depth limit.
     int maxNodes;     // Max nodes we are authorized to search.
