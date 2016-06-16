@@ -24,6 +24,7 @@
 #include <unistd.h>     // close(2)
 
 #include "gDynamic.h"   // PvInit()
+#include "HistoryWindow.h"
 #include "log.h"
 #include "Thinker.h"
 #include "TransTable.h" // gTransTable
@@ -32,7 +33,6 @@
 // bldbg
 #undef LOG_DEBUG
 #define LOG_DEBUG(format, ...)
-
 
 /* Okay, here's the lowdown.
    Communication between the main program and computer is done via 2 sockets,
@@ -241,7 +241,7 @@ void Thinker::CmdNewGame()
 {
     CmdBail();
     gTransTable.Reset();
-    gHistInit();
+    gHistoryWindow.Clear();
     gVars.pv.Clear();
     if (!context.board.SetPosition(Variant::Current()->StartingPosition()))
         assert(0);
@@ -560,6 +560,9 @@ void ThinkerSearchersCreate(int numThreads)
 
     for (i = 0; i < gSG.count; i++)
     {
+        // (The root thinker should have already been initialized by this
+        //  point.)
+        assert(!gSG.th[i].IsRootThinker());
         // (initialize the associated poll structures --
         //  it is global so is already zero.)
         gSG.pfds[i].fd = gSG.th[i].MasterSock();

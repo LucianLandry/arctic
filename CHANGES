@@ -40,6 +40,7 @@ Converted code to use platform-agnostic std::thread.
 Implemented platform-agnostic Semaphore class and converted everyone to use it.
 Refactored Spinlocks into a platform-agnostic C++11 class (1.6% speedup)
 Refactored ThinkContextT into a C++ 'Thinker' class.
+Refactored history window functionality into its own C++ class.
 
 Version 1.1:
 Build improvements: use Git for version control, cmake for building

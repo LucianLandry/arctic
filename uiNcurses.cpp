@@ -28,6 +28,7 @@
 #include "conio.h"
 #include "gDynamic.h"
 #include "gPreCalc.h"
+#include "HistoryWindow.h"
 #include "log.h"
 #include "Pv.h"
 #include "saveGame.h"
@@ -336,7 +337,7 @@ static void UIOptionsDraw(GameT *game)
                 gVars.ponder ? "On" : "Off");
 
     prettyprint(8,  "Generate moves", "History window (%d)",
-                gVars.hiswin >> 1);
+                gHistoryWindow.Window());
     prettyprint(9,  "Move now",       "Time control");
     prettyprint(10, "Flip board",     "Undo");
     prettyprint(11, "Color",          "redO");
@@ -1088,7 +1089,7 @@ static void UIPlayerMove(Thinker *th, GameT *game)
             {
                 ; // noop
             }
-            gVars.hiswin = myHiswin << 1;   // convert moves to plies.
+            gHistoryWindow.SetWindow(myHiswin);
             UIOptionsDraw(game);
             return;
         case 'W':     // toggle computer control

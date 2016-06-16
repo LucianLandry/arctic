@@ -189,7 +189,6 @@ int main(int argc, char *argv[])
     gVars.ponder = false;
 
     gVars.maxNodes = NO_LIMIT;
-    gVars.hiswin = 2;   // set for killer move heuristic
     gVars.canResign = true;
 
     GameT game;

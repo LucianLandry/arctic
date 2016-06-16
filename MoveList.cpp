@@ -16,6 +16,7 @@
 
 #include "Board.h"
 #include "gDynamic.h"
+#include "HistoryWindow.h"
 #include "MoveList.h"
 
 //--------------------------------------------------------------------------
@@ -49,24 +50,18 @@ public:
 //                       PRIVATE FUNCTIONS AND METHODS:
 //--------------------------------------------------------------------------
 
-static inline bool historyWindowHit(const Board &board, cell_t from, cell_t to)
-{
-    return
-        abs(gVars.hist[board.Turn()] [from] [to] - board.Ply()) < gVars.hiswin;
-}
-
 // Does not take promotion, en passant, or castling into account.
 static inline bool isPreferredMoveFast(MoveT move, const Board &board)
 {
     return !board.PieceAt(move.dst).IsEmpty() || move.chk != FLAG ||
-        historyWindowHit(board, move.src, move.dst);
+        gHistoryWindow.Hit(move, board.Turn(), board.Ply());
 }
 
 static inline bool isPreferredMove(MoveT move, const Board &board)
 {
     return (move.src != move.dst && !board.PieceAt(move.dst).IsEmpty()) ||
         move.chk != FLAG || move.promote != PieceType::Empty ||
-        historyWindowHit(board, move.src, move.dst);
+        gHistoryWindow.Hit(move, board.Turn(), board.Ply());
 }
 
 static thread_local FreeMoves gFreeMoves;

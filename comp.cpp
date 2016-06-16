@@ -23,6 +23,7 @@
 #include "Eval.h"
 #include "gDynamic.h"
 #include "gPreCalc.h"
+#include "HistoryWindow.h"
 #include "log.h"
 #include "ref.h"
 #include "Thinker.h"
@@ -707,7 +708,7 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
     {
         assert(bestMove != MoveNone);
         // move is at least one point better than others.
-        gVars.hist[turn] [bestMove.src] [bestMove.dst] = board.Ply();
+        gHistoryWindow.StoreMove(bestMove, turn, board.Ply());
     }
 
     // Update the transposition table entry if needed.

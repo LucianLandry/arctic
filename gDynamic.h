@@ -27,8 +27,8 @@ extern "C" {
 #define NO_LIMIT (-1)
 
 typedef struct {
-    short hist[NUM_PLAYERS] [NUM_SQUARES] [NUM_SQUARES]; // History table.
-    int hiswin;       // Tells us how many plies we can check backwards or
+//    short hist[NUM_PLAYERS] [NUM_SQUARES] [NUM_SQUARES]; // History table.
+//    int hiswin;       // Tells us how many plies we can check backwards or
                       //  forwards, and still be a valid 'history' entry.
     int maxLevel;     // Max depth we are authorized to search at.
                       //  NO_LIMIT indicates no (external) depth limit.
@@ -42,9 +42,6 @@ typedef struct {
     int gameCount;    // for stats keeping.
 } GDynamicT;
 extern GDynamicT gVars;
-
-void gHashInit(void);
-void gHistInit(void);
 
 #ifdef __cplusplus
 }
