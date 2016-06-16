@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//           HistoryWindow.h - chess-oriented message passing interface
+//            HistoryWindow.cpp - History Heuristic functionality
 //                            -------------------
 //  copyright            : (C) 2016 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
