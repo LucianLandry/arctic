@@ -143,22 +143,17 @@ static void xboardEditPosition(Position &position, SwitcherContextT *sw)
     }
 }
 
-static void xboardInit(GameT *ignore)
+static void xboardInit(GameT *game)
 {
     static bool initialized;
     if (initialized)
-    {
         return;
-    }
 
     // Set unbuffered I/O (obviously necessary for output, also necessary for
     // input if we want to poll() correctly.)
     setbuf(stdout, NULL);
     setbuf(stdin, NULL);
 
-    // In practice, with a normal search, we search at least depth 15 in
-    // the (extreme) endgame.
-    gVars.maxLevel = NO_LIMIT;
     initialized = true;
 }
 
@@ -275,10 +270,10 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
         game->clocks[1] = ENGINE_CLOCK;
 
         gVars.ponder = false; // disable pondering on first ply.
-        gVars.maxLevel = NO_LIMIT;
+        th->Config().SetSpin(Config::MaxDepthSpin, 0);
         game->control[1] = 1;
 
-        GameNew(game, th);
+        GameNew(game);
 
         gVars.randomMoves = false;
         gXboardState.newgame = true;
@@ -378,9 +373,11 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
         // depth 5000, okay ...
         if (myLevel > 0)
         {
-            if (th->Context().maxDepth > (gVars.maxLevel = myLevel - 1))
+            if (th->Config().SetSpinClamped(Config::MaxDepthSpin, myLevel) !=
+                Config::Error::None)
             {
-                PlayloopCompMoveNowAndSync(game, th);
+                printf("Error (cannot set maxDepth for this engine): %s",
+                       inputStr);
             }
         }
         else
@@ -411,21 +408,21 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
     else if (matches(inputStr, "?"))
     {
         // Move now.
-        PlayloopCompMoveNowAndSync(game, th);
+        PlayloopCompMoveNowAndSync(*th);
     }
 
     else if (sscanf(inputStr, "ping %d", &i) == 1)
     {
-        // xboard docs say we should never get 'ping' while moving...
-        // "however, if you do..." so here we just force any outstanding
-        // move (not including pondering) to be completed before we return.
+        // xboard docs imply it is very unlikely we will see a ping while
+        //  moving.  "However, if you do..." then we still try to do the right
+        //  thing.  Still, reading the protocol strictly, it is possible we
+        //  might hang here forever if there is no search limit at all and no
+        //  preceeding "move now".
         if (th->CompIsThinking())
-        {
-            PlayloopCompMoveNowAndSync(game, th);
-        }
+            PlayloopCompProcessRspUntilIdle(*th);
+
         printf("pong %d\n", i);
     }
-
 
     else if (matches(inputStr, "result"))
     {
@@ -447,7 +444,7 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
             // We could attempt to detect if we are more or less in the
             // same game and not clear the hash, like we do w/uci "position"
             // command.
-            GameNewEx(game, th, &tmpBoard, false);
+            GameNewEx(game, &tmpBoard, false);
         }
     }
 
@@ -463,7 +460,7 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
         if (tmpPosition.IsLegal(errString))
         {
             tmpBoard.SetPosition(tmpPosition);
-            GameNewEx(game, th, &tmpBoard, false);
+            GameNewEx(game, &tmpBoard, false);
         }
         else
         {
@@ -475,7 +472,7 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
 
     else if (matches(inputStr, "undo"))
     {
-        if (GameRewind(game, 1, th) < 0)
+        if (GameRewind(game, 1) < 0)
         {
             printf("Error (undo: start of game): %s", inputStr);
         }
@@ -483,7 +480,7 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
 
     else if (matches(inputStr, "remove"))
     {
-        if (GameRewind(game, 2, th) < 0)
+        if (GameRewind(game, 2) < 0)
         {
             printf("Error (remove: ply %d): %s",
                    GameCurrentPly(game), inputStr);
@@ -497,7 +494,7 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
         {
             // Activate pondering, if necessary.
             gVars.ponder = true;
-            GameCompRefresh(game, th);
+            GameCompRefresh(game);
         }
     }
 
@@ -505,7 +502,7 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
     {
         gXboardState.ponder = false;
         gVars.ponder = false;
-        GameCompRefresh(game, th);
+        GameCompRefresh(game);
     }
 
     else if (matches(inputStr, "post"))
@@ -600,7 +597,7 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
             ClockStart(ENGINE_CLOCK);
         }
 #endif
-        GameMoveCommit(game, &myMove, th, 0);
+        GameMoveCommit(game, &myMove, false);
     }
 
     else
@@ -654,7 +651,7 @@ static void xboardNotifyCheckmated(int turn)
 }
 
 
-static void xboardNotifyPV(GameT *game, RspPvArgsT *pvArgs)
+static void xboardNotifyPV(GameT *game, const RspPvArgsT *pvArgs)
 {
     char mySanString[65];
     const DisplayPv &pv = pvArgs->pv; // shorthand
@@ -669,7 +666,7 @@ static void xboardNotifyPV(GameT *game, RspPvArgsT *pvArgs)
     }
 
     printf("%d %d %u %d %s.\n",
-           pv.Level(), pv.Eval().LowBound(),
+           pv.Level() + 1, pv.Eval().LowBound(),
            // (Convert bigtime to centiseconds)
            uint32(game->clocks[board.Turn()]->TimeTaken() / 10000),
            pvArgs->stats.nodes, mySanString);
@@ -680,7 +677,8 @@ static bool xboardShouldCommitMoves(void)
     return true;
 }
 
-static void xboardNotifyComputerStats(GameT *game, ThinkerStatsT *stats) { }
+static void xboardNotifyComputerStats(GameT *game,
+                                      const ThinkerStatsT *stats) { }
 static void xboardPositionRefresh(const Position &position) { }
 static void xboardNoop(void) { }
 static void xboardStatusDraw(GameT *game) { }

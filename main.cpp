@@ -185,15 +185,19 @@ int main(int argc, char *argv[])
 
     srandom(getBigTime() / 1000000);
 
-    gVars.maxLevel = 0; // (these are not really necessary as gVars is static)
-    gVars.ponder = false;
+    gVars.ponder = false; // (not really necessary as gVars is static)
 
     gVars.maxNodes = NO_LIMIT;
     gVars.canResign = true;
 
+    Thinker th; // This is the root thinker.
+    ThinkerSearchersCreate(gPreCalc.numProcs, th);
+
     GameT game;
-    GameInit(&game);
-    
+    GameInit(&game, &th);
+
+    PlayloopSetThinkerRspHandler(game, th);
+
     gUI =
         !strcmp(uiString, "juce") ? uiJuceOps() :
         !strcmp(uiString, "console") ? uiNcursesOps() :
@@ -203,19 +207,18 @@ int main(int argc, char *argv[])
         uiNcursesOps() : uiXboardOps();
 
     Semaphore readySem;
-    Thinker th;
-
-    ThinkerSearchersCreate(gPreCalc.numProcs);
     uiThreadInit(&th, &game, &readySem);
     // Wait for the UI to do some initialization.
     readySem.wait();
 
-    GameNew(&game, &th);
+    GameNew(&game);
+
     gUI->notifyReady();
+
     game.clocks[0]->Start();
 
     // Enter main play loop.
-    PlayloopRun(&game, &th);
+    PlayloopRun(game, th);
 
     gUI->exit();
 

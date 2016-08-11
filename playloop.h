@@ -20,17 +20,12 @@
 #include "game.h"
 #include "Thinker.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
+// Basically, attaches the engine's responses to the playloop.
+void PlayloopSetThinkerRspHandler(GameT &game, Thinker &th);
 // Synchronous move-now support.
-void PlayloopCompMoveNowAndSync(GameT *game, Thinker *th);
+void PlayloopCompMoveNowAndSync(Thinker &th);
+void PlayloopCompProcessRspUntilIdle(Thinker &th);
 // Main play loop.
-void PlayloopRun(GameT *game, Thinker *th);
-
-#ifdef __cplusplus
-}
-#endif
+void PlayloopRun(GameT &game, Thinker &th);
 
 #endif // PLAYLOOP_H

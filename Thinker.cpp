@@ -16,11 +16,13 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <limits.h>     // INT_MAX
 #include <poll.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <thread>
+#include <type_traits>  // std::is_trivially_copyable<>
 #include <unistd.h>     // close(2)
 
 #include "gDynamic.h"   // PvInit()
@@ -29,6 +31,17 @@
 #include "Thinker.h"
 #include "TransTable.h" // gTransTable
 #include "Variant.h"
+
+// HACK workaround for std::is_trivially_copyable not being provided prior to
+// libstdc++5.0.  Lifted from https://github.com/mpark/variant/issues/8.
+// I should probably put this in some sort of header file.
+#if defined(__GLIBCXX__) && __GLIBCXX__ < 20150801
+namespace std {
+template <typename T>
+struct is_trivially_copyable : integral_constant<bool, __has_trivial_copy(T)> {
+};
+}  // namespace std
+#endif  // GLIBCXX macro
 
 // bldbg
 #undef LOG_DEBUG
@@ -83,7 +96,23 @@ Thinker::SearchArgsT::SearchArgsT() :
 {
 }
 
-Thinker::ContextT::ContextT() : maxDepth(0), depth(0) {}
+Thinker::ContextT::ContextT() : maxDepth(0), depth(0), maxLevel(NO_LIMIT) {}
+
+static void onSpinItemChanged(const Config::SpinItem &item, Thinker &th)
+{
+    Thinker::ContextT &context = th.Context(); // shorthand
+
+    if (item.Name() == Config::MaxDepthSpin)
+    {
+        context.maxLevel = item.Value() - 1;
+        if (context.maxLevel != NO_LIMIT && context.maxDepth > context.maxLevel)
+            th.CmdMoveNow();
+    }
+    else
+    {
+        assert(0); // unknown item
+    }
+}
 
 // ctor.
 Thinker::Thinker()
@@ -104,6 +133,13 @@ Thinker::Thinker()
     if (rootThinker == nullptr)
         rootThinker = this;
 
+    // Register config callbacks.
+    Config().Register(
+        Config::SpinItem(Config::MaxDepthSpin, Config::MaxDepthDescription,
+                         0, 0, INT_MAX,
+                         std::bind(onSpinItemChanged, std::placeholders::_1,
+                                   std::ref(*this))));
+    
     thread = new std::thread(&Thinker::threadFunc, this);
     thread->detach();
 }
@@ -213,7 +249,7 @@ static eThinkMsgT compRecv(int sock, void *buffer, int bufLen)
     return msg;
 }
 
-eThinkMsgT Thinker::RecvRsp(void *buffer, int bufLen)
+eThinkMsgT Thinker::recvRsp(void *buffer, int bufLen)
 {
     eThinkMsgT msg = compRecv(masterSock, buffer, bufLen);
 
@@ -351,11 +387,67 @@ void Thinker::CmdBail()
         // Wait for, and discard, the computer's move.
         do
         {
-            rsp = RecvRsp(nullptr, 0);
+            rsp = recvRsp(nullptr, 0);
         } while (rsp != eRspDraw && rsp != eRspMove && rsp != eRspResign &&
                  rsp != eRspSearchDone);
     }
     assert(!CompIsBusy());
+}
+
+void Thinker::SetRspHandler(const RspHandlerT &rspHandler)
+{
+    this->rspHandler = rspHandler;
+}
+
+void Thinker::ProcessOneRsp()
+{
+    alignas(sizeof(void *)) char rspBuf[MAX(MAX(sizeof(ThinkerStatsT), sizeof(RspPvArgsT)), MAX(sizeof(MoveT), sizeof(RspSearchDoneArgsT)))];
+    ThinkerStatsT *stats = (ThinkerStatsT *)rspBuf;
+    RspPvArgsT *pvArgs = (RspPvArgsT *)rspBuf;
+    MoveT *move = (MoveT *)rspBuf;
+    RspSearchDoneArgsT *searchDoneArgs = (RspSearchDoneArgsT *)rspBuf;
+
+    static_assert(std::is_trivially_copyable<ThinkerStatsT>::value,
+                  "ThinkerStatsT must be trivially copyable to copy it "
+                  "through a socket!");
+    static_assert(std::is_trivially_copyable<RspPvArgsT>::value,
+                  "RspPvStatsT must be trivially copyable to copy it "
+                  "through a socket!");
+    static_assert(std::is_trivially_copyable<MoveT>::value,
+                  "MoveT must be trivially copyable to copy it "
+                  "through a socket!");
+    static_assert(std::is_trivially_copyable<RspSearchDoneArgsT>::value,
+                  "RspSearchDoneArgsT must be trivially copyable to copy it "
+                  "through a socket!");
+
+    
+    eThinkMsgT rsp = recvRsp(&rspBuf, sizeof(rspBuf));
+
+    switch (rsp)
+    {
+        case eRspDraw:
+            rspHandler.Draw(*this, *move);
+            break;
+        case eRspMove:
+            rspHandler.Move(*this, *move);
+            break;
+        case eRspResign:
+            rspHandler.Resign(*this);
+            break;
+        case eRspStats:
+            rspHandler.NotifyStats(*this, *stats);
+            break;
+        case eRspPv:
+            rspHandler.NotifyPv(*this, *pvArgs);
+            break;
+        case eRspSearchDone:
+            rspHandler.SearchDone(*this, *searchDoneArgs);
+            break;
+        default:
+            LOG_EMERG("%s: unknown response type %d\n", __func__, rsp);
+            assert(0);
+            break;
+    }
 }
 
 void Thinker::RspDraw(MoveT move) const
@@ -413,7 +505,7 @@ eThinkMsgT Thinker::CompWaitThinkOrPonder() const
     return cmd;
 }
 
-eThinkMsgT Thinker::CompWaitSearch() const
+void Thinker::CompWaitSearch() const
 {
     eThinkMsgT cmd;
 
@@ -423,8 +515,6 @@ eThinkMsgT Thinker::CompWaitSearch() const
         cmd = recvCmd(nullptr, 0);
         LOG_DEBUG("%s: recvd cmd %d\n", __func__, cmd);
     } while (cmd != eCmdSearch);
-
-    return cmd;
 }
 
 // Get an available searcher.
@@ -475,12 +565,11 @@ void ThinkerSearchersUnmakeMove()
     }
 }
 
-// returns index of completed searcher.
-static int searcherWaitOne(RspSearchDoneArgsT &args)
+// Waits for a searcher to finish, then grabs the response from it.
+static void searcherWaitOne()
 {
     int res;
     int i;
-    eThinkMsgT rsp;
     
     while ((res = poll(gSG.pfds, gSG.count, -1)) == -1 &&
            errno == EINTR)
@@ -494,21 +583,19 @@ static int searcherWaitOne(RspSearchDoneArgsT &args)
         if (gSG.pfds[i].revents & POLLIN)
         {
             // Received response from slave.
-            rsp = gSG.th[i].RecvRsp(&args, sizeof(args));
-            assert(rsp == eRspSearchDone);
+            gSG.th[i].ProcessOneRsp();
             gSG.numSearching--;
-            return i;
+            return;
         }
     }
     assert(0);
-    return -1;
 }
 
-Eval ThinkerSearchersWaitOne(MoveT &move, SearchPv &pv)
+Eval ThinkerSearchersWaitOne(MoveT &move, SearchPv &pv, Thinker &parent)
 {
-    RspSearchDoneArgsT args; 
+    RspSearchDoneArgsT &args = parent.Context().searchResult;
 
-    searcherWaitOne(args);
+    searcherWaitOne();
     move = args.move;
     pv = args.pv;
     return args.eval;
@@ -549,10 +636,26 @@ void ThinkerSearchersSetDepthAndLevel(int depth, int level)
     }
 }
 
-void ThinkerSearchersCreate(int numThreads)
+static void onThinkerRspSearchDone(Thinker &searcher,
+                                   const RspSearchDoneArgsT &args,
+                                   Thinker &rootThinker)
+{
+    rootThinker.Context().searchResult = args;
+}
+
+void ThinkerSearchersCreate(int numThreads, Thinker &rootThinker)
 {
     int i;
 
+    // Currently, we only support one 'master' thinker.
+    assert(rootThinker.IsRootThinker());
+
+    Thinker::RspHandlerT rspHandler;
+    rspHandler.SearchDone =
+        std::bind(onThinkerRspSearchDone,
+                  std::placeholders::_1, std::placeholders::_2,
+                  std::ref(rootThinker));
+    
     gSG.count = numThreads;
 
     gSG.pfds = new struct pollfd[numThreads];
@@ -560,9 +663,7 @@ void ThinkerSearchersCreate(int numThreads)
 
     for (i = 0; i < gSG.count; i++)
     {
-        // (The root thinker should have already been initialized by this
-        //  point.)
-        assert(!gSG.th[i].IsRootThinker());
+        gSG.th[i].SetRspHandler(rspHandler);
         // (initialize the associated poll structures --
         //  it is global so is already zero.)
         gSG.pfds[i].fd = gSG.th[i].MasterSock();

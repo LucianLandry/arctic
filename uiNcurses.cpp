@@ -166,7 +166,7 @@ static void UIStatusDraw(GameT *game)
 
 
 // prints out expected move sequence at the bottom of the screen.
-static void UINotifyPV(GameT *game, RspPvArgsT *pvArgs)
+static void UINotifyPV(GameT *game, const RspPvArgsT *pvArgs)
 {
     char spaces[80];
     char mySanString[79 - 18];
@@ -208,8 +208,7 @@ static void UINotifyPV(GameT *game, RspPvArgsT *pvArgs)
 
     // print the new pv.
     gotoxy(1, 25);
-    cprintf("pv: d%d %s %s.",
-            pv.Level(), evalString, mySanString);
+    cprintf("pv: d%d %s %s.", pv.Level() + 1, evalString, mySanString);
 }
 
 #define CURSOR_NOBLINK 0
@@ -322,11 +321,15 @@ static void UIWindowClear(int startx, int starty, int width, int height)
 
 static void UIOptionsDraw(GameT *game)
 {
+    const Config::SpinItem *sItem =
+        game->th->Config().SpinItemAt(Config::MaxDepthSpin);
+    int level = sItem == nullptr ? -1 : sItem->Value();
+
     UIWindowClear(OPTIONS_X, 1, SCREEN_WIDTH - OPTIONS_X, 12);
     gotoxy(OPTIONS_X, 1);
     textcolor(SYSTEMCOL);
     cprintf("Options:");
-    prettyprint(2,  "New game",       "Level (%d)", gVars.maxLevel);
+    prettyprint(2,  "New game",       "Level (%d)", level);
     prettyprint(3,  "Save game",      "White control (%s)",
                 game->control[0] ? "C" : "P");
     prettyprint(4,  "Restore game",   "Black control (%s)",
@@ -977,7 +980,7 @@ static void UINotifyReady(void)
     UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
 }
 
-static void UINotifyComputerStats(GameT *game, ThinkerStatsT *stats)
+static void UINotifyComputerStats(GameT *game, const ThinkerStatsT *stats)
 {
     gotoxy(1, 1);
     textcolor(SYSTEMCOL);
@@ -1070,7 +1073,7 @@ static void UIPlayerMove(Thinker *th, GameT *game)
         case 'N':     // new game
             gVars.gameCount++;
             th->CmdBail();
-            GameNew(game, th);
+            GameNew(game);
             return;
         case 'L':     // switch computer level
             do
@@ -1078,9 +1081,7 @@ static void UIPlayerMove(Thinker *th, GameT *game)
                 UIBarfString(myStr, 3, "0123456789", "Set level to? >");
             } while (sscanf(myStr, "%d", &myLevel) < 1);
 
-            if (th->Context().maxDepth > (gVars.maxLevel = myLevel))
-                th->CmdMoveNow();
-
+            th->Config().SetSpinClamped(Config::MaxDepthSpin, myLevel);
             UIOptionsDraw(game);
             return;
         case 'H':     // change history window
@@ -1097,13 +1098,13 @@ static void UIPlayerMove(Thinker *th, GameT *game)
             player = (comstr[0] == 'B');
             game->control[player] ^= 1;
 
-            GameCompRefresh(game, th);
+            GameCompRefresh(game);
             UIOptionsDraw(game);
             return;
         case 'P': // toggle pondering.
             gVars.ponder = !gVars.ponder;
 
-            GameCompRefresh(game, th);
+            GameCompRefresh(game);
             UIOptionsDraw(game);
             return;
         case 'M':
@@ -1136,17 +1137,17 @@ static void UIPlayerMove(Thinker *th, GameT *game)
                 // Could goto current ply instead of numPlies.  I'm assuming
                 // here the user is absent-minded and might forget (or might not
                 // know) the current ply is persistent.
-                GameGotoPly(game, GameLastPly(game), th);
+                GameGotoPly(game, GameLastPly(game));
             }
             return;
         case 'U':
-            if (GameRewind(game, 1, th) < 0)
+            if (GameRewind(game, 1) < 0)
             {
                 UIBarf("Start of game.");
             }
             return;
         case 'O':
-            if (GameFastForward(game, 1, th) < 0)
+            if (GameFastForward(game, 1) < 0)
             {
                 UIBarf("End of redo information.");
             }
@@ -1168,7 +1169,7 @@ static void UIPlayerMove(Thinker *th, GameT *game)
 
             UIOptionsDraw(game);
 
-            GameNewEx(game, th, board, false);
+            GameNewEx(game, board, false);
             return;
         }
         case 'A': // toggle randomization of moves.
@@ -1183,7 +1184,7 @@ static void UIPlayerMove(Thinker *th, GameT *game)
             UITimeMenu(game);
             UIOptionsDraw(game);
             UINotifyReady();
-            GameMoveCommit(game, NULL, th, 0);
+            GameMoveCommit(game, NULL, false);
             return;
         default:
             break;
@@ -1236,7 +1237,7 @@ static void UIPlayerMove(Thinker *th, GameT *game)
     }
 
     myMove = *foundMove;
-    GameMoveCommit(game, &myMove, th, 0);
+    GameMoveCommit(game, &myMove, false);
 }
 
 static bool UIShouldCommitMoves(void)

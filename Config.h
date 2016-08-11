@@ -17,6 +17,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include <algorithm>
 #include <assert.h>
 #include <functional>
 #include <map>
@@ -30,13 +31,6 @@
 // button (a simple trigger)
 // string (a free-form string)
 
-// Pre-defined config items.
-#define kConfigMaxDepthSpin "limits/maxDepth" // 0 == 'no limit'
-#define kConfigMaxNodesSpin "limits/maxNodes" // 0 == 'no limit'
-#define kConfigRandomMovesCheckbox "randomMoves" // true iff engine should
-                                              //  randomize moves
-#define kConfigCanResignCheckbox   "canResign"   // true iff engine may resign
-
 // not used yet
 // #define kConfigHistoryWindowSpin "historyWindow"
 // #define kConfigTranpositionTableSizeSpin "limits/transpositionTableSize"
@@ -44,6 +38,14 @@
 class Config
 {
 public:
+    // Pre-defined config items (see Config.cpp for a better decription of these
+    //  variables:)
+    static const char
+        *const MaxDepthSpin, *const MaxDepthDescription,
+        *const MaxNodesSpin, *const MaxNodesDescription,
+        *const RandomMovesCheckbox, *const RandomMovesDescription,
+        *const CanResignCheckbox, *const CanResignDescription;
+    
     Config() = default;
     Config(const Config &other) = default;
     
@@ -79,16 +81,6 @@ public:
     Error SetButton(const std::string &name);
     Error SetString(const std::string &name, const std::string &value);
 
-    class Item;
-    Error Register(const Item &item);
-
-    // Retrieve an item by index.  This allows item discovery.  Returns item at
-    //  index 'idx' (or nullptr if no such item exists).
-    const Item *ItemAt(int idx) const;
-    
-    // Retrieve an item by name.  Returns nullptr if no such item exists.
-    Item *ItemAt(const std::string &name) const;
-
     // Do a type_id check to figure this out.
     // ItemType ItemType(const std::string &name) const;
     class Item
@@ -106,6 +98,15 @@ public:
         std::string description;
     };
 
+    Error Register(const Item &item);
+
+    // Retrieve an item by index.  This allows item discovery.  Returns item at
+    //  index 'idx' (or nullptr if no such item exists).
+    const Item *ItemAt(int idx) const;
+    
+    // Retrieve an item by name.  Returns nullptr if no such item exists.
+    Item *ItemAt(const std::string &name) const;
+    
     class CheckboxItem final : public Item
     {
     public:
@@ -140,6 +141,8 @@ public:
         SpinChangedFunc callback;
     };
 
+    const SpinItem *SpinItemAt(const std::string &name) const;
+    
     using ComboChoices = std::vector<std::string>;
     class ComboItem final : public Item
     {
@@ -256,6 +259,11 @@ inline int Config::SpinItem::Min() const
 inline int Config::SpinItem::Max() const
 {
     return max;
+}
+
+inline const Config::SpinItem *Config::SpinItemAt(const std::string &name) const
+{
+    return dynamic_cast<const SpinItem *>(ItemAt(name));
 }
 
 inline Config::ComboItem::ComboItem(const std::string &name,

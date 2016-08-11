@@ -261,7 +261,7 @@ static void finishMoves(GameT *game, Board *fenBoard, MoveT *move, char *pToken,
         // handling such a case.  Fortunately all such (legal) draws must happen
         // on the last ply and can therefore be handled entirely by
         // processPositionCommand().
-        GameGotoPly(game, lastCommonPly, th);
+        GameGotoPly(game, lastCommonPly);
         GameMoveMake(game, move);
         if (abs(lastPly - lastCommonPly) > 2)
         {
@@ -277,7 +277,7 @@ static void finishMoves(GameT *game, Board *fenBoard, MoveT *move, char *pToken,
     {
         // First position was different.  We always have to blow the hash
         // etc. away because we do not know exactly how different things were.
-        GameNewEx(game, th, fenBoard, false);
+        GameNewEx(game, fenBoard, false);
     }
 
     for (;
@@ -504,7 +504,7 @@ static void processGoCommand(Thinker *th, GameT *game, char *pToken)
     int wtime = INT_MAX, btime = INT_MAX;
     int winc = 0, binc = 0;
     int movestogo = -1;
-    int depth = NO_LIMIT;  // okay, these better be at least zero
+    int depth = 0;
     int nodes = NO_LIMIT;
     int movetime = -1;
     int mate = -1;
@@ -639,7 +639,7 @@ static void processGoCommand(Thinker *th, GameT *game, char *pToken)
         // According to the spec "the last move sent in in (sic) the position
         // string is the ponder move".  Since we like to ponder on different
         // moves we need to start 1 move back.
-        GameRewind(game, 1, th);
+        GameRewind(game, 1);
     }
 
     // Setup the clocks.
@@ -692,7 +692,7 @@ static void processGoCommand(Thinker *th, GameT *game, char *pToken)
         }
     }
 
-    gVars.maxLevel = depth - (depth != NO_LIMIT);
+    th->Config().SetSpin(Config::MaxDepthSpin, depth);
     gVars.maxNodes = nodes;  // (maxNodes is best-effort only.)
 
     if (mate > 0)
@@ -701,10 +701,8 @@ static void processGoCommand(Thinker *th, GameT *game, char *pToken)
         // ('we are getting checkmated' || 'we are checkmating') in x moves.
         // With our current (almost-)full search window, we should not need
         // any further customization for mates, but if we change that we would.
-        gVars.maxLevel =
-            (gVars.maxLevel == NO_LIMIT ?
-             mate * 2 :
-             MIN(gVars.maxLevel, mate * 2));
+        th->Config().SetSpin(Config::MaxDepthSpin,
+                             depth == 0 ? mate * 2 : MIN(depth, mate * 2));
     }
 
     if (movetime >= 0)
@@ -799,7 +797,7 @@ static void uciPlayerMove(Thinker *th, GameT *game)
             gUciState.initialTime[0] = 0;
             gUciState.initialTime[1] = 0;
             gUciState.ponderMove = MoveNone;
-            GameNew(game, th);
+            GameNew(game);
         }
     }
     else if (matches(inputStr, "position"))
@@ -815,7 +813,7 @@ static void uciPlayerMove(Thinker *th, GameT *game)
         th->CmdBail();
         // We preserve the rest of our state (bInfinite, mate, etc)
         gUciState.bPonder = false;
-        // GameFastForward(game, 1, th) does not work here, since the clock
+        // GameFastForward(game, 1) does not work here, since the clock
         // is restored to infinite time.  So:
         if (gUciState.ponderMove != MoveNone)
         {
@@ -828,7 +826,7 @@ static void uciPlayerMove(Thinker *th, GameT *game)
     }
     else if (matches(inputStr, "stop") && gUciState.bSearching)
     {
-        PlayloopCompMoveNowAndSync(game, th);
+        PlayloopCompMoveNowAndSync(*th);
         gUciState.bPonder = false;
         gUciState.bInfinite = false;
         // Print the result that we just cached away.
@@ -895,7 +893,8 @@ static void uciNotifyResign(int turn)
 
 // Assumes "result" is long enough to hold the actual result (say 80 chars to
 // be safe).  Returns "result".
-static char *buildStatsString(char *result, GameT *game, ThinkerStatsT *stats)
+static char *buildStatsString(char *result, GameT *game,
+                              const ThinkerStatsT *stats)
 {
     int nodes = stats->nodes;
     // (Convert bigtime_t to milliseconds)
@@ -927,7 +926,7 @@ static bool chopFirstMove(char *moveString)
     return false;
 }
 
-static void uciNotifyPV(GameT *game, RspPvArgsT *pvArgs)
+static void uciNotifyPV(GameT *game, const RspPvArgsT *pvArgs)
 {
     char lanString[65];
     char evalString[20];
@@ -990,7 +989,7 @@ static void uciNotifyPV(GameT *game, RspPvArgsT *pvArgs)
 }
 
 
-static void uciNotifyComputerStats(GameT *game, ThinkerStatsT *stats)
+static void uciNotifyComputerStats(GameT *game, const ThinkerStatsT *stats)
 {
     char statsString[80];
 

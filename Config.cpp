@@ -18,6 +18,22 @@
 #include <assert.h>
 #include "Config.h"
 
+const char *const Config::MaxDepthSpin = "limits/maxDepth";
+const char *const Config::MaxDepthDescription =
+    "Max depth engine may search.  0 implies 'no limit'.";
+
+const char *const Config::MaxNodesSpin = "limits/maxNodes";
+const char *const Config::MaxNodesDescription =
+    "Max nodes engine may search.  0 implies 'no limit'.";
+
+const char *const Config::RandomMovesCheckbox = "randomMoves";
+const char *const Config::RandomMovesDescription =
+    "True iff engine should randomize moves.";
+
+const char *const Config::CanResignCheckbox = "canResign";
+const char *const Config::CanResignDescription =
+    "True iff engine may resign.";
+
 const char *Config::ErrorString(Config::Error error) const
 {
     switch (error)

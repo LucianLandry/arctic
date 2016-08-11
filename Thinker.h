@@ -21,6 +21,7 @@
 
 #include "aTypes.h"
 #include "Board.h"
+#include "Config.h"
 #include "Eval.h"
 #include "MoveList.h"
 #include "Pv.h"
@@ -28,8 +29,7 @@
 #include "saveGame.h"
 #include "ThinkerTypes.h"
 
-// FIXME, external code should not need to be aware of this.  That means
-//  I need to do something about RecvRsp().
+// FIXME, external code should not need to be aware of this.
 enum eThinkMsgT
 {
     eCmdThink,   // full iterative-depth search
@@ -37,10 +37,10 @@ enum eThinkMsgT
     eCmdSearch,  // simple search on a sub-tree
     // eCmdMoveNow not needed until clustering
 
-    eRspDraw,
-    eRspMove,
-    eRspResign,
-    eRspStats,
+    eRspDraw,      // takes MoveT
+    eRspMove,      // takes MoveT
+    eRspResign,    // takes (void)
+    eRspStats,     // takes ThinkerStatsT
     eRspPv,        // takes RspPvArgsT
 
     eRspSearchDone // takes RspSearchDoneArgsT
@@ -71,7 +71,6 @@ public:
     // ---------------------------------------------------------------------
     // Client/proxy-side methods:
 
-    eThinkMsgT RecvRsp(void *buffer, int bufLen);
     void CmdNewGame();
     void CmdSetBoard(const Board &board);
     void CmdMakeMove(MoveT move);
@@ -94,18 +93,40 @@ public:
     // return a poll()able object that says 'you can call RecvRsp()'
     int MasterSock() const;
 
+    using RspDrawFunc = std::function<void(Thinker &, MoveT)>;
+    using RspMoveFunc = std::function<void(Thinker &, MoveT)>;
+    using RspResignFunc = std::function<void(Thinker &)>;
+    using RspNotifyStatsFunc =
+        std::function<void(Thinker &, const ThinkerStatsT &)>;
+    using RspNotifyPvFunc =
+        std::function<void(Thinker &, const RspPvArgsT &)>;
+    using RspSearchDoneFunc =
+        std::function<void(Thinker &, const RspSearchDoneArgsT &)>;
+
+    struct RspHandlerT
+    {
+        RspDrawFunc Draw;
+        RspMoveFunc Move;
+        RspResignFunc Resign;
+        RspNotifyStatsFunc NotifyStats;
+        RspNotifyPvFunc NotifyPv;
+        RspSearchDoneFunc SearchDone;
+    };
+    void SetRspHandler(const RspHandlerT &rspHandler);
+    void ProcessOneRsp();
+    
     // ---------------------------------------------------------------------
     // Server/engine-side methods:
-    // ---------------------------------------------------------------------
+
     void RspDraw(MoveT move) const;
     void RspMove(MoveT move) const;
     void RspResign() const;
-    void RspSearchDone(MoveT move, Eval eval, const SearchPv &pv) const;
     void RspNotifyStats(const ThinkerStatsT &stats) const;
     void RspNotifyPv(const ThinkerStatsT &stats, const DisplayPv &pv) const;
+    void RspSearchDone(MoveT move, Eval eval, const SearchPv &pv) const;
     inline bool CompNeedsToMove() const;
     eThinkMsgT CompWaitThinkOrPonder() const;
-    eThinkMsgT CompWaitSearch() const;
+    void CompWaitSearch() const;
     inline bool IsRootThinker() const;
 
     struct ContextT
@@ -123,10 +144,20 @@ public:
                          //  (or quiesce).
         int depth;       // Depth we are currently searching at (searching from
                          //  root == 0).
+
+        // Searchers dump their results into here.
+        RspSearchDoneArgsT searchResult;
+        
+        // Config variable.  -1 == no limit.  Like 'maxDepth', except 'maxDepth'
+        //  is manipulated by the engine.
+        volatile int maxLevel;
     };
     // (used by engine to track/manipulate internal state)
     inline ContextT &Context();
+
     // ---------------------------------------------------------------------
+    // methods common to both client and engine:
+    inline class Config &Config();
     
 private:
     // The masterSock sends commands and receives responses.
@@ -161,13 +192,17 @@ private:
     } searchArgs;
 
     ContextT context;
-
+    class Config config;
+    
     void threadFunc();
     std::thread *thread;
 
+    RspHandlerT rspHandler;
+    
     void compSendCmd(eThinkMsgT cmd) const;
     void compSendRsp(eThinkMsgT rsp, const void *buffer, int bufLen) const;
     eThinkMsgT recvCmd(void *buffer, int bufLen) const;
+    eThinkMsgT recvRsp(void *buffer, int bufLen);
     void doThink(eThinkMsgT cmd, const MoveList *mvlist);
 
     // There is (currently) one 'master' thinker that coordinates all of the
@@ -215,9 +250,14 @@ inline Thinker::ContextT &Thinker::Context()
     return context;
 }
 
+inline class Config &Thinker::Config()
+{
+    return config;
+}
+
 // Operations on slave threads.
 bool ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT move);
-Eval ThinkerSearchersWaitOne(MoveT &move, SearchPv &pv);
+Eval ThinkerSearchersWaitOne(MoveT &move, SearchPv &pv, Thinker &parent);
 void ThinkerSearchersBail();
 
 void ThinkerSearchersMakeMove(MoveT move);
@@ -225,6 +265,7 @@ void ThinkerSearchersUnmakeMove();
 int ThinkerSearchersAreSearching();
 void ThinkerSearchersSetBoard(const Board &board);
 void ThinkerSearchersSetDepthAndLevel(int depth, int level);
-void ThinkerSearchersCreate(int numThreads); // Initialize searcher threads.
+// Initialize searcher threads.
+void ThinkerSearchersCreate(int numThreads, Thinker &rootThinker);
 
 #endif // THINKER_H

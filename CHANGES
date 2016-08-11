@@ -41,6 +41,9 @@ Implemented platform-agnostic Semaphore class and converted everyone to use it.
 Refactored Spinlocks into a platform-agnostic C++11 class (1.6% speedup)
 Refactored ThinkContextT into a C++ 'Thinker' class.
 Refactored history window functionality into its own C++ class.
+Updated license from LGPL 2 to LGPL 2.1.
+Bugfix: uiXboard: fix bad "ping" command handling in extremely rare cases.
+Displayed search depth now consistently starts at 1, not 0.
 
 Version 1.1:
 Build improvements: use Git for version control, cmake for building

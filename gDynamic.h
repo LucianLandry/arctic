@@ -27,8 +27,6 @@ extern "C" {
 #define NO_LIMIT (-1)
 
 typedef struct {
-    int maxLevel;     // Max depth we are authorized to search at.
-                      //  NO_LIMIT indicates no (external) depth limit.
     int maxNodes;     // Max nodes we are authorized to search.
                       //  NO_LIMIT indicates no node limit.
     bool randomMoves; // randomize moves? (default: false)

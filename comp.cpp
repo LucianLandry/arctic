@@ -583,7 +583,7 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
                 // nobody to search on it.  Wait for an eval to become
                 // available.
                 // LOG_DEBUG("bldbg: comp3.5\n");
-                myEval = ThinkerSearchersWaitOne(move, childPv);
+                myEval = ThinkerSearchersWaitOne(move, childPv, *th);
                 i--; // this counters i++
             }
         }
@@ -767,7 +767,8 @@ static void computermove(Thinker *th, bool bPonder)
     // lot of spew) when running into the fifty-move rule.  If I could think
     // of an elegant (not compute-hogging) way to detect that further-depth
     // searches would be futile, I would implement it.
-    int maxSearchDepth = gVars.maxLevel == NO_LIMIT ? 100 : gVars.maxLevel;
+    int maxSearchDepth =
+        th->Context().maxLevel == NO_LIMIT ? 100 : th->Context().maxLevel;
 
     th->Context().depth = 0; // start search from root depth.
 

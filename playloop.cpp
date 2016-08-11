@@ -26,128 +26,146 @@
 #include "playloop.h"
 #include "ui.h"
 
-
-static eThinkMsgT PlayloopCompProcessRsp(GameT *game, Thinker *th)
+static void sanityCheckBadRsp(const GameT &game, const char *context)
 {
-    // For this to work, 'stats', 'pvArgs', and 'move' must be trivially
-    //  copyable.
-    alignas(sizeof(void *)) char rspBuf[MAX3(sizeof(ThinkerStatsT), sizeof(RspPvArgsT), sizeof(MoveT))];
-    ThinkerStatsT *stats = (ThinkerStatsT *)rspBuf;
-    RspPvArgsT *pvArgs = (RspPvArgsT *)rspBuf;
-    MoveT *move = (MoveT *)rspBuf;
+    const Board &board = game.savedBoard; // shorthand.
 
-    int turn;
-    Board *board = &game->savedBoard; // shorthand.
-    eThinkMsgT rsp = th->RecvRsp(&rspBuf, sizeof(rspBuf));
-
-    if (!gVars.ponder && !game->control[board->Turn()])
+    // The engine should not emit anything when it isn't pondering *and*
+    // it is not the engine's turn.
+    if (!gVars.ponder && !game.control[board.Turn()])
     {
-        LOG_EMERG("bad rsp %d\n", rsp);
+        LOG_EMERG("unexpected response received (%s)\n", context);
         assert(0);
     }
-
-    switch(rsp)
-    {
-    case eRspStats:
-        gUI->notifyComputerStats(game, stats);
-        break;
-    case eRspPv:
-        gUI->notifyPV(game, pvArgs);
-        break;
-    case eRspDraw:
-        if (!game->control[board->Turn()])
-        {
-            // Decided or forced to draw while pondering.  Ignore and let the
-            // player make their move.
-            gUI->notifyReady();
-            break;
-        }
-
-        // Only claimed draws, not automatic draws, should go through
-        // this path.
-        if (*move != MoveNone && gUI->shouldCommitMoves())
-        {
-            GameMoveCommit(game, move, th, 1);
-        }
-
-        ClocksStop(game);
-        game->bDone = true;
-        gUI->notifyReady();
-
-        if (board->IsDrawFiftyMove())
-        {
-            gUI->notifyDraw("fifty-move rule", move);
-        }
-        else if (board->IsDrawThreefoldRepetition())
-        {
-            gUI->notifyDraw("threefold repetition", move);
-        }
-        else
-        {
-            assert(0);
-        }
-        break;
-    case eRspMove:
-        if (!game->control[board->Turn()])
-        {
-            // Decided or forced to move while pondering.  Ignore and let the
-            // player make their move.
-            gUI->notifyReady();
-            break;
-        }
-
-        gUI->notifyMove(*move);
-        if (gUI->shouldCommitMoves())
-        {
-            GameMoveCommit(game, move, th, 0);
-        }
-        LogFlush();
-        break;
-    case eRspResign:
-        turn =
-            // Computer resigned its position while pondering?
-            !game->control[board->Turn()] ?
-            board->Turn() ^ 1 : // (yes)
-            board->Turn();      // (no)
-
-        ClocksStop(game);
-        game->bDone = true;
-        gUI->notifyReady();
-        LOG_DEBUG("%d resigns\n", turn);
-        LogFlush();
-        gUI->notifyResign(turn);
-        break;
-    default:
-        assert(0);
-    }
-
-    return rsp;
 }
-
-
-void PlayloopCompMoveNowAndSync(GameT *game, Thinker *th)
+    
+static void onThinkerRspDraw(Thinker &th, MoveT move, GameT &game)
 {
-    eThinkMsgT rsp;
-    if (!th->CompIsBusy())
+    const Board &board = game.savedBoard; // shorthand.
+
+    sanityCheckBadRsp(game, "draw");
+    if (!game.control[board.Turn()])
     {
+        // Decided (or forced) to draw while pondering.  Ignore and let the
+        // player make their move.
+        gUI->notifyReady();
         return;
     }
 
+    // Only claimed draws, not automatic draws, should go through
+    // this path.
+    if (move != MoveNone && gUI->shouldCommitMoves())
+    {
+        GameMoveCommit(&game, &move, true);
+    }
+
+    ClocksStop(&game);
+    game.bDone = true;
+    gUI->notifyReady();
+
+    if (board.IsDrawFiftyMove())
+        gUI->notifyDraw("fifty-move rule", &move);
+    else if (board.IsDrawThreefoldRepetition())
+        gUI->notifyDraw("threefold repetition", &move);
+    else
+        assert(0);
+}
+
+static void onThinkerRspMove(Thinker &th, MoveT move, GameT &game)
+{
+    const Board &board = game.savedBoard; // shorthand.
+
+    sanityCheckBadRsp(game, "move");
+    if (!game.control[board.Turn()])
+    {
+        // Decided or forced to move while pondering.  Ignore and let the
+        // player make their move.
+        gUI->notifyReady();
+        return;
+    }
+
+    gUI->notifyMove(move);
+    if (gUI->shouldCommitMoves())
+    {
+        GameMoveCommit(&game, &move, false);
+    }
+    LogFlush();
+}
+
+static void onThinkerRspResign(Thinker &th, GameT &game)
+{
+    const Board &board = game.savedBoard; // shorthand.
+    
+    sanityCheckBadRsp(game, "resign");
+    int turn =
+        // Computer resigned its position while pondering?
+        !game.control[board.Turn()] ?
+        board.Turn() ^ 1 : // (yes)
+        board.Turn();      // (no)
+
+    ClocksStop(&game);
+    game.bDone = true;
+    gUI->notifyReady();
+    LOG_DEBUG("%d resigns\n", turn);
+    LogFlush();
+    gUI->notifyResign(turn);
+}
+
+static void onThinkerRspNotifyStats(Thinker &th, const ThinkerStatsT &stats,
+                                    GameT &game)
+{
+    sanityCheckBadRsp(game, "notifyStats");
+    gUI->notifyComputerStats(&game, &stats);
+}
+
+static void onThinkerRspNotifyPv(Thinker &th, const RspPvArgsT &pvArgs,
+                                 GameT &game)
+{
+    sanityCheckBadRsp(game, "notifyPv");
+    gUI->notifyPV(&game, &pvArgs);
+}
+
+void PlayloopSetThinkerRspHandler(GameT &game, Thinker &th)
+{
+    Thinker::RspHandlerT rspHandler;
+    rspHandler.Draw = std::bind(onThinkerRspDraw,
+                                std::placeholders::_1, std::placeholders::_2,
+                                std::ref(game));
+    rspHandler.Move = std::bind(onThinkerRspMove,
+                                std::placeholders::_1, std::placeholders::_2,
+                                std::ref(game));
+    rspHandler.Resign = std::bind(onThinkerRspResign, std::placeholders::_1,
+                                  std::ref(game));
+    rspHandler.NotifyStats =
+        std::bind(onThinkerRspNotifyStats,
+                  std::placeholders::_1, std::placeholders::_2,
+                  std::ref(game));
+    rspHandler.NotifyPv =
+        std::bind(onThinkerRspNotifyPv,
+                  std::placeholders::_1, std::placeholders::_2,
+                  std::ref(game));
+    // .SearchDone is left unset for now; if it is actually called we should
+    // terminate with a badfunc exception.
+    th.SetRspHandler(rspHandler);
+}
+
+void PlayloopCompProcessRspUntilIdle(Thinker &th)
+{
+    while (th.CompIsBusy())
+        th.ProcessOneRsp();
+}
+
+void PlayloopCompMoveNowAndSync(Thinker &th)
+{
     // At this point, even if the computer moved in the meantime, we
     // know we haven't processed its response yet ...
-    th->CmdMoveNow();
-
-    do
-    {
-        rsp = PlayloopCompProcessRsp(game, th);
-    } while (rsp == eRspStats || rsp == eRspPv);
-
+    th.CmdMoveNow(); // (assumes CmdMoveNow() == noop if !th.CompIsBusy())
+    PlayloopCompProcessRspUntilIdle(th);
     // ... but now we definitely have (processed the response).
 }
 
-
 // Main play loop.
-void PlayloopRun(GameT *game, Thinker *th)
+void PlayloopRun(GameT &game, Thinker &th)
 {
     struct pollfd pfds[2];
     int res;
@@ -160,7 +178,7 @@ void PlayloopRun(GameT *game, Thinker *th)
     // Setup the pollfd array.
     pfds[0].fd = fileno(stdin);
     pfds[0].events = POLLIN;
-    pfds[1].fd = th->MasterSock();
+    pfds[1].fd = th.MasterSock();
     pfds[1].events = POLLIN;
 
     while (1)
@@ -168,17 +186,17 @@ void PlayloopRun(GameT *game, Thinker *th)
         tickTimeout = -1;
         moveNowTimeout = -1;
         pollTimeout = -1;
-        turn = game->savedBoard.Turn();
+        turn = game.savedBoard.Turn();
         moveNowOnTimeout = false;
-        myTime = game->clocks[turn]->PerMoveTime();
+        myTime = game.clocks[turn]->PerMoveTime();
 
         // In ClocksICS mode, the clock will run on the first move even though
         // we would rather it not.  Making it run makes the time recalc in the
         // poll loop much more robust (since many things might happen to the
         // clock in the meanwhile).
         // But, it means we should skip any tick notification.
-        if (!ClocksICS(game) &&
-            game->clocks[turn]->IsRunning() &&
+        if (!ClocksICS(&game) &&
+            game.clocks[turn]->IsRunning() &&
             myTime != CLOCK_TIME_INFINITE)
         {
             // Try to keep the UI time display refreshed.
@@ -197,12 +215,12 @@ void PlayloopRun(GameT *game, Thinker *th)
 
         // The computer cannot currently decide for itself when to move, so
         // we decide for it.
-        if (game->clocks[turn]->IsRunning() &&
-            game->control[turn] &&
-            game->goalTime[turn] != CLOCK_TIME_INFINITE)
+        if (game.clocks[turn]->IsRunning() &&
+            game.control[turn] &&
+            game.goalTime[turn] != CLOCK_TIME_INFINITE)
         {
             // Yes.
-            moveNowTimeout = (myTime - game->goalTime[turn]) / 1000;
+            moveNowTimeout = (myTime - game.goalTime[turn]) / 1000;
             moveNowTimeout = MAX(moveNowTimeout, 0);        
 
             moveNowOnTimeout = tickTimeout == -1 || moveNowTimeout < tickTimeout;
@@ -223,19 +241,19 @@ void PlayloopRun(GameT *game, Thinker *th)
             if (moveNowOnTimeout)
             {
                 // So we do not trigger again
-                game->goalTime[turn] = CLOCK_TIME_INFINITE;
-                th->CmdMoveNow();
+                game.goalTime[turn] = CLOCK_TIME_INFINITE;
+                th.CmdMoveNow();
             }
             else
             {
                 // Tick, tock...
-                gUI->notifyTick(game);
+                gUI->notifyTick(&game);
             }
             continue;
         }
 
         if (res == -1 && errno == EINTR) continue;
-        assert(res > 0); /* other errors should not happen. */
+        assert(res > 0); // other errors should not happen.
         assert(!(pfds[1].revents & (POLLERR | POLLHUP | POLLNVAL)));
 
         if (pfds[0].revents & (POLLERR | POLLHUP | POLLNVAL))
@@ -246,13 +264,13 @@ void PlayloopRun(GameT *game, Thinker *th)
 
         if (pfds[0].revents & POLLIN)
         {
-            SwitcherSwitch(&game->sw);
+            SwitcherSwitch(&game.sw);
         }
         // 'else' because user-input handler may change the state on us,
         // so we need to re-poll...
         else if (pfds[1].revents & POLLIN)
         {
-            PlayloopCompProcessRsp(game, th);
+            th.ProcessOneRsp();
         }
     }
 }

@@ -59,7 +59,7 @@ static void compRefresh(GameT *game, Thinker *th)
 }
 
 
-void GameInit(GameT *game)
+void GameInit(GameT *game, Thinker *th)
 {
     int i;
 
@@ -79,14 +79,17 @@ void GameInit(GameT *game)
         game->goalTime[i] = CLOCK_TIME_INFINITE;
     }
     ClocksReset(game);
+
+    game->th = th;
 }
 
 
 // Handle a change in computer control or pondering.
-void GameCompRefresh(GameT *game, Thinker *th)
+void GameCompRefresh(GameT *game)
 {
     uint8 turn = game->savedBoard.Turn(); // shorthand
-
+    Thinker *th = game->th; // shorthand
+    
     if ((!game->bDone && th->CompIsThinking() && game->control[turn]) ||
         (!game->bDone && th->CompIsPondering() && gVars.ponder &&
          !game->control[turn] && game->control[turn ^ 1]))
@@ -138,13 +141,13 @@ void GameMoveMake(GameT *game, MoveT *move)
 }
 
 
-void GameMoveCommit(GameT *game, MoveT *move, Thinker *th,
-                    int declaredDraw)
+void GameMoveCommit(GameT *game, MoveT *move, bool declaredDraw)
 {
     MoveList mvlist;
     Board *board = &game->savedBoard; // shorthand.
     int turn;
-
+    Thinker *th = game->th; // shorthand.
+    
     GameMoveMake(game, move);
 
 #if 0 // bldbg: here is a way to turn on logging for one ply only.
@@ -200,29 +203,28 @@ void GameMoveCommit(GameT *game, MoveT *move, Thinker *th,
 }
 
 
-void GameNewEx(GameT *game, Thinker *th, Board *board, bool resetClocks)
+void GameNewEx(GameT *game, Board *board, bool resetClocks)
 {
     assert(board->Position().IsLegal());
     game->savedBoard = *board;
     SaveGamePositionSet(&game->sgame, board);
     if (resetClocks)
         ClocksReset(game);
-    th->CmdNewGame();
-    GameMoveCommit(game, NULL, th, 0);
+    game->th->CmdNewGame();
+    GameMoveCommit(game, NULL, false);
 }
 
-
-void GameNew(GameT *game, Thinker *th)
+void GameNew(GameT *game)
 {
     Board myBoard;
-    GameNewEx(game, th, &myBoard, true);
+    GameNewEx(game, &myBoard, true);
 }
 
-
-int GameGotoPly(GameT *game, int ply, Thinker *th)
+int GameGotoPly(GameT *game, int ply)
 {
     int plyDiff = ply - GameCurrentPly(game);
-
+    Thinker *th = game->th; // shorthand
+    
     if (ply < GameFirstPly(game) || ply > GameLastPly(game))
     {
         return -1;
@@ -235,16 +237,16 @@ int GameGotoPly(GameT *game, int ply, Thinker *th)
     //  other state), but if the user tracks back and forth through the history,
     //  we might not diverge that much.
     SaveGameGotoPly(&game->sgame, ply, &game->savedBoard, game->clocks);
-    GameMoveCommit(game, NULL, th, 0);
+    GameMoveCommit(game, NULL, false);
     return 0;
 }
 
-int GameRewind(GameT *game, int numPlies, Thinker *th)
+int GameRewind(GameT *game, int numPlies)
 {
-    return GameGotoPly(game, GameCurrentPly(game) - numPlies, th);
+    return GameGotoPly(game, GameCurrentPly(game) - numPlies);
 }
 
-int GameFastForward(GameT *game, int numPlies, Thinker *th)
+int GameFastForward(GameT *game, int numPlies)
 {
-    return GameGotoPly(game, GameCurrentPly(game) + numPlies, th);
+    return GameGotoPly(game, GameCurrentPly(game) + numPlies);
 }

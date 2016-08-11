@@ -24,10 +24,6 @@
 #include "switcher.h"
 #include "Thinker.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct {
     bool bDone;      // 'true' if game has ended (draw/mate), or
                      //  computer resigned the position.
@@ -54,22 +50,26 @@ typedef struct {
     bigtime_t goalTime[NUM_PLAYERS];
 
     Board savedBoard;
+
+    // Associated thinker.  For now there is only one (the root thinker), but
+    //  we will probably want to expand this as we start supporting multiple
+    //  engines.
+    Thinker *th;
 } GameT;
 
-void GameInit(GameT *game);
+void GameInit(GameT *game, Thinker *th);
 
 void GameMoveMake(GameT *game, MoveT *move);
 // Like GameMoveMake(), but also kick off UI and thinker state updates.
-void GameMoveCommit(GameT *game, MoveT *move, Thinker *th,
-                    int declaredDraw);
+void GameMoveCommit(GameT *game, MoveT *move, bool declaredDraw);
 // Handle a change in computer control or pondering.
-void GameCompRefresh(GameT *game, Thinker *th);
-void GameNewEx(GameT *game, Thinker *th, Board *board, bool resetClocks);
-void GameNew(GameT *game, Thinker *th);
+void GameCompRefresh(GameT *game);
+void GameNewEx(GameT *game, Board *board, bool resetClocks);
+void GameNew(GameT *game);
 
-int GameGotoPly(GameT *game, int ply, Thinker *th);
-int GameRewind(GameT *game, int numPlies, Thinker *th);
-int GameFastForward(GameT *game, int numPlies, Thinker *th);
+int GameGotoPly(GameT *game, int ply);
+int GameRewind(GameT *game, int numPlies);
+int GameFastForward(GameT *game, int numPlies);
 
 // These are wrappers for SaveGameT.
 static inline int GameCurrentPly(GameT *game)
@@ -84,9 +84,5 @@ static inline int GameLastPly(GameT *game)
 {
     return SaveGameLastPly(&game->sgame);
 }
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // GAME_H
