@@ -122,6 +122,8 @@ public:
         CheckboxChangedFunc callback;
     };
 
+    const CheckboxItem *CheckboxItemAt(const std::string &name) const;
+    
     class SpinItem final : public Item
     {
     public:
@@ -264,6 +266,11 @@ inline int Config::SpinItem::Max() const
 inline const Config::SpinItem *Config::SpinItemAt(const std::string &name) const
 {
     return dynamic_cast<const SpinItem *>(ItemAt(name));
+}
+
+inline const Config::CheckboxItem *Config::CheckboxItemAt(const std::string &name) const
+{
+    return dynamic_cast<const CheckboxItem *>(ItemAt(name));
 }
 
 inline Config::ComboItem::ComboItem(const std::string &name,

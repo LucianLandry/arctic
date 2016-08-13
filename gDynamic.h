@@ -27,12 +27,7 @@ extern "C" {
 #define NO_LIMIT (-1)
 
 typedef struct {
-    int maxNodes;     // Max nodes we are authorized to search.
-                      //  NO_LIMIT indicates no node limit.
-    bool randomMoves; // randomize moves? (default: false)
     bool ponder;      // allow computer to ponder? (default: false)
-    bool canResign;   // true iff engine is allowed to resign
-
     HintPv pv;        // Attempts to keep track of principal variation.
     int gameCount;    // for stats keeping.
 } GDynamicT;

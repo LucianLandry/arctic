@@ -166,7 +166,7 @@ static char *findRecognizedToken(char *pStr)
     return NULL;
 }
 
-static void uciInit(GameT *ignore)
+static void uciInit(GameT *game)
 {
     static bool initialized;
 
@@ -186,13 +186,13 @@ static void uciInit(GameT *ignore)
 
 #if 1 // bldbg: goes out for debugging
     // Use random moves by default.
-    gVars.randomMoves = true;
+    game->th->Config().SetCheckbox(Config::RandomMovesCheckbox, true);
 #endif
     // There is no standard way I am aware of for a UCI engine to resign
-    // so until I figure out how Polyglot might interpret it, we have to
-    // play until the bitter end.  Even then, we probably want to work w/all
-    // UCI interfaces.
-    gVars.canResign = false;
+    //  so until I figure out how Polyglot might interpret it, we must play
+    //  until the bitter end.  Even then, we probably want to work w/all UCI
+    //  interfaces.
+    game->th->Config().SetCheckbox(Config::CanResignCheckbox, false);
     initialized = true;
 }
 
@@ -437,7 +437,7 @@ static int convertNextInteger64(char **pToken, int64 *result, int64 atLeast,
     return 0;
 }
 
-static void processSetOptionCommand(char *inputStr)
+static void processSetOptionCommand(Thinker *th, char *inputStr)
 {
     int64 hashSizeMB;
     char *pToken;
@@ -459,7 +459,8 @@ static void processSetOptionCommand(char *inputStr)
         (matchesNoCase((pToken = findNextToken(pToken)), "true") ||
          matchesNoCase(pToken, "false")))
     {
-        gVars.randomMoves = !strcasecmp(pToken, "true");
+        th->Config().SetCheckbox(Config::RandomMovesCheckbox,
+                                 !strcasecmp(pToken, "true"));
     }
     else if (!gPreCalc.userSpecifiedHashSize &&
              matches(inputStr, "name") &&
@@ -505,7 +506,7 @@ static void processGoCommand(Thinker *th, GameT *game, char *pToken)
     int winc = 0, binc = 0;
     int movestogo = -1;
     int depth = 0;
-    int nodes = NO_LIMIT;
+    int nodes = 0;
     int movetime = -1;
     int mate = -1;
 
@@ -546,73 +547,51 @@ static void processGoCommand(Thinker *th, GameT *game, char *pToken)
         else if (matches(pToken, "wtime"))
         {
             if (convertNextInteger(&pToken, &wtime, -1, "wtime") < 0)
-            {
                 return;
-            }
         }
         else if (matches(pToken, "btime"))
         {
             if (convertNextInteger(&pToken, &btime, -1, "btime") < 0)
-            {
                 return;
-            }
         }
         else if (matches(pToken, "winc"))
         {
             if (convertNextInteger(&pToken, &winc, -1, "winc") < 0)
-            {
                 return;
-            }
             if (winc < 0) // UCI does not strictly forbid this
-            {
                 winc = 0;
-            }
         }
         else if (matches(pToken, "binc"))
         {
             if (convertNextInteger(&pToken, &binc, -1, "binc") < 0)
-            {
                 return;
-            }
             if (binc < 0) // UCI does not strictly forbid this
-            {
                 binc = 0;
-            }
         }
         else if (matches(pToken, "movestogo"))
         {
             if (convertNextInteger(&pToken, &movestogo, 1, "movestogo") < 0)
-            {
                 return;
-            }
         }
         else if (matches(pToken, "depth"))
         {
             if (convertNextInteger(&pToken, &depth, 1, "depth") < 0)
-            {
                 return;
-            }
         }
         else if (matches(pToken, "nodes"))
         {
-            if (convertNextInteger(&pToken, &nodes, 0, "nodes") < 0)
-            {
+            if (convertNextInteger(&pToken, &nodes, 1, "nodes") < 0)
                 return;
-            }
         }
         else if (matches(pToken, "mate"))
         {
             if (convertNextInteger(&pToken, &mate, 0, "mate") < 0)
-            {
                 return;
-            }
         }
         else if (matches(pToken, "movetime"))
         {
             if (convertNextInteger(&pToken, &movetime, 0, "movetime") < 0)
-            {
                 return;
-            }
         }
         else if (matches(pToken, "infinite"))
         {
@@ -693,7 +672,7 @@ static void processGoCommand(Thinker *th, GameT *game, char *pToken)
     }
 
     th->Config().SetSpin(Config::MaxDepthSpin, depth);
-    gVars.maxNodes = nodes;  // (maxNodes is best-effort only.)
+    th->Config().SetSpin(Config::MaxNodesSpin, nodes);
 
     if (mate > 0)
     {
@@ -771,7 +750,7 @@ static void uciPlayerMove(Thinker *th, GameT *game)
     }
     else if (matches(inputStr, "setoption"))
     {
-        processSetOptionCommand(findNextToken(inputStr));
+        processSetOptionCommand(th, findNextToken(inputStr));
     }
     else if (matches(inputStr, "register"))
     {
@@ -953,8 +932,9 @@ static void uciNotifyPV(GameT *game, const RspPvArgsT *pvArgs)
         // Chop off the first (ponder) move since the UI does not expect it.
         // This is not spelled out by the UCI spec, just observed from
         // interaction between Polyglot and (Fruit,Stockfish).  This does mean
-        // we will actually ponder 1 ply deeper than advertised, and we may
-        // get two "depth 1" searches (actually levels 0 and 1).
+        // we will actually ponder 1 ply deeper than advertised (in a sense,
+        // because we are searching all moves from the root, not just the ponder
+        // move ... unless a movelist was sent).
         chopFirst = true;
     }
 

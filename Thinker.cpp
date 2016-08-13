@@ -96,22 +96,31 @@ Thinker::SearchArgsT::SearchArgsT() :
 {
 }
 
-Thinker::ContextT::ContextT() : maxDepth(0), depth(0), maxLevel(NO_LIMIT) {}
+Thinker::ContextT::ContextT() :
+    maxDepth(0), depth(0), maxLevel(NO_LIMIT), maxNodes(0), randomMoves(false),
+    canResign(true) {}
 
-static void onSpinItemChanged(const Config::SpinItem &item, Thinker &th)
+static void onMaxDepthChanged(const Config::SpinItem &item, Thinker &th)
 {
     Thinker::ContextT &context = th.Context(); // shorthand
 
-    if (item.Name() == Config::MaxDepthSpin)
-    {
-        context.maxLevel = item.Value() - 1;
-        if (context.maxLevel != NO_LIMIT && context.maxDepth > context.maxLevel)
-            th.CmdMoveNow();
-    }
-    else
-    {
-        assert(0); // unknown item
-    }
+    context.maxLevel = item.Value() - 1;
+    if (context.maxLevel != NO_LIMIT && context.maxDepth > context.maxLevel)
+        th.CmdMoveNow();
+}
+static void onMaxNodesChanged(const Config::SpinItem &item, Thinker &th)
+{
+    th.Context().maxNodes = item.Value();
+    // The engine itself should shortly notice that it has exceeded
+    //  maxNodes (if applicable), and return.
+}
+static void onRandomMovesChanged(const Config::CheckboxItem &item, Thinker &th)
+{
+    th.Context().randomMoves = item.Value();
+}
+static void onCanResignChanged(const Config::CheckboxItem &item, Thinker &th)
+{
+    th.Context().canResign = item.Value();
 }
 
 // ctor.
@@ -137,8 +146,27 @@ Thinker::Thinker()
     Config().Register(
         Config::SpinItem(Config::MaxDepthSpin, Config::MaxDepthDescription,
                          0, 0, INT_MAX,
-                         std::bind(onSpinItemChanged, std::placeholders::_1,
+                         std::bind(onMaxDepthChanged, std::placeholders::_1,
                                    std::ref(*this))));
+    Config().Register(
+        Config::SpinItem(Config::MaxNodesSpin, Config::MaxNodesDescription,
+                         0, 0, INT_MAX,
+                         std::bind(onMaxNodesChanged, std::placeholders::_1,
+                                   std::ref(*this))));
+    Config().Register(
+        Config::CheckboxItem(Config::RandomMovesCheckbox,
+                             Config::RandomMovesDescription,
+                             false,
+                             std::bind(onRandomMovesChanged,
+                                       std::placeholders::_1,
+                                       std::ref(*this))));
+    Config().Register(
+        Config::CheckboxItem(Config::CanResignCheckbox,
+                             Config::CanResignDescription,
+                             true,
+                             std::bind(onCanResignChanged,
+                                       std::placeholders::_1,
+                                       std::ref(*this))));
     
     thread = new std::thread(&Thinker::threadFunc, this);
     thread->detach();

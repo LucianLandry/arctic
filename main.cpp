@@ -185,11 +185,6 @@ int main(int argc, char *argv[])
 
     srandom(getBigTime() / 1000000);
 
-    gVars.ponder = false; // (not really necessary as gVars is static)
-
-    gVars.maxNodes = NO_LIMIT;
-    gVars.canResign = true;
-
     Thinker th; // This is the root thinker.
     ThinkerSearchersCreate(gPreCalc.numProcs, th);
 

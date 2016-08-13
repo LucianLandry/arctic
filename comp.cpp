@@ -630,13 +630,10 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
         // If we need to move, we cannot trust (and should not hash) 'myEval'.
         // We must go with the best value/move we already had ... if any.
         if (th->CompNeedsToMove() ||
-            (gVars.maxNodes != NO_LIMIT && gStats.nodes >= gVars.maxNodes))
+            (th->Context().maxNodes && gStats.nodes >= th->Context().maxNodes))
         {
             if (masterNode)
-            {
-                // Wait for any searchers to terminate.
-                ThinkerSearchersBail();
-            }
+                ThinkerSearchersBail(); // Wait for any searchers to terminate.
             return retVal.BumpHighBoundToWin();
         }
 
@@ -757,8 +754,9 @@ static void computermove(Thinker *th, bool bPonder)
 {
     Eval myEval;
     SearchPv pv(0);
-    Board &board = th->Context().board;
-    int resigned = 0;
+    Thinker::ContextT &context = th->Context();
+    Board &board = context.board;
+    bool resigned = false;
     MoveList mvlist;
     MoveT move = MoveNone;
     bool bWillDraw = false;
@@ -768,12 +766,11 @@ static void computermove(Thinker *th, bool bPonder)
     // of an elegant (not compute-hogging) way to detect that further-depth
     // searches would be futile, I would implement it.
     int maxSearchDepth =
-        th->Context().maxLevel == NO_LIMIT ? 100 : th->Context().maxLevel;
+        context.maxLevel == NO_LIMIT ? 100 : context.maxLevel;
 
-    th->Context().depth = 0; // start search from root depth.
+    context.depth = 0; // start search from root depth.
 
-    // Clear stats.
-    memset(&gStats, 0, sizeof(gStats));
+    gStats.Clear();
 
     // If we can claim a draw without moving, do so w/out thinking.
     if (canClaimDraw(board))
@@ -782,10 +779,8 @@ static void computermove(Thinker *th, bool bPonder)
         return;
     }
 
-    if (gVars.randomMoves)
-    {
+    if (context.randomMoves)
         board.Randomize();
-    }
 
     board.GenerateLegalMoves(mvlist, false);
 
@@ -808,14 +803,14 @@ static void computermove(Thinker *th, bool bPonder)
         // setup known search parameters across the slaves.
         ThinkerSearchersSetBoard(board);
 
-        int &maxDepth = th->Context().maxDepth;
+        int &maxDepth = context.maxDepth;
         
         for (maxDepth = gVars.pv.SuggestSearchStartLevel();
              maxDepth <= maxSearchDepth;
              maxDepth++)
         {
             // Setup known search parameters across the slaves.
-            ThinkerSearchersSetDepthAndLevel(th->Context().depth, maxDepth);
+            ThinkerSearchersSetDepthAndLevel(context.depth, maxDepth);
 
             LOG_DEBUG("ply %d searching level %d\n", board.Ply(), maxDepth);
             myEval = minimax(th,
@@ -849,10 +844,10 @@ static void computermove(Thinker *th, bool bPonder)
             
             gVars.pv.CompletedSearch();
 
-            if (gVars.canResign && shouldResign(board, myEval, bPonder))
+            if (context.canResign && shouldResign(board, myEval, bPonder))
             {
                 // we're in a really bad situation
-                resigned = 1;
+                resigned = true;
                 break;
             }
             if (
@@ -870,7 +865,7 @@ static void computermove(Thinker *th, bool bPonder)
             }
         }
 
-        th->Context().maxDepth = 0; // reset this
+        context.maxDepth = 0; // reset this
     }
 
     th->RspNotifyStats(gStats);

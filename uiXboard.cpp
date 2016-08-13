@@ -275,7 +275,7 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
 
         GameNew(game);
 
-        gVars.randomMoves = false;
+        th->Config().SetCheckbox(Config::RandomMovesCheckbox, false);
         gXboardState.newgame = true;
     }
 
@@ -287,8 +287,12 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
 
     else if (matches(inputStr, "random"))
     {
+        const Config::CheckboxItem *cbItem =
+            th->Config().CheckboxItemAt(Config::RandomMovesCheckbox);
+        bool randomMoves = cbItem ? cbItem->Value() : false;
 #if 1 // bldbg: goes out for debugging
-        gVars.randomMoves = !gVars.randomMoves; // toggle random moves.
+        th->Config().SetCheckbox(Config::RandomMovesCheckbox,
+                                 !randomMoves); // toggle random moves.
 #endif
     }
 

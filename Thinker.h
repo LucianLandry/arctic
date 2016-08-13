@@ -147,10 +147,16 @@ public:
 
         // Searchers dump their results into here.
         RspSearchDoneArgsT searchResult;
-        
+
+        // The following are currently only meaningful for the root thinker:
         // Config variable.  -1 == no limit.  Like 'maxDepth', except 'maxDepth'
         //  is manipulated by the engine.
         volatile int maxLevel;
+        // Config variable.  0 == no limit.  Max nodes we are authorized to
+        //  search.
+        volatile int maxNodes;
+        volatile bool randomMoves;
+        volatile bool canResign;
     };
     // (used by engine to track/manipulate internal state)
     inline ContextT &Context();

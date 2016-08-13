@@ -324,7 +324,10 @@ static void UIOptionsDraw(GameT *game)
     const Config::SpinItem *sItem =
         game->th->Config().SpinItemAt(Config::MaxDepthSpin);
     int level = sItem == nullptr ? -1 : sItem->Value();
-
+    const Config::CheckboxItem *cbItem =
+        game->th->Config().CheckboxItemAt(Config::RandomMovesCheckbox);
+    bool randomMoves = cbItem == nullptr ? false : cbItem->Value();
+    
     UIWindowClear(OPTIONS_X, 1, SCREEN_WIDTH - OPTIONS_X, 12);
     gotoxy(OPTIONS_X, 1);
     textcolor(SYSTEMCOL);
@@ -335,7 +338,7 @@ static void UIOptionsDraw(GameT *game)
     prettyprint(4,  "Restore game",   "Black control (%s)",
                 game->control[1] ? "C" : "P");
     prettyprint(5,  "Edit position",  "rAndom moves (%s)",
-                gVars.randomMoves ? "On" : "Off");
+                randomMoves ? "On" : "Off");
     prettyprint(6,  "Quit",           "Ponder (%s)",
                 gVars.ponder ? "On" : "Off");
 
@@ -1173,9 +1176,15 @@ static void UIPlayerMove(Thinker *th, GameT *game)
             return;
         }
         case 'A': // toggle randomization of moves.
-            gVars.randomMoves = !gVars.randomMoves;
+        {
+            const Config::CheckboxItem *cbItem =
+                th->Config().CheckboxItemAt(Config::RandomMovesCheckbox);
+            bool randomMoves = cbItem ? cbItem->Value() : false;
+            th->Config().SetCheckbox(Config::RandomMovesCheckbox,
+                                     !randomMoves);
             UIOptionsDraw(game);
             return;
+        }
         case 'T':
             // I'm pretty sure I want the computer to stop thinking, if I'm
             //  swiping the time out from under it.
