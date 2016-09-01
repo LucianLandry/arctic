@@ -543,6 +543,10 @@ static void xboardPlayerMove(Game *game)
         // At this point, we must have a valid move.
         game->MakeMove(myMove);
         gXboardState.newgame = false;
+        // We may already be Go()ing, but this is necessary for newgame and
+        //  other situations where we are Stop()ped.
+        if (game->EngineControl(0) || game->EngineControl(1))
+            game->Go();
     }
     else
     {
