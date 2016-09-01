@@ -23,7 +23,6 @@
 #include <thread>
 
 #include "clockUtil.h"
-#include "gDynamic.h"
 #include "log.h"
 #include "MoveList.h"
 #include "ui.h"
@@ -135,7 +134,7 @@ int reportError(bool silent, const char *errorFormatStr, ...)
     {
         gUI->notifyError(tmpBuf);
     }
-    LOG_DEBUG("%s\n", tmpBuf);
+    LOG_DEBUG("Error: %s\n", tmpBuf);
     return -1;
 }
 
@@ -171,7 +170,7 @@ int fenToBoard(const char *fenString, Board *result)
     if (fenString == NULL)
     {
         return reportError
-            (false, "Error: fenToBoard: NULL fenString (missing arg?)");
+            (false, "fenToBoard: NULL fenString (missing arg?)");
     }
 
     // Read in everything.  This is insensitive to whitespace between fields,
@@ -181,7 +180,7 @@ int fenToBoard(const char *fenString, Board *result)
                       &halfmove, &fullmove)) < 6)
     {
         return reportError
-            (false, "Error: fenToBoard: not enough arguments (%d)", res);
+            (false, "fenToBoard: not enough arguments (%d)", res);
     }
 
     // Handle the board pieces.
@@ -195,7 +194,7 @@ int fenToBoard(const char *fenString, Board *result)
             if (file + spaces > 8)
             {
                 return reportError
-                    (false, "Error: fenToBoard: (%d,%d) too many spaces (%d)",
+                    (false, "fenToBoard: (%d,%d) too many spaces (%d)",
                      rank, file, spaces);
             }
             file += spaces;
@@ -205,7 +204,7 @@ int fenToBoard(const char *fenString, Board *result)
             if (file < 8 || rank <= 0)
             {
                 return reportError
-                    (false, "Error: fenToBoard: (%d,%d) bad separator",
+                    (false, "fenToBoard: (%d,%d) bad separator",
                      rank, file);
             }
             rank--;
@@ -216,7 +215,7 @@ int fenToBoard(const char *fenString, Board *result)
             if (file >= 8)
             {
                 return reportError
-                    (false, "Error: fenToBoard: (%d,%d) too many pieces",
+                    (false, "fenToBoard: (%d,%d) too many pieces",
                      rank, file);
             }
             tmpPosition.SetPiece(ToCoord(rank, file++), piece);
@@ -225,14 +224,14 @@ int fenToBoard(const char *fenString, Board *result)
         {
             // Unknown token.  Assume it's an unknown piece.
             return reportError
-                (false, "Error: fenToBoard: (%d,%d) unknown piece %c",
+                (false, "fenToBoard: (%d,%d) unknown piece %c",
                  rank, file, chr);
         }
     }
     if (file != 8 || rank != 0)
     {
         return reportError
-            (false, "Error: fenToBoard: (%d,%d) bad terminator",
+            (false, "fenToBoard: (%d,%d) bad terminator",
              rank, file);
     }
 
@@ -243,7 +242,7 @@ int fenToBoard(const char *fenString, Board *result)
     }
     else if (strcmp(turnStr, "w"))
     {
-        return reportError(false, "Error: fenToBoard: unknown turn %s",
+        return reportError(false, "fenToBoard: unknown turn %s",
                            turnStr);
     }
 
@@ -270,13 +269,13 @@ int fenToBoard(const char *fenString, Board *result)
                     break;
                 default:
                     return reportError
-                        (false, "Error: fenToBoard: unknown cbyte token '%c'", chr);
+                        (false, "fenToBoard: unknown cbyte token '%c'", chr);
             }
         }
         if (i == 4 && cbyteStr[i] != '\0')
         {
             return reportError(false,
-                               "Error: fenToBoard: cbyteStr too long (%c)",
+                               "fenToBoard: cbyteStr too long (%c)",
                                cbyteStr[i]);
         }
     }
@@ -286,13 +285,13 @@ int fenToBoard(const char *fenString, Board *result)
     {
         if ((epCoord = asciiToCoord(ebyteStr)) == FLAG)
         {
-            return reportError(false, "Error: fenToBoard: bad ebyte");
+            return reportError(false, "fenToBoard: bad ebyte");
         }
         tmpPosition.SetEnPassantCoord(epCoord);
         if (ebyteStr[2] != '\0')
         {
             return reportError(false,
-                               "Error: fenToBoard: ebyteStr too long (%c)",
+                               "fenToBoard: ebyteStr too long (%c)",
                                ebyteStr[2]);
         }
     }
@@ -302,7 +301,7 @@ int fenToBoard(const char *fenString, Board *result)
         !tmpPosition.SetNcpPlies(halfmove))
     {
         return reportError(false,
-                           "Error: fenToBoard: bad fullmove/halfmove %d/%d",
+                           "fenToBoard: bad fullmove/halfmove %d/%d",
                            fullmove, halfmove);
     }
 
@@ -310,7 +309,7 @@ int fenToBoard(const char *fenString, Board *result)
     if (!tmpPosition.IsLegal(errString))
     {
         return reportError(false,
-                           "Error: fenToBoard: illegal position: %s",
+                           "fenToBoard: illegal position: %s",
                            errString.c_str());
     }
 
@@ -321,21 +320,7 @@ int fenToBoard(const char *fenString, Board *result)
     return 0;
 }
 
-
-// Stop everything (including clocks) and wait for further input, basically.
-void setForceMode(Thinker *th, GameT *game)
-{
-    int i;
-
-    th->CmdBail();
-    ClocksStop(game);
-    for (i = 0; i < NUM_PLAYERS; i++)
-    {
-        game->control[i] = 0;
-    }
-}
-
-char *findNextNonWhiteSpace(char *pStr)
+const char *findNextNonWhiteSpace(const char *pStr)
 {
     if (pStr == NULL)
     {
@@ -348,7 +333,7 @@ char *findNextNonWhiteSpace(char *pStr)
     return *pStr != '\0' ? pStr : NULL;
 }
 
-char *findNextWhiteSpace(char *pStr)
+const char *findNextWhiteSpace(const char *pStr)
 {
     if (pStr == NULL)
     {
@@ -361,7 +346,7 @@ char *findNextWhiteSpace(char *pStr)
     return *pStr != '\0' ? pStr : NULL;
 }
 
-char *findNextWhiteSpaceOrNull(char *pStr)
+const char *findNextWhiteSpaceOrNull(const char *pStr)
 {
     if (pStr == NULL)
     {
@@ -377,7 +362,7 @@ char *findNextWhiteSpaceOrNull(char *pStr)
 // Copies (possibly non-NULL-terminated) token 'src' to NULL-terminated 'dst'.
 // Returns 'dst' iff a full copy could be performed, otherwise NULL (and in that
 //  case, does not clobber 'dst', just to be nice)
-static char *copyToken(char *dst, int dstLen, char *src)
+static char *copyToken(char *dst, int dstLen, const char *src)
 {
     int srcLen;
 
@@ -396,7 +381,7 @@ static char *copyToken(char *dst, int dstLen, char *src)
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation (and also O-O-style
 //  castling).
-bool isMove(char *inputStr, MoveT *resultMove, Board *board)
+bool isMove(const char *inputStr, MoveT *resultMove, const Board *board)
 {
     char moveStr[MOVE_STRING_MAX];
 
@@ -430,10 +415,10 @@ bool isMove(char *inputStr, MoveT *resultMove, Board *board)
 // NULL "inputStr"s are not legal moves.
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation.
-bool isLegalMove(char *inputStr, MoveT *resultMove, Board *board)
+bool isLegalMove(const char *inputStr, MoveT *resultMove, const Board *board)
 {
     MoveList moveList;
-    MoveT *foundMove;
+    const MoveT *foundMove;
     uint8 chr;
 
     if (!isMove(inputStr, resultMove, board))
@@ -569,20 +554,19 @@ char *getStdinLine(int maxLen, SwitcherContextT *sw)
     return buf;
 }
 
-static void uiThread(Thinker *th, GameT *game, Semaphore *readySem)
+static void uiThread(Game *game, SwitcherContextT *sw, Semaphore *readySem)
 {
-    gUI->init(game);
-
+    gUI->init(game, sw);
     // Let the main thread know it is safe to continue.
     readySem->post();
-
-    SwitcherRegister(&game->sw);
+    SwitcherRegister(sw);
     while (1)
-        gUI->playerMove(th, game);
+        gUI->playerMove(game);
 }
 
-void uiThreadInit(Thinker *th, GameT *game, Semaphore *readySem)
+void uiThreadInit(Game *game, SwitcherContextT *sw, Semaphore *readySem)
 {
-    std::thread *mainUiThread = new std::thread(uiThread, th, game, readySem);
+    std::thread *mainUiThread =
+        new std::thread(uiThread, game, sw, readySem);
     mainUiThread->detach();
 }

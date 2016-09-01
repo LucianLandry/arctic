@@ -125,7 +125,7 @@ static void notifyNewPv(Thinker *th, const SearchPv &goodPv, Eval eval)
     th->RspNotifyPv(gStats, pv);
 
     // Update the tracked principal variation.
-    gVars.pv.Update(pv);
+    th->Context().pv.Update(pv);
 }
 
 static Eval tryMove(Thinker *th, MoveT move, int alpha, int beta,
@@ -318,9 +318,9 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
     // Trying to order the declared variables by their struct size, to
     // increase cache hits, does not work.  Trying instead by functionality.
     // and/or order of usage, is also not reliable.
-    bool mightDraw; // Is it possible to hit a draw while evaluating from
-                    //  this position.
-    bool masterNode;  // multithread support.
+    bool mightDraw;  // Is it possible to hit a draw while evaluating from
+                     //  this position.
+    bool masterNode; // multithread support.
 
     MoveT hashMove;
     Eval hashEval;
@@ -500,7 +500,7 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
         // mvlist->SortByCapWorth(board);
         
         // Try the principal variation move (if applicable) first.
-        mvlist.UseAsFirstMove(gVars.pv.Hint(curDepth));
+        mvlist.UseAsFirstMove(th->RootThinker().Context().pv.Hint(curDepth));
 
         // If we find no better moves ...
         retVal.Set(Eval::Loss, alpha);
@@ -560,7 +560,6 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
         {
             if (i == 0)
             {
-                // LOG_DEBUG("bldbg: comp1\n");
                 // First move is special (for PV).  We process it (almost)
                 // normally.
                 move = mvlist.Moves(i);
@@ -573,16 +572,13 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
                      ThinkerSearcherGetAndSearch(alpha, beta, mvlist.Moves(i)))
             {
                 // We delegated it successfully.
-                // LOG_DEBUG("bldbg: comp2\n");
                 continue;
             }
             else 
             {
-                // LOG_DEBUG("bldbg: comp3\n");
                 // Either do not have a move to search, or
                 // nobody to search on it.  Wait for an eval to become
                 // available.
-                // LOG_DEBUG("bldbg: comp3.5\n");
                 myEval = ThinkerSearchersWaitOne(move, childPv, *th);
                 i--; // this counters i++
             }
@@ -630,7 +626,8 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
         // If we need to move, we cannot trust (and should not hash) 'myEval'.
         // We must go with the best value/move we already had ... if any.
         if (th->CompNeedsToMove() ||
-            (th->Context().maxNodes && gStats.nodes >= th->Context().maxNodes))
+            (th->RootThinker().Context().maxNodes &&
+             gStats.nodes >= th->RootThinker().Context().maxNodes))
         {
             if (masterNode)
                 ThinkerSearchersBail(); // Wait for any searchers to terminate.
@@ -759,7 +756,6 @@ static void computermove(Thinker *th, bool bPonder)
     bool resigned = false;
     MoveList mvlist;
     MoveT move = MoveNone;
-    bool bWillDraw = false;
 
     // Do impose some kind of max search depth to prevent a tight loop (and a
     // lot of spew) when running into the fifty-move rule.  If I could think
@@ -786,7 +782,7 @@ static void computermove(Thinker *th, bool bPonder)
 
     // Use the principal variation move (if it exists) if we run out of
     // time before we figure out a move to recommend.
-    mvlist.UseAsFirstMove(gVars.pv.Hint(0));
+    mvlist.UseAsFirstMove(context.pv.Hint(0));
 
     // Use this move if we cannot (or choose not to) come up with a better one.
     move = mvlist.Moves(0);
@@ -805,7 +801,7 @@ static void computermove(Thinker *th, bool bPonder)
 
         int &maxDepth = context.maxDepth;
         
-        for (maxDepth = gVars.pv.SuggestSearchStartLevel();
+        for (maxDepth = context.pv.SuggestSearchStartLevel();
              maxDepth <= maxSearchDepth;
              maxDepth++)
         {
@@ -842,7 +838,7 @@ static void computermove(Thinker *th, bool bPonder)
             }
 #endif
             
-            gVars.pv.CompletedSearch();
+            context.pv.CompletedSearch();
 
             if (context.canResign && shouldResign(board, myEval, bPonder))
             {
@@ -878,10 +874,10 @@ static void computermove(Thinker *th, bool bPonder)
 
     // If we can draw after this move, do so.
     board.MakeMove(move);
-    bWillDraw = canClaimDraw(board);
+    bool bClaimDraw = canClaimDraw(board);
     board.UnmakeMove();
 
-    if (bWillDraw)
+    if (bClaimDraw)
         th->RspDraw(move);
     else
         th->RspMove(move);

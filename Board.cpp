@@ -18,7 +18,6 @@
 #include <stdlib.h> // exit(3)
 #include <assert.h>
 
-#include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
 #include "ref.h"
@@ -992,4 +991,52 @@ void Board::Log(LogLevelT level) const
         }
     }
     LogPrint(level, "}}");
+}
+
+MoveT Board::MoveAt(int ply) const
+{
+    if (ply < BasePly() || ply >= Ply())
+    {
+        LOG_EMERG("%s: unexpected: requested ply %d, range %d-%d\n",
+                  __func__, ply, BasePly(), Ply());
+        assert(0);
+        return MoveNone;
+    }
+    return unmakes[ply - BasePly()].move;
+}
+
+int Board::LastCommonPly(const Board &other) const
+{
+    int plyLow = MAX(BasePly(), other.BasePly());
+    int plyHigh = MIN(Ply(), other.Ply());
+    int i;
+    
+    if (plyLow > plyHigh)
+        return -1; // No plies in common.
+
+    // We do not wish for this to be destructive, so instead we use copies
+    //  (which is slow).
+    Board myTmp(*this), otherTmp(other);
+
+    // Rewind each board back to the starting (maybe) common ply.
+    for (i = 0; i < Ply() - plyLow; i++)
+        myTmp.UnmakeMove();
+    for (i = 0; i < other.Ply() - plyLow; i++)
+        otherTmp.UnmakeMove();
+
+    // When is a ply 'common'?
+    // 1) at the start ply, the positions (including ncpPlies) must be the same.
+    //  Keep in mind that we may be working with incomplete information
+    //  (ncpPlies != 0), but this is best-effort and nobody sane should call us
+    //  with that kind of position.
+    if (myTmp.Position() != otherTmp.Position())
+        return -1;
+
+    // 2) the MoveAt()s for each board must be the same.
+    for (i = plyLow; i < plyHigh; i++)
+    {
+        if (MoveAt(i) != other.MoveAt(i))
+            break;
+    }
+    return i;
 }

@@ -45,6 +45,7 @@ public:
     Clock &ApplyIncrement(int ply);
     Clock &Reset(); // Stops the clock and resets the time to the starting time.
     Clock &AddTime(bigtime_t myTime); // add some time to a clock.
+
     // (Setter functions.)
     Clock &SetTime(bigtime_t myTime);
     inline Clock &SetStartTime(bigtime_t myStartTime);
@@ -54,9 +55,17 @@ public:
     // It should not be used at the same time as SetTimeControlPeriod() (because
     // conflicts may occur)
     inline Clock &SetNumMovesToNextTimeControl(int numMoves);
+    // Is the clock really intended to run during the first move.  For FICS
+    //  games, this is false.  Default = true.  The semantics of this is weird
+    //  as we still want the clock to run for stats-keeping purposes (we don't
+    //  want to special-case the time taken to move).
+    inline Clock &SetIsFirstMoveFree(bool isIt);
     // This is not normally used for human players, but I include it here
     //  because it could be.
     inline Clock &SetPerMoveLimit(bigtime_t myLimit);
+    // (Sets all of the above at once, but does not touch the rest of the
+    //  clock state like operator=().)
+    void SetParameters(const Clock &other);
     
     // Getter functions.
     bigtime_t Time() const;
@@ -65,7 +74,8 @@ public:
     inline int TimeControlPeriod() const;
     inline int NumMovesToNextTimeControl() const;
     inline bigtime_t PerMoveLimit() const;
-
+    inline bool IsFirstMoveFree() const;
+    
 private:
     bigtime_t startTime; // This time is put on the clock whenever the clock
                          // is reset.  It is not the time the clock started
@@ -81,14 +91,17 @@ private:
     int timeControlPeriod; // normally overrides the below variable, but do
                            // not rely on this
     int numMovesToNextTimeControl;
-
-    bool running; // is the clock currently running?
-
     bigtime_t turnStartTime; // time this turn started (absolute).  Do not
                              // confuse this with startTime!
     bigtime_t timeTaken; // time of the last start-stop cycle.
-
     bigtime_t perMoveLimit; // per-move limit (infinite if no limit)
+
+    bool running; // is the clock currently running?
+    bool isFirstMoveFree; // are we dealing with ICS clocks; see above
+    bool incrementApplied; // Have we called ApplyIncrement() since reset?
+                           // (ab)used to track whether 'isFirstMoveFree' should
+                           // apply.  (note that this may be 'true' even if
+                           // increments are 0.)
 
     bigtime_t calcTimeTaken() const;
 };
@@ -151,6 +164,16 @@ inline Clock &Clock::SetPerMoveLimit(bigtime_t myLimit)
 inline bigtime_t Clock::PerMoveLimit() const
 {
     return perMoveLimit;
+}
+
+inline Clock &Clock::SetIsFirstMoveFree(bool isIt)
+{
+    isFirstMoveFree = isIt;
+    return *this;
+}
+inline bool Clock::IsFirstMoveFree() const
+{
+    return isFirstMoveFree;
 }
 
 #endif // CLOCK_H

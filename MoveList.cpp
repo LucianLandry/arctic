@@ -15,7 +15,6 @@
 //--------------------------------------------------------------------------
 
 #include "Board.h"
-#include "gDynamic.h"
 #include "HistoryWindow.h"
 #include "MoveList.h"
 
@@ -179,16 +178,14 @@ void MoveList::useAsFirstMove(MoveT firstMove)
     *startMove = myMove; // Now replace the first move.
 }
 
-MoveT *MoveList::SearchSrcDst(MoveT move)
+const MoveT *MoveList::SearchSrcDst(MoveT move) const
 {
     auto end = moves.end();
 
     for (auto iter = moves.begin(); iter < end; ++iter)
     {
         if (move.src == iter->src && move.dst == iter->dst)
-        {
             return &(*iter);
-        }
     }
 
     return nullptr; // move not found.
@@ -208,24 +205,20 @@ MoveT *MoveList::SearchSrcDstPromote(MoveT move)
         tmpMove.chk = 0;
         
         if (move == tmpMove)
-        {
             return &(*iter);
-        }
     }
 
     return nullptr; // move not found.
 }
 
-MoveT *MoveList::Search(MoveT move)
+const MoveT *MoveList::Search(MoveT move) const
 {
     auto end = moves.end();
     
     for (auto iter = moves.begin(); iter < end; ++iter)
     {
         if (move == *iter)
-        {
             return &(*iter);
-        }
     }
 
     return nullptr; // move not found.
@@ -303,7 +296,7 @@ void MoveList::DeleteMove(int idx)
     }
 }
 
-void MoveList::Log(LogLevelT level)
+void MoveList::Log(LogLevelT level) const
 {
     char tmpStr[MOVE_STRING_MAX];
     const MoveStyleT style = {mnCAN, csK2, true};

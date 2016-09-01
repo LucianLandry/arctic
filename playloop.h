@@ -17,15 +17,11 @@
 #ifndef PLAYLOOP_H
 #define PLAYLOOP_H
 
-#include "game.h"
+#include "Game.h"
+#include "switcher.h"
 #include "Thinker.h"
 
-// Basically, attaches the engine's responses to the playloop.
-void PlayloopSetThinkerRspHandler(GameT &game, Thinker &th);
-// Synchronous move-now support.
-void PlayloopCompMoveNowAndSync(Thinker &th);
-void PlayloopCompProcessRspUntilIdle(Thinker &th);
 // Main play loop.
-void PlayloopRun(GameT &game, Thinker &th);
+void PlayloopRun(Game &game, Thinker &th, SwitcherContextT &sw);
 
 #endif // PLAYLOOP_H

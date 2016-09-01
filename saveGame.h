@@ -51,22 +51,22 @@ void SaveGameMoveCommit(SaveGameT *game, MoveT *move, bigtime_t myTime);
 int SaveGameSave(SaveGameT *game);
 
 // Assumes 'sgame' has been initialized (w/SaveGameInit())
-// Returns: 0, if restore successful, otherwise -1.
-// 'sgame' is guaranteed to be 'sane' after return, regardless of result.
+// Returns: 0, if restore successful, otherwise -1 (in which case 'sgame' is
+//  not altered).
 int SaveGameRestore(SaveGameT *sgame);
 void SaveGamePositionSet(SaveGameT *game, Board *board);
-void SaveGameClocksSet(SaveGameT *sgame, Clock *clocks[]);
-int SaveGameGotoPly(SaveGameT *game, int ply, Board *board, Clock *clocks[]);
+void SaveGameClocksSet(SaveGameT *sgame, Clock *clocks);
+int SaveGameGotoPly(SaveGameT *game, int ply, Board *board, Clock *clocks);
 
-static inline int SaveGameCurrentPly(SaveGameT *sgame)
+static inline int SaveGameCurrentPly(const SaveGameT *sgame)
 {
     return sgame->currentPly;
 }
-static inline int SaveGameFirstPly(SaveGameT *sgame)
+static inline int SaveGameFirstPly(const SaveGameT *sgame)
 {
     return sgame->startPosition.Ply();
 }
-static inline int SaveGameLastPly(SaveGameT *sgame)
+static inline int SaveGameLastPly(const SaveGameT *sgame)
 {
     return sgame->startPosition.Ply() + sgame->plies.size();
 }

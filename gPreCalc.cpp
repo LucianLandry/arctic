@@ -18,8 +18,8 @@
 #include <assert.h>
 
 #include "aSystem.h"
+#include "Eval.h"
 #include "gPreCalc.h"
-#include "gDynamic.h"
 #include "Variant.h"
 
 using arctic::File;

@@ -20,7 +20,7 @@
 #include "aSemaphore.h"
 #include "aTypes.h"
 #include "Board.h"
-#include "game.h"
+#include "Game.h"
 #include "Piece.h"
 #include "ref.h"       // Rank(), File()
 #include "switcher.h"
@@ -60,25 +60,22 @@ int fenToBoard(const char *fenString, Board *result);
 int reportError(bool silent, const char *errorFormatStr, ...)
     __attribute__ ((format (printf, 2, 3)));
 
-// Stop everything (including clocks) and wait for further input, basically.
-void setForceMode(Thinker *th, GameT *game);
-
 // Token support routines.
-char *findNextNonWhiteSpace(char *pStr);
-char *findNextWhiteSpace(char *pStr);
-char *findNextWhiteSpaceOrNull(char *pStr);
+const char *findNextNonWhiteSpace(const char *pStr);
+const char *findNextWhiteSpace(const char *pStr);
+const char *findNextWhiteSpaceOrNull(const char *pStr);
 
 // Return whether or not 'inputStr' looks like a move.
 // NULL "inputStr"s are not moves.
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation.
-bool isMove(char *inputStr, MoveT *resultMove, Board *board);
+bool isMove(const char *inputStr, MoveT *resultMove, const Board *board);
 
 // Return whether or not 'inputStr' looks like a legal move.
 // NULL "inputStr"s are not legal moves.
 // Side effect: fills in 'resultMove'.
 // Currently we can only handle algebraic notation.
-bool isLegalMove(char *inputStr, MoveT *resultMove, Board *board);
+bool isLegalMove(const char *inputStr, MoveT *resultMove, const Board *board);
 
 // Pattern matchers for tokens embedded at the start of a larger string.
 bool matches(const char *str, const char *needle);
@@ -92,6 +89,7 @@ char *getStdinLine(int maxLen, SwitcherContextT *sw);
 // convenience.
 char *ChopBeforeNewLine(char *s);
 
-void uiThreadInit(Thinker *th, GameT *game, arctic::Semaphore *readySem);
+void uiThreadInit(Game *game, SwitcherContextT *sw,
+                  arctic::Semaphore *readySem);
 
 #endif // UIUTIL_H

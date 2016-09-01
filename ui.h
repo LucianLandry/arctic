@@ -19,27 +19,27 @@
 
 #include "aTypes.h"
 #include "Board.h"
-#include "game.h"
+#include "Game.h"
+#include "switcher.h"
 #include "Thinker.h"
 
 typedef struct {
-    void (*init)(GameT *game);
-    void (*playerMove)(Thinker *th, GameT *game);
+    void (*init)(Game *game, SwitcherContextT *sw);
+    void (*playerMove)(Game *game);
     void (*positionRefresh)(const Position &position);
     void (*exit)(void);
-    void (*statusDraw)(GameT *game);
-    void (*notifyTick)(GameT *game);
-    void (*notifyMove)(MoveT move);
+    void (*statusDraw)(Game *game);
+    void (*notifyTick)(Game *game);
+    void (*notifyMove)(Game *game, MoveT move);
     void (*notifyError)(char *reason);
-    void (*notifyPV)(GameT *game, const RspPvArgsT *pvArgs);
+    void (*notifyPV)(Game *game, const RspPvArgsT *pvArgs);
     void (*notifyThinking)(void);
     void (*notifyPonder)(void);
     void (*notifyReady)(void);
-    void (*notifyComputerStats)(GameT *game, const ThinkerStatsT *stats);
-    void (*notifyDraw)(const char *reason, MoveT *move);
+    void (*notifyComputerStats)(Game *game, const ThinkerStatsT *stats);
+    void (*notifyDraw)(Game *game, const char *reason, MoveT *move);
     void (*notifyCheckmated)(int turn);
-    void (*notifyResign)(int turn);
-    bool (*shouldCommitMoves)(void);
+    void (*notifyResign)(Game *game, int turn);
 } UIFuncTableT;
 extern UIFuncTableT *gUI;
 
@@ -48,11 +48,11 @@ UIFuncTableT *uiNcursesOps(void);
 
 // uiXboard.c
 UIFuncTableT *uiXboardOps(void);
-void processXboardCommand(void);
+void processXboardCommand(Game *game, SwitcherContextT *sw);
 
 // uiUci.c
 UIFuncTableT *uiUciOps(void);
-void processUciCommand(void);
+void processUciCommand(Game *game, SwitcherContextT *sw);
 
 // uiJuce.c
 UIFuncTableT *uiJuceOps(void);

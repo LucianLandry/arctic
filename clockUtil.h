@@ -18,11 +18,7 @@
 #define CLOCKUTIL_H
 
 #include "aTypes.h"
-#include "game.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "Game.h"
 
 // 2^32 / 3600 = 7 digits, + 2 colons, +minutes+seconds + terminator
 #define CLOCK_TIME_STR_LEN 14
@@ -30,16 +26,6 @@ extern "C" {
 bool TimeStringIsValid(char *str);
 bigtime_t TimeStringToBigTime(char *str);
 char *TimeStringFromBigTime(char *result, bigtime_t myTime);
-    
-void ClocksReset(GameT *game);
-void ClocksStop(GameT *game);
-void ClocksPrint(GameT *game, char *context);
-bool ClocksICS(GameT *game);
-void GoaltimeCalc(GameT *game);
-bigtime_t getBigTime(void);
-
-#ifdef __cplusplus
-}
-#endif
+bigtime_t CurrentTime(); // Returns 'now' in bigtime_t units.
 
 #endif // CLOCKUTIL_H

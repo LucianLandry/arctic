@@ -19,7 +19,7 @@
 
 bigtime_t Clock::calcTimeTaken() const
 {
-    return getBigTime() - turnStartTime;
+    return CurrentTime() - turnStartTime;
 }
 
 Clock::Clock()
@@ -38,6 +38,8 @@ Clock &Clock::ReInit()
     turnStartTime = 0;
     timeTaken = 0;
     perMoveLimit = CLOCK_TIME_INFINITE;
+    isFirstMoveFree = false;
+    incrementApplied = false;
     return *this;
 }
 
@@ -45,6 +47,7 @@ Clock &Clock::Reset()
 {
     Stop();
     SetTime(StartTime());
+    incrementApplied = false;
     return *this;
 }
 
@@ -55,7 +58,7 @@ Clock &Clock::Stop()
         running = false;
         timeTaken = calcTimeTaken();
 
-        if (!IsInfinite())
+        if (!IsInfinite() && (!IsFirstMoveFree() || incrementApplied))
             time -= timeTaken;
     }
     return *this;
@@ -66,7 +69,7 @@ Clock &Clock::Start()
     if (!IsRunning())
     {
         running = true;
-        turnStartTime = getBigTime();
+        turnStartTime = CurrentTime();
     }
     return *this;
 }
@@ -90,8 +93,12 @@ Clock &Clock::AddTime(bigtime_t myTime)
 // move is made.
 Clock &Clock::ApplyIncrement(int ply)
 {
-    if (IsInfinite())
+    if (IsInfinite() || (IsFirstMoveFree() && !incrementApplied))
+    {
+        incrementApplied = true;
         return *this;
+    }
+    incrementApplied = true;
 
     // Apply per-move increment (if any)
     AddTime(inc);
@@ -147,4 +154,19 @@ Clock &Clock::SetTime(bigtime_t myTime)
 bigtime_t Clock::TimeTaken() const
 {
     return IsRunning() ? calcTimeTaken() : timeTaken;
+}
+
+// Like operator=(), but does not change the state (running/stopped etc.) of
+//  the destination.
+void Clock::SetParameters(const Clock &other)
+{
+    startTime = other.startTime;
+    time = other.time;
+    inc = other.inc;
+    timeControlPeriod = other.timeControlPeriod;
+    numMovesToNextTimeControl = other.numMovesToNextTimeControl;
+    // skip 'running', 'turnStartTime', 'timeTaken'
+    perMoveLimit = other.perMoveLimit;
+    isFirstMoveFree = other.isFirstMoveFree;
+    // skip 'incrementApplied'
 }

@@ -25,7 +25,7 @@
 #include <type_traits>  // std::is_trivially_copyable<>
 #include <unistd.h>     // close(2)
 
-#include "gDynamic.h"   // PvInit()
+#include "gDynamic.h"   // gameCount
 #include "HistoryWindow.h"
 #include "log.h"
 #include "Thinker.h"
@@ -168,6 +168,8 @@ Thinker::Thinker()
                                        std::placeholders::_1,
                                        std::ref(*this))));
     
+    goalTime = CLOCK_TIME_INFINITE;
+
     thread = new std::thread(&Thinker::threadFunc, this);
     thread->detach();
 }
@@ -306,7 +308,7 @@ void Thinker::CmdNewGame()
     CmdBail();
     gTransTable.Reset();
     gHistoryWindow.Clear();
-    gVars.pv.Clear();
+    context.pv.Clear();
     if (!context.board.SetPosition(Variant::Current()->StartingPosition()))
         assert(0);
 }
@@ -315,24 +317,32 @@ void Thinker::CmdSetBoard(const Board &board)
 {
     // If we were previously thinking, just start over.
     CmdBail();
-
+    // Make a best effort at PV tracking (in case the boards are similar).  
+    if (IsRootThinker())
+    {
+        context.pv.Rewind(context.board.Ply() - board.Ply());
+        // If the ply happened to be the same, we still want to start the search
+        //  over.
+        context.pv.ResetSearchStartLevel();
+    }
     context.board = board;
 }
 
 void Thinker::CmdMakeMove(MoveT move)
 {
-    // If we were previously thinking, just start over.
-    CmdBail();
+    CmdBail(); // If we were previously thinking, just start over.
 
     context.board.MakeMove(move);
+    if (IsRootThinker())
+        context.pv.Decrement(move);
 }
 
 void Thinker::CmdUnmakeMove()
 {
-    // If we were previously thinking, just start over.
-    CmdBail();
-
+    CmdBail(); // If we were previously thinking, just start over.
     context.board.UnmakeMove();
+    if (IsRootThinker())
+        context.pv.Rewind(1);
 }
 
 void Thinker::doThink(eThinkMsgT cmd, const MoveList *mvlist)
@@ -358,13 +368,110 @@ void Thinker::doThink(eThinkMsgT cmd, const MoveList *mvlist)
     compSendCmd(cmd);
 }
 
-void Thinker::CmdThink(const MoveList &mvlist)
+// Expected number of moves in a game.  Actually a little lower, as this is
+// biased toward initial moves.  The idea is that we would rather have less
+// time at the end to think about a won position than more time to think about
+// a lost position.
+#define GAME_NUM_MOVES 40
+// Minimum time we want left on the clock, presumably to compensate for
+// lag, in usec (however, normally we rely on timeseal to compensate for
+// network lag)
+#define MIN_TIME 500000
+// The clock doesn't run on the first move in an ICS game.
+// But as a courtesy, refuse to think over 5 seconds (unless our clock has
+// infinite time anyway)
+#define ICS_FIRSTMOVE_LIMIT 5000000
+void Thinker::calcGoalTime(const Clock &myClock)
 {
+    const Board &board = context.board; // shorthand.
+    int ply = board.Ply();
+    bigtime_t myTime, calcTime, altCalcTime, myInc, safeTime,
+        myPerMoveLimit, safeMoveLimit;
+    int myTimeControlPeriod, numMovesToNextTimeControl;
+    int numIncs;
+    
+    myTime = myClock.Time();
+    myPerMoveLimit = myClock.PerMoveLimit();
+    myTimeControlPeriod = myClock.TimeControlPeriod();
+    numMovesToNextTimeControl = myClock.NumMovesToNextTimeControl();
+    myInc = myClock.Increment();
+
+    safeMoveLimit =
+        myPerMoveLimit == CLOCK_TIME_INFINITE ? CLOCK_TIME_INFINITE :
+        myPerMoveLimit - MIN_TIME;      
+
+    if (myClock.IsFirstMoveFree() && ply < NUM_PLAYERS)
+        safeMoveLimit = MIN(safeMoveLimit, ICS_FIRSTMOVE_LIMIT);
+
+    safeMoveLimit = MAX(safeMoveLimit, 0);
+
+    // Degenerate case.
+    if (myClock.IsInfinite())
+    {
+        goalTime =
+            myPerMoveLimit == CLOCK_TIME_INFINITE ?
+            CLOCK_TIME_INFINITE :
+            MIN_TIME;
+        return;
+    }
+
+    safeTime = MAX(myTime - MIN_TIME, 0);
+
+    // 'calcTime' is the amount of time we want to think.
+    calcTime = safeTime / GAME_NUM_MOVES;
+
+    if (myTimeControlPeriod || numMovesToNextTimeControl)
+    {
+        // Anticipate the additional time we will possess to make our
+        // GAME_NUM_MOVES moves due to time-control increments.
+        if (myTimeControlPeriod)
+        {
+            numMovesToNextTimeControl =
+                myTimeControlPeriod - ((ply >> 1) % myTimeControlPeriod);
+        }
+        numIncs = GAME_NUM_MOVES <= numMovesToNextTimeControl ? 0 :
+            1 + (myTimeControlPeriod ?
+                 ((GAME_NUM_MOVES - numMovesToNextTimeControl - 1) /
+                  myTimeControlPeriod) :
+                 0);
+
+        calcTime += (myClock.StartTime() * numIncs) / GAME_NUM_MOVES;
+        // However, say we have :30 on the clock, 10 moves to make, and a one-
+        // minute increment every two moves.  We want to burn only :15.
+        altCalcTime = safeTime / MIN(GAME_NUM_MOVES,
+                                     numMovesToNextTimeControl);
+        calcTime = MIN(calcTime, altCalcTime);
+    }
+
+    // Anticipate the additional time we will possess to make our
+    // GAME_NUM_MOVES moves due to increments.
+    if (myInc)
+    {
+        numIncs = GAME_NUM_MOVES - 1;
+        calcTime += (myInc * numIncs) / GAME_NUM_MOVES;
+        // Fix cases like 10 second start time, 22 second increment
+        calcTime = MIN(calcTime, safeTime);
+    }
+
+    // Do not think over any per-move limit.
+    if (safeMoveLimit != CLOCK_TIME_INFINITE)
+        calcTime = MIN(calcTime, safeMoveLimit);
+
+    // Refuse to think for a "negative" time.
+    calcTime = MAX(calcTime, 0);
+
+    goalTime = myTime - calcTime;
+}
+
+void Thinker::CmdThink(const Clock &myClock, const MoveList &mvlist)
+{
+    calcGoalTime(myClock);
     doThink(eCmdThink, &mvlist);
 }
 
-void Thinker::CmdThink()
+void Thinker::CmdThink(const Clock &myClock)
 {
+    calcGoalTime(myClock);
     doThink(eCmdThink, nullptr);
 }
 
@@ -393,7 +500,7 @@ void Thinker::CmdSearch(int alpha, int beta, MoveT move)
 }
 
 // Force the computer to move in the very near future.  This is asynchronous.
-// For a synchronous analogue, see PlayloopCompMoveNowAndSync().
+// For a synchronous analogue, see Game->MoveNow().
 void Thinker::CmdMoveNow()
 {
     if (CompIsBusy())

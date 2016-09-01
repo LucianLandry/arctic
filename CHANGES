@@ -1,8 +1,8 @@
 Out-there (maybe, maybe not)
 Neural net evaluation.  Examples: neurochess, SAL, morph.
 Still more efficient smp search (propagate alpha-beta up the pv?)
-Go directly from pondering to thinking on a ponderhit, just like
-	any good UCI engine would do.
+Go directly from pondering to thinking on a ponderhit, just like any good UCI
+	engine would do.
 Razoring variation?  Something like doing a depth-2 search to see which moves
 	to only do a depth-1 search on.  If the search is good enough I could
 	also use it for move ordering.
@@ -41,9 +41,15 @@ Implemented platform-agnostic Semaphore class and converted everyone to use it.
 Refactored Spinlocks into a platform-agnostic C++11 class (1.6% speedup)
 Refactored ThinkContextT into a C++ 'Thinker' class.
 Refactored history window functionality into its own C++ class.
-Updated license from LGPL 2 to LGPL 2.1.
-Bugfix: uiXboard: fix bad "ping" command handling in extremely rare cases.
+Updated license from LGPL 2 to LGPL 2.1 (except conio.[ch])
+uiXboard: fix bad "ping" command handling in extremely rare cases; fix poorly
+    formatted error strings (no newline!).        
 Displayed search depth now consistently starts at 1, not 0.
+Bugfix: fix think time w/infinite clock but per-move limit.
+Bugfix: crash when switching on the fly from xboard to uci interface
+uiUci: attempt to report a bestmove when we stop pondering; handle
+    'ponder + searchmoves' sanely; more correct ponder info and score
+Refactored GameT into a C++ 'Game' class; UIs now drive engines through it.
 
 Version 1.1:
 Build improvements: use Git for version control, cmake for building

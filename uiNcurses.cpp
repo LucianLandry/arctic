@@ -56,6 +56,7 @@ static struct {
     int col[2];    // player colors.
     int flipped;   // bool, is the board inverted (black on the bottom)
     int cursCoord; // coordinate cursor is at.
+    SwitcherContextT *sw;
 } gBoardIf;
 
 
@@ -79,13 +80,9 @@ static void UIPrintPositionStatus(const Position &position)
     gotoxy(OPTIONS_X, 15);
     cprintf("enpass: ");
     if (ebyte == FLAG)
-    {
         cprintf("  ");
-    }
     else
-    {
         cprintf("%c%c", AsciiFile(ebyte), AsciiRank(ebyte));
-    }
 
     // print check status.
     gotoxy(OPTIONS_X, 16);
@@ -93,19 +90,14 @@ static void UIPrintPositionStatus(const Position &position)
     if (ncheck == FLAG)
         cprintf("   ");
     else if (ncheck == DOUBLE_CHECK)
-    {
         cprintf("dis");
-    }
     else // normal check
-    {
         cprintf("%c%c ", AsciiFile(ncheck), AsciiRank(ncheck));
-    }
 }
 
 
-static void UINotifyTick(GameT *game)
+static void UINotifyTick(Game *game)
 {
-    Clock *myClock;
     char timeStr[CLOCK_TIME_STR_LEN];
     int i;
     bigtime_t myTime, perMoveTime;
@@ -116,23 +108,23 @@ static void UINotifyTick(GameT *game)
     gotoxy(OPTIONS_X, 18);
     for (i = 0; i < NUM_PLAYERS; i++)
     {
-        myClock = game->clocks[i];
-        myTime = myClock->Time();
+        const Clock &myClock = game->Clock(i);
+        myTime = myClock.Time();
 
         // The clock goes red even when the time supposedly reaches 0, probably
         // because TimeStringFromBigTime() is rounding up.  FIXME: need to
         // rethink that.
         textcolor(myTime >= 0 ? LIGHTGRAY : RED);
         bytesWritten += cprintf("%s", TimeStringFromBigTime(timeStr, myTime));
-        if (myClock->PerMoveLimit() < CLOCK_TIME_INFINITE)
+        if (myClock.PerMoveLimit() < CLOCK_TIME_INFINITE)
         {
-            perMoveTime = myClock->PerMoveTime();
+            perMoveTime = myClock.PerMoveTime();
             textcolor(perMoveTime >= 0 ? LIGHTGRAY : RED);
             bytesWritten += cprintf("(%s)", TimeStringFromBigTime(timeStr,
                                                                   perMoveTime));
         }
         textcolor(LIGHTGRAY);
-        bytesWritten += cprintf("%s ", myClock->IsRunning() ? "r" : "s");
+        bytesWritten += cprintf("%s ", myClock.IsRunning() ? "r" : "s");
     }
 
     // Prevent old longer clock-line strings from sticking around.
@@ -143,30 +135,30 @@ static void UINotifyTick(GameT *game)
 }
 
 
-static void UIStatusDraw(GameT *game)
+static void UIStatusDraw(Game *game)
 {
     bigtime_t timeTaken;
-    Board *board = &game->savedBoard; // shorthand.
-    int turn = board->Turn();
+    const Board &board = game->Board(); // shorthand.
+    int turn = board.Turn();
 
-    UIPrintPositionStatus(board->Position());
+    UIPrintPositionStatus(board.Position());
     UINotifyTick(game);
 
     gotoxy(OPTIONS_X, 20);
-    timeTaken = game->clocks[turn ^ 1]->TimeTaken();
+    timeTaken = game->Clock(turn ^ 1).TimeTaken();
     cprintf("move: %d (%.2f sec)     ",
-            (board->Ply() >> 1) + 1,
+            (board.Ply() >> 1) + 1,
             ((double) timeTaken) / 1000000);
     gotoxy(OPTIONS_X, 21);
     textcolor(SYSTEMCOL);
     cprintf("%s\'s turn", turn ? "black" : "white");
     gotoxy(OPTIONS_X, 22);
-    cprintf(board->IsInCheck() ? "<check>" : "       ");
+    cprintf(board.IsInCheck() ? "<check>" : "       ");
 }
 
 
 // prints out expected move sequence at the bottom of the screen.
-static void UINotifyPV(GameT *game, const RspPvArgsT *pvArgs)
+static void UINotifyPV(Game *game, const RspPvArgsT *pvArgs)
 {
     char spaces[80];
     char mySanString[79 - 18];
@@ -177,7 +169,7 @@ static void UINotifyPV(GameT *game, const RspPvArgsT *pvArgs)
 
     // Get a suitable string of moves to print.
     if (pv.BuildMoveString(mySanString, sizeof(mySanString), pvStyle,
-                           game->savedBoard) < 1)
+                           game->Board()) < 1)
     {
         return;
     }
@@ -318,14 +310,13 @@ static void UIWindowClear(int startx, int starty, int width, int height)
     }
 }
 
-
-static void UIOptionsDraw(GameT *game)
+static void UIOptionsDraw(Game *game)
 {
     const Config::SpinItem *sItem =
-        game->th->Config().SpinItemAt(Config::MaxDepthSpin);
+        game->EngineConfig().SpinItemAt(Config::MaxDepthSpin);
     int level = sItem == nullptr ? -1 : sItem->Value();
     const Config::CheckboxItem *cbItem =
-        game->th->Config().CheckboxItemAt(Config::RandomMovesCheckbox);
+        game->EngineConfig().CheckboxItemAt(Config::RandomMovesCheckbox);
     bool randomMoves = cbItem == nullptr ? false : cbItem->Value();
     
     UIWindowClear(OPTIONS_X, 1, SCREEN_WIDTH - OPTIONS_X, 12);
@@ -334,13 +325,13 @@ static void UIOptionsDraw(GameT *game)
     cprintf("Options:");
     prettyprint(2,  "New game",       "Level (%d)", level);
     prettyprint(3,  "Save game",      "White control (%s)",
-                game->control[0] ? "C" : "P");
+                game->EngineControl(0) ? "C" : "P");
     prettyprint(4,  "Restore game",   "Black control (%s)",
-                game->control[1] ? "C" : "P");
+                game->EngineControl(1) ? "C" : "P");
     prettyprint(5,  "Edit position",  "rAndom moves (%s)",
                 randomMoves ? "On" : "Off");
     prettyprint(6,  "Quit",           "Ponder (%s)",
-                gVars.ponder ? "On" : "Off");
+                game->Ponder() ? "On" : "Off");
 
     prettyprint(8,  "Generate moves", "History window (%d)",
                 gHistoryWindow.Window());
@@ -367,28 +358,32 @@ static void UIEditOptionsDraw(void)
 }
 
 
-static void UITimeOptionsDraw(GameT *game, int applyToggle)
+static void UITimeOptionsDraw(Game *game, int applyToggle)
 {
     char t1[CLOCK_TIME_STR_LEN], t2[CLOCK_TIME_STR_LEN];
-
     UIWindowClear(OPTIONS_X, 1, SCREEN_WIDTH - OPTIONS_X, 12);
     gotoxy(OPTIONS_X, 1);
     textcolor(SYSTEMCOL);
+
+    Clock clocks[NUM_PLAYERS];
+    for (int i = 0; i < NUM_PLAYERS; i++)
+        clocks[i] = game->InitialClock(i);
+    
     cprintf("Options:");
     prettyprint(2, "Start time(s) (%s %s)", NULL,
-                TimeStringFromBigTime(t1, game->origClocks[0].Time()),
-                TimeStringFromBigTime(t2, game->origClocks[1].Time()));
+                TimeStringFromBigTime(t1, clocks[0].Time()),
+                TimeStringFromBigTime(t2, clocks[1].Time()));
     prettyprint(3, "Increment(s) (%s %s)",  NULL,
-                TimeStringFromBigTime(t1, game->origClocks[0].Increment()),
-                TimeStringFromBigTime(t2, game->origClocks[1].Increment()));
+                TimeStringFromBigTime(t1, clocks[0].Increment()),
+                TimeStringFromBigTime(t2, clocks[1].Increment()));
     prettyprint(4, "Time control period(s) (%d %d)", NULL,
-                game->origClocks[0].TimeControlPeriod(),
-                game->origClocks[1].TimeControlPeriod());
+                clocks[0].TimeControlPeriod(),
+                clocks[1].TimeControlPeriod());
     prettyprint(5, "Per-move limit (%s %s)", NULL,
                 TimeStringFromBigTime
-                (t1, game->origClocks[0].PerMoveLimit()),
+                (t1, clocks[0].PerMoveLimit()),
                 TimeStringFromBigTime
-                (t2, game->origClocks[1].PerMoveLimit()));
+                (t2, clocks[1].PerMoveLimit()));
     prettyprint(7, "Apply to current game", NULL);
     prettyprint(8, "Changes: (%s)", NULL,
                 applyToggle == 0 ? "white" :
@@ -481,14 +476,18 @@ static void UITicksDraw(void)
             "  a    b    c    d    e    f    g    h                 ");
 }
 
-
 static void UIExit(void)
 {
     doneconio();
 }
 
-
-static int UIBarf(const char *format, ...)
+// Prompts the user, and waits for a single char as input.
+// FIXME: modal() and modalString() both assume the user will respond promptly;
+//  in the meantime other events (like engine responses) may be delayed!  One
+//  solution would be to stop and restart game processing.  A slightly nicer
+//  solution would be to make modals interruptible.  OTOH, such a solution would
+//  need to take PV notifications into account.
+static int modal(const char *format, ...)
 {
     int chr, i;
     int len;
@@ -500,20 +499,20 @@ static int UIBarf(const char *format, ...)
     va_end(ap);
     assert(len < 80);
 
-    /* Display the message. */
+    // Display the message.
     gotoxy((SCREEN_WIDTH / 2) - len / 2, 25);
     textcolor(MAGENTA);
     cprintf("%s", message);
 
-    /* Wait for input. */
+    // Wait for input.
     chr = getch();
-    if (chr == ESC)     /* bail on ESC */
+    if (chr == ESC) // bail on ESC (is this really a good idea?)
     {
         UIExit();
         exit(0);
     }
 
-    /* Now, blank the entire message. */
+    // Now, blank the entire message.
     gotoxy((SCREEN_WIDTH / 2) - len / 2, 25);
     for (i = 0; i < len; i++)
     {
@@ -521,15 +520,15 @@ static int UIBarf(const char *format, ...)
     }
 
     UITicksDraw();
-    gotoxy(1, 1); /* justncase */
+    gotoxy(1, 1); // (just in case)
     return chr;
 }
 
 
-// 'myLen' == sizeof(myStr) (including terminator) and must be at least 2 bytes
-// long.
+// 'myStrLen' == sizeof(myStr) (including terminator) and must be at least 2
+// bytes long.
 // Returns 'myStr'.
-static char *UIBarfString(char *myStr, int myStrLen,
+static char *modalString(char *myStr, int myStrLen,
                           const char *validChars, const char *format, ...)
 {
     int chr, i;
@@ -593,7 +592,7 @@ static char *UIBarfString(char *myStr, int myStrLen,
 
 static void UINotifyError(char *reason)
 {
-    UIBarf(reason);
+    modal("Error: %s", reason);
 }
 
 
@@ -696,15 +695,16 @@ static void UIEditPosition(Position &position)
 
 #define APPLY_BOTH (NUM_PLAYERS)
 
-/* Adjusts time. */
-static void UITimeMenu(GameT *game)
+// Adjusts time.
+static void UITimeMenu(Game *game)
 {   
     int c, i;
     int *coord = &gBoardIf.cursCoord; // shorthand.
-    char validChars[] = "SsIiTtPpAaCcDd";
+    char validChars[] = "sitpacd";
     char timeStr[CLOCK_TIME_STR_LEN];
     int timeControlPeriod;
-
+    Clock clock;
+    
     // 0 -> white
     // 1 -> black
     // 2 -> both
@@ -715,22 +715,21 @@ static void UITimeMenu(GameT *game)
     while (1)
     {
         UITimeOptionsDraw(game, applyToggle);
-        /* I do this here just so the cursor ends up in an aesthetically
-           pleasing spot. */
+        // I do this here just so the cursor ends up in an aesthetically
+        //  pleasing spot.
         gotoxy(OPTIONS_X, 24);
         textcolor(LIGHTCYAN);
         cprintf("Time             ");
 
-        c = getch();
+        c = tolower(getch());
         if (strchr(validChars, c) != NULL)
         {
             switch(c)
             {
-            case 'S':
             case 's':
                 do
                 {
-                    UIBarfString(timeStr, 9, /* xx:yy:zz\0 */
+                    modalString(timeStr, 9, /* xx:yy:zz\0 */
                                  "0123456789:inf", "Set start time to? >");
                 } while (!TimeStringIsValid(timeStr));
 
@@ -738,17 +737,17 @@ static void UITimeMenu(GameT *game)
                 {
                     if (applyToggle == i || applyToggle == APPLY_BOTH)
                     {
-                        game->origClocks[i].
-                            SetStartTime(TimeStringToBigTime(timeStr));
-                        game->origClocks[i].Reset();
+                        clock = game->InitialClock(i);
+                        clock.SetStartTime(TimeStringToBigTime(timeStr))
+                            .Reset();
+                        game->SetInitialClock(i, clock);
                     }
                 }
                 break;
-            case 'I':
             case 'i':
                 do
                 {
-                    UIBarfString(timeStr, 9, /* xx:yy:zz\0 */
+                    modalString(timeStr, 9, /* xx:yy:zz\0 */
                                  "0123456789:", "Set increment to? >");
                 } while (!TimeStringIsValid(timeStr));
 
@@ -756,16 +755,16 @@ static void UITimeMenu(GameT *game)
                 {
                     if (applyToggle == i || applyToggle == APPLY_BOTH)
                     {
-                        game->origClocks[i].
-                            SetIncrement(TimeStringToBigTime(timeStr));
+                        clock = game->InitialClock(i);
+                        clock.SetIncrement(TimeStringToBigTime(timeStr));
+                        game->SetInitialClock(i, clock);
                     }
                 }
                 break;
-            case 'T':
             case 't':
                 do
                 {
-                    UIBarfString(timeStr, 9, /* xx:yy:zz\0 */
+                    modalString(timeStr, 9, /* xx:yy:zz\0 */
                                  "0123456789", "Set time control period to? >");
                 } while (sscanf(timeStr, "%d", &timeControlPeriod) < 1);
 
@@ -773,16 +772,16 @@ static void UITimeMenu(GameT *game)
                 {
                     if (applyToggle == i || applyToggle == APPLY_BOTH)
                     {
-                        game->origClocks[i].
-                            SetTimeControlPeriod(timeControlPeriod);
+                        clock = game->InitialClock(i);
+                        clock.SetTimeControlPeriod(timeControlPeriod);
+                        game->SetInitialClock(i, clock);
                     }
                 }
                 break;
-            case 'P':
             case 'p':
                 do
                 {
-                    UIBarfString(timeStr, 9, /* xx:yy:zz\0 */
+                    modalString(timeStr, 9, /* xx:yy:zz\0 */
                                  "0123456789:inf", "Set per-move limit to? >");
                 } while (!TimeStringIsValid(timeStr));
 
@@ -790,111 +789,99 @@ static void UITimeMenu(GameT *game)
                 {
                     if (applyToggle == i || applyToggle == APPLY_BOTH)
                     {
-                        game->origClocks[i].
-                            SetPerMoveLimit(TimeStringToBigTime(timeStr));
+                        clock = game->InitialClock(i);
+                        clock.SetPerMoveLimit(TimeStringToBigTime(timeStr));
+                        game->SetInitialClock(i, clock);
                     }
                 }
                 break;
-            case 'A':
             case 'a':
-                ClocksReset(game);
+                game->ResetClocks();
                 UIStatusDraw(game);
                 break;
-            case 'C':
             case 'c':
                 if (++applyToggle > APPLY_BOTH)
-                {
                     applyToggle = 0;
-                }
                 break;
-            case 'D':
             case 'd':
-                /* bail from time menu. */
+                // bail from time menu.
                 return;
             default:
                 break;
             }
         }
-    }   /* end while */
+    } // end while
 }
 
-
-/* Gets user input and translates it to valid command.  Returns: command, or
-   two numbers signaling source and destination.  */
-static void UIGetCommand(uint8 command[], GameT *game)
+// Gets user input and translates it to valid command.
+// Returns: command, or two numbers signaling source and destination.
+static void UIGetCommand(uint8 command[], Game *game)
 {   
     int c;
-    int gettingsrc = 1;
+    bool gettingsrc = true;
     int *coord = &gBoardIf.cursCoord; // shorthand.
-    Board *board = &game->savedBoard; // shorthand
-    char validChars[] = "NSRLWBFQHCMEGATUOP"
+    const Board &board = game->Board(); // shorthand
+    // It would be easy to use tolower() up front, but I guess I'm paranoid that
+    //  KEY_UP etc. are interpreted as alphabetic in some odd locales.
+    char validChars[] = "NnSsRrLlWwBbFfQqHhCcMmEeGgAaTtUuOoPp"
 #ifdef ENABLE_DEBUG_LOGGING
-        "D"
+        "Dd"
 #endif
-        ;
+        ; // terminates 'validChars[]'
 
     while (1)
     {
         // Wait for actual input.
-        while(!kbhit())
-        {
-            SwitcherSwitch(&game->sw);
-        }
+        while (!kbhit())
+            SwitcherSwitch(gBoardIf.sw);
         c = getch();
-        if (isalpha(c))
-            c = toupper(c); // accept lower-case commands, too.
         if (strchr(validChars, c) != NULL)
         {
             if (!gettingsrc)
-            {
                 UICursorDraw(command[0], CURSOR_HIDE);
-            }
-            command[0] = c; /* valid one-char command */
+            command[0] = tolower(c); // valid one-char command
             return;
         }
         if (c == ENTER && gettingsrc)
         {
             // (ignore attempts to set a blank src)
-            if (!board->PieceAt(*coord).IsEmpty())
+            if (!board.PieceAt(*coord).IsEmpty())
             {
                 command[0] = *coord;
                 UICursorDraw(*coord, CURSOR_NOBLINK);
-                gettingsrc = 0;
+                gettingsrc = false;
             }
             continue;
         }
         else if (c == ENTER)
         {
-            if (*coord == command[0]) /* we want to unselect src spot */
+            if (*coord == command[0]) // we want to unselect src spot
             {
-                gettingsrc = 1;
+                gettingsrc = true;
                 UICursorDraw(*coord, CURSOR_BLINK);
                 continue;
             }
             UICursorDraw(command[0], CURSOR_HIDE);
-            command[1] = *coord;        /* enter destination */
+            command[1] = *coord;      // enter destination
             return;
         }
-        if (c != KEY_UP && c != KEY_DOWN && c != KEY_LEFT &&
-            c != KEY_RIGHT)
+        if (c != KEY_UP && c != KEY_DOWN && c != KEY_LEFT && c != KEY_RIGHT)
             continue;
 
-        /* At this point we have a valid direction. */
+        // At this point we have a valid direction.
         if (gettingsrc || command[0] != *coord)
-            UICursorDraw(*coord, CURSOR_HIDE); /* need to unmark current loc */
+            UICursorDraw(*coord, CURSOR_HIDE);  // need to unmark current loc
         UICursorMove(c, coord);
         if (gettingsrc || command[0] != *coord)
-            UICursorDraw(*coord, CURSOR_BLINK); /* need to blink current loc */
-    }   /* end while */
+            UICursorDraw(*coord, CURSOR_BLINK); // need to blink current loc
+    } // end while
 }
-
 
 static void UIBoardDraw(void)
 {
     int i, j;
 
-    /* note: a carriage return after drawing the board could clobber the
-       ticks. */
+    // note: a carriage return after drawing the board could clobber the ticks.
     for (i = 0; i < NUM_SQUARES; i++)
     {
         for (j = 0; j < 3; j++) // three rows per 'checker'
@@ -916,16 +903,14 @@ static void UIBoardDraw(void)
     }
 }
 
-
-static void UIBoardFlip(Board *board)
+static void UIBoardFlip(const Board &board)
 {
     UICursorDraw(gBoardIf.cursCoord, CURSOR_HIDE); // hide old cursor
     gBoardIf.flipped ^= 1;
     UITicksDraw();   // update ticks
-    UIPositionRefresh(board->Position()); // update player positions
+    UIPositionRefresh(board.Position()); // update player positions
     UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
 }
-
 
 static void UIPlayerColorChange(void)
 {
@@ -939,7 +924,7 @@ static void UIPlayerColorChange(void)
     {
         do
         {
-            UIBarfString(myStr, 3, "0123456789", "%s color? >", colors[i]);
+            modalString(myStr, 3, "0123456789", "%s color? >", colors[i]);
             
         } while (sscanf(myStr, "%d", &myColor) < 1 ||
                  myColor < 1 || myColor > 15 ||
@@ -948,16 +933,14 @@ static void UIPlayerColorChange(void)
     }
 }
 
-
 static void UISetDebugLoggingLevel(void)
 {
     int i;
-    while ((i = UIBarf("Set debug level to (0-2) (higher -> more verbose)? >") - '0') < 0 ||
+    while ((i = modal("Set debug level to (0-2) (higher -> more verbose)? >") - '0') < 0 ||
            i > 2)
         ;
     LogSetLevel(LogLevelT(i));
 }
-
 
 static void UINotifyThinking(void)
 {
@@ -965,7 +948,6 @@ static void UINotifyThinking(void)
     textcolor(RED);
     cprintf("Thinking         ");
 }
-
 
 static void UINotifyPonder(void)
 {
@@ -983,7 +965,7 @@ static void UINotifyReady(void)
     UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
 }
 
-static void UINotifyComputerStats(GameT *game, const ThinkerStatsT *stats)
+static void UINotifyComputerStats(Game *game, const ThinkerStatsT *stats)
 {
     gotoxy(1, 1);
     textcolor(SYSTEMCOL);
@@ -992,26 +974,22 @@ static void UINotifyComputerStats(GameT *game, const ThinkerStatsT *stats)
             stats->hashHitGood);
 }
 
-
-static void UINotifyDraw(const char *reason, MoveT *move)
+static void UINotifyDraw(Game *game, const char *reason, MoveT *move)
 {
-    UIBarf("Game is drawn (%s).", reason);
+    modal("Game is drawn (%s).", reason);
 }
-
 
 static void UINotifyCheckmated(int turn)
 {
-    UIBarf("%s is checkmated.", turn ? "Black" : "White");
+    modal("%s is checkmated.", turn ? "Black" : "White");
 }
 
-
-static void UINotifyResign(int turn)
+static void UINotifyResign(Game *game, int turn)
 {
-    UIBarf("%s resigns.", turn ? "Black" : "White");
+    modal("%s resigns.", turn ? "Black" : "White");
 }
 
-
-static void UIMovelistShow(MoveList *mvlist, Board *board)
+static void UIMovelistShow(const MoveList &mvlist, const Board &board)
 {
     int i;
     char result[MOVE_STRING_MAX];
@@ -1020,75 +998,71 @@ static void UIMovelistShow(MoveList *mvlist, Board *board)
     textcolor(SYSTEMCOL);
     gotoxy(1, 1);
 
-    for (i = 0; i < mvlist->NumMoves(); i++)
-    {
-        cprintf("%s ", mvlist->Moves(i).ToString(result, &msUI, board));
-    }
-    UIBarf("possible moves.");
+    for (i = 0; i < mvlist.NumMoves(); i++)
+        cprintf("%s ", mvlist.Moves(i).ToString(result, &msUI, &board));
+    modal("possible moves.");
 }
 
 // Do any UI-specific initialization.
-static void UIInit(GameT *game)
+static void UIInit(Game *game, SwitcherContextT *sw)
 {
     setlocale(LC_CTYPE, ""); // necessary for a UTF-8 console cursor
-    // set cursor invisible (ncurses).  Hacky, but geez.
     initconio();
-    if (curs_set(0) == ERR)
-    {
+    if (curs_set(0) == ERR) // set cursor invisible (ncurses).
         assert(0);
-    }
     clrscr();
     gBoardIf.col[0] = LIGHTCYAN;
     gBoardIf.col[1] = LIGHTGRAY;
     gBoardIf.flipped = 0;
     gBoardIf.cursCoord = 0;
-
+    gBoardIf.sw = sw;
+    
     UIBoardDraw();
     UITicksDraw();
     UIOptionsDraw(game);    
+    game->NewGame();
+    game->Go(); // start white's clock
 }
 
 // This function intended to get player input and adjust variables accordingly.
-static void UIPlayerMove(Thinker *th, GameT *game)
+static void UIPlayerMove(Game *game)
 {
-    MoveT *foundMove;
+    const MoveT *foundMove;
     uint8 chr;
     MoveList movelist;
     uint8 comstr[2] = {FLAG, FLAG};
     MoveT myMove = MoveNone;
     int myLevel;
     int myHiswin;
-    int player;
     char myStr[3];
 
-    Board *board = &game->savedBoard; // shorthand
+    const Board &board = game->Board(); // shorthand
 
     UIGetCommand(comstr, game);
     
-    switch(comstr[0])
+    switch (comstr[0])
     {
-        case 'Q':    // bail
-            th->CmdBail();
+        case 'q':    // bail
+            game->Stop();
             UIExit();
             printf("bye.\n");
             exit(0);
             break;
-        case 'N':     // new game
+        case 'n':    // new game
             gVars.gameCount++;
-            th->CmdBail();
-            GameNew(game);
+            game->NewGame();
             return;
-        case 'L':     // switch computer level
+        case 'l':    // switch computer level
             do
             {
-                UIBarfString(myStr, 3, "0123456789", "Set level to? >");
+                modalString(myStr, 3, "0123456789", "Set level to? >");
             } while (sscanf(myStr, "%d", &myLevel) < 1);
 
-            th->Config().SetSpinClamped(Config::MaxDepthSpin, myLevel);
+            game->EngineConfig().SetSpinClamped(Config::MaxDepthSpin, myLevel);
             UIOptionsDraw(game);
             return;
-        case 'H':     // change history window
-            while ((myHiswin = UIBarf("Set to x moves (0-9)? >") - '0') < 0 ||
+        case 'h':    // change history window
+            while ((myHiswin = modal("Set to x moves (0-9)? >") - '0') < 0 ||
                    myHiswin > 9)
             {
                 ; // noop
@@ -1096,119 +1070,95 @@ static void UIPlayerMove(Thinker *th, GameT *game)
             gHistoryWindow.SetWindow(myHiswin);
             UIOptionsDraw(game);
             return;
-        case 'W':     // toggle computer control
-        case 'B':
-            player = (comstr[0] == 'B');
-            game->control[player] ^= 1;
-
-            GameCompRefresh(game);
+        case 'w':    // toggle computer control
+        case 'b':
+            game->ToggleEngineControl(comstr[0] == 'b');
             UIOptionsDraw(game);
             return;
-        case 'P': // toggle pondering.
-            gVars.ponder = !gVars.ponder;
-
-            GameCompRefresh(game);
+        case 'p':    // toggle pondering.
+            game->TogglePonder();
             UIOptionsDraw(game);
             return;
-        case 'M':
-            th->CmdMoveNow();
+        case 'm':
+            game->MoveNow();
             return;
-        case 'C':     // change w/b colors
+        case 'c':    // change w/b colors
             UIPlayerColorChange();
-            UIPositionRefresh(board->Position());
+            UIPositionRefresh(board.Position());
             return;
-        case 'F':     // flip board.
+        case 'f':    // flip board.
             UIBoardFlip(board);
             return;
-        case 'D':     // change debug logging level.
+        case 'd':    // change debug logging level.
             UISetDebugLoggingLevel();
             return;
-        case 'S':
-            UIBarf(SaveGameSave(&game->sgame) < 0 ?
-                   "Game save failed." :
-                   "Game save succeeded.");
+        case 's':
+            modal(game->Save() < 0 ?
+                  "Game save failed." :
+                  "Game save succeeded.");
             return;
-        case 'R':
-            if (SaveGameRestore(&game->sgame) < 0)
-            {
-                UIBarf("Game restore failed.");
-            }
-            else
-            {
-                th->CmdNewGame();
-                UIBarf("Game restore succeeded.");
-                // Could goto current ply instead of numPlies.  I'm assuming
-                // here the user is absent-minded and might forget (or might not
-                // know) the current ply is persistent.
-                GameGotoPly(game, GameLastPly(game));
-            }
+        case 'r':
+            modal(game->Restore() < 0 ?
+                  "Game restore failed." :
+                  "Game restore succeeded.");
             return;
-        case 'U':
-            if (GameRewind(game, 1) < 0)
-            {
-                UIBarf("Start of game.");
-            }
+        case 'u':
+            if (game->Rewind(1) < 0)
+                modal("Start of game.");
             return;
-        case 'O':
-            if (GameFastForward(game, 1) < 0)
-            {
-                UIBarf("End of redo information.");
-            }
+        case 'o':
+            if (game->FastForward(1) < 0)
+                modal("End of redo information.");
             return;
-        case 'E':
+        case 'e':
         {
-            th->CmdBail();
-            ClocksStop(game);
+            game->Stop();
 
-            Position position = board->Position();
+            Position position = board.Position();
             std::string errString;
-            do {
+            Board tmpBoard = board;
+
+            do
+            {
                 UIEditPosition(position);
                 if (!position.IsLegal(errString))
-                {
                     reportError(false, "Error: %s", errString.c_str());
-                }
-            } while (!board->SetPosition(position));
+            } while (!tmpBoard.SetPosition(position));
 
             UIOptionsDraw(game);
-
-            GameNewEx(game, board, false);
+            game->NewGame(tmpBoard, false);
+            game->Go();
             return;
         }
-        case 'A': // toggle randomization of moves.
+        case 'a': // toggle randomization of moves.
         {
-            const Config::CheckboxItem *cbItem =
-                th->Config().CheckboxItemAt(Config::RandomMovesCheckbox);
-            bool randomMoves = cbItem ? cbItem->Value() : false;
-            th->Config().SetCheckbox(Config::RandomMovesCheckbox,
-                                     !randomMoves);
+            game->EngineConfig().ToggleCheckbox(Config::RandomMovesCheckbox);
             UIOptionsDraw(game);
             return;
         }
-        case 'T':
+        case 't':
             // I'm pretty sure I want the computer to stop thinking, if I'm
-            //  swiping the time out from under it.
-            th->CmdBail();
-            ClocksStop(game);
+            //  (maybe) swiping the time out from under it.
+            game->Stop();
             UITimeMenu(game);
             UIOptionsDraw(game);
             UINotifyReady();
-            GameMoveCommit(game, NULL, false);
+            game->Go();
             return;
         default:
             break;
     }
 
     // At this point, must be a move or request for moves, so get valid moves.
-    board->GenerateLegalMoves(movelist, false);
+    board.GenerateLegalMoves(movelist, false);
 
-    if (comstr[0] == 'G')       // display moves
+    if (comstr[0] == 'g')       // display moves
     {
-        UIMovelistShow(&movelist, board);
+        UIMovelistShow(movelist, board);
         UIBoardDraw();
         UITicksDraw();
         UIOptionsDraw(game);
-        UIPositionRefresh(board->Position());
+        UIPositionRefresh(board.Position());
         UIStatusDraw(game);
         UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
         return;
@@ -1217,24 +1167,22 @@ static void UIPlayerMove(Thinker *th, GameT *game)
     // Suppose we have a valid move.  Can we find it in the movelist?
     myMove.src = comstr[0];
     myMove.dst = comstr[1];
-    myMove.UnmangleCastle(*board);
+    myMove.UnmangleCastle(board);
 
     // Search movelist for move.
     if ((foundMove = movelist.SearchSrcDst(myMove)) == NULL)
     {
-        UIBarf("Sorry, invalid move.");
+        modal("Sorry, invalid move.");
         UITicksDraw();
         return;
     }
 
     // At this point, we must have a valid move.
-    th->CmdBail();
-
     // Do we need to promote?
     if (foundMove->IsPromote())
     {
-        while ((chr = UIBarf("Promote piece to (q, r, b, n)? >")) != 'q' &&
-               chr != 'r' && chr != 'b' && chr != 'n')
+        while ((chr = tolower(modal("Promote piece to (q, r, b, n)? >")))
+               != 'q' && chr != 'r' && chr != 'b' && chr != 'n')
         {
             ; // no-op
         }
@@ -1246,15 +1194,10 @@ static void UIPlayerMove(Thinker *th, GameT *game)
     }
 
     myMove = *foundMove;
-    GameMoveCommit(game, &myMove, false);
+    game->MakeMove(myMove);
 }
 
-static bool UIShouldCommitMoves(void)
-{
-    return true;
-}
-
-static void UINotifyMove(MoveT move) { }
+static void UINotifyMove(Game *game, MoveT move) { }
 
 static UIFuncTableT myUIFuncTable =
 {
@@ -1274,7 +1217,6 @@ static UIFuncTableT myUIFuncTable =
     .notifyDraw = UINotifyDraw,
     .notifyCheckmated = UINotifyCheckmated,
     .notifyResign = UINotifyResign,
-    .shouldCommitMoves = UIShouldCommitMoves
 };
 
 UIFuncTableT *uiNcursesOps(void)

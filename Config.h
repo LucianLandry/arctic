@@ -31,7 +31,7 @@
 // button (a simple trigger)
 // string (a free-form string)
 
-// not used yet
+// FIXME: not used yet, but should be
 // #define kConfigHistoryWindowSpin "historyWindow"
 // #define kConfigTranpositionTableSizeSpin "limits/transpositionTableSize"
 
@@ -75,6 +75,7 @@ public:
     const char *ErrorString(Error error) const;
     
     Error SetCheckbox(const std::string &name, bool value);
+    Error ToggleCheckbox(const std::string &name);
     Error SetSpin(const std::string &name, int value);
     Error SetSpinClamped(const std::string &name, int value);
     Error SetCombo(const std::string &name, const std::string &value);

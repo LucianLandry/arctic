@@ -114,9 +114,9 @@ JUCE GOTCHAS:
 USING ARCTIC FROM CONSOLE:
 
 gnome-terminal has funky color handling and the background shows up as dark
-    gray instead of black.  Also, flashing is disabled.  The linux console has
-    a dark background, but the flashing is messed up.  Only workaround so far
-    is to use konsole or xterm.
+    gray instead of black (as described above, the pallete needs to be
+    changed).  Also, flashing is disabled.  The linux console has a dark
+    background, but the flashing is messed up.  konsole and xterm work, though.
 
 -------------------------------------------------------------------------------
 
@@ -157,3 +157,20 @@ xboard -size bulky -debug -nameOfDebugFile ~/xboard.debug -thinking -ponder -mod
 
 # Play arctic (UCI) against older version
 xboard -size bulky -defaultHashSize 508 -debug -nameOfDebugFile ~/xboard.debug -thinking -xponder -mode TwoMachines -fcp ../../arcticExe/arctic10 -scp "polyglot -noini -log true -lf /home/blandry/polyglot.log3 -ec ./arctic"
+
+# uci: figure out whether pondering returns a pondermove when stopped
+uci
+isready
+ucinewgame
+# position startpos moves e2e4
+# check evals with White down its kbpawn:
+position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPP2P/RNBQKBNR w KQkq - 0 1 moves a2a4
+position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPP2P/RNBQKBNR w KQkq - 0 1 moves e2e4
+go infinite ponder
+# expect illegal command
+go infinite ponder searchmoves d2d3 c2c3
+go infinite ponder searchmoves b7b5 c7c6
+ponderhit
+stop
+# stockfish returns the pv move after the bestmove for pondering, even *when* pondering.  As does Fruit.  example: bestmove g8f6 ponder e4e5.
+quit

@@ -164,6 +164,14 @@ Config::Error Config::SetCheckbox(const std::string &name, bool value)
     return Error::None;
 }
 
+Config::Error Config::ToggleCheckbox(const std::string &name)
+{
+    const Config::CheckboxItem *cbItem = CheckboxItemAt(name);
+    return
+        cbItem == nullptr ? Error::NotFound :
+        SetCheckbox(name, !cbItem->Value());
+}
+
 Config::Error Config::SetSpin(const std::string &name, int value)
 {
     Item *item = ItemAt(name);

@@ -27,7 +27,7 @@ static juce::JUCEApplicationBase *createArcticInstance()
     return new ArcticApp();
 }
 
-static void juceInit(GameT *game)
+static void juceInit(Game *game, SwitcherContextT *sw)
 {
     // This is the dance we do to get around needing a START_JUCE_APPLICATION()
     // macro.  It is platform-specific.
@@ -39,7 +39,7 @@ static void juceInit(GameT *game)
     exit(0);
 }
 
-static void jucePlayerMove(Thinker *th, GameT *game)
+static void jucePlayerMove(Game *game)
 {
 }
 
@@ -51,15 +51,15 @@ static void juceExit(void)
 {
 }
 
-static void juceStatusDraw(GameT *game)
+static void juceStatusDraw(Game *game)
 {
 }
 
-static void juceNotifyTick(GameT *game)
+static void juceNotifyTick(Game *game)
 {
 }
 
-static void juceNotifyMove(MoveT move)
+static void juceNotifyMove(Game *game, MoveT move)
 {
 }
 
@@ -67,7 +67,7 @@ static void juceNotifyError(char *reason)
 {
 }
 
-static void juceNotifyPV(GameT *game, const RspPvArgsT *pvArgs)
+static void juceNotifyPV(Game *game, const RspPvArgsT *pvArgs)
 {
 }
 
@@ -83,11 +83,11 @@ static void juceNotifyReady(void)
 {
 }
 
-static void juceNotifyComputerStats(GameT *game, const ThinkerStatsT *stats)
+static void juceNotifyComputerStats(Game *game, const ThinkerStatsT *stats)
 {
 }
 
-static void juceNotifyDraw(const char *reason, MoveT *move)
+static void juceNotifyDraw(Game *game, const char *reason, MoveT *move)
 {
 }
 
@@ -95,13 +95,8 @@ static void juceNotifyCheckmated(int turn)
 {
 }
 
-static void juceNotifyResign(int turn)
+static void juceNotifyResign(Game *game, int turn)
 {
-}
-
-static bool juceShouldCommitMoves(void)
-{
-    return true;
 }
 
 UIFuncTableT *uiJuceOps(void)
@@ -125,7 +120,6 @@ UIFuncTableT *uiJuceOps(void)
     juceUIFuncTable.notifyDraw = juceNotifyDraw;
     juceUIFuncTable.notifyCheckmated = juceNotifyCheckmated;
     juceUIFuncTable.notifyResign = juceNotifyResign;
-    juceUIFuncTable.shouldCommitMoves = juceShouldCommitMoves;
 
     return &juceUIFuncTable;
 }

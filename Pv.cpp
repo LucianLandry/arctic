@@ -18,7 +18,6 @@
 #include <assert.h>
 
 #include "Board.h"
-#include "gDynamic.h"
 #include "move.h" // MovesToString()
 #include "Pv.h"
 
@@ -108,6 +107,20 @@ void SearchPv::Log(LogLevelT logLevel) const
     LogPrint(logLevel, "}}");
 }
 
+void SearchPv::Decrement()
+{
+    // "++" instead of "--" since this is depth of node this was instantiated
+    //  at, not 'level'
+    startDepth++;
+    if (numMoves <= 0)
+        return;
+    numMoves--;
+    int i;
+    for (i = 0; i < numMoves; i++)
+        moves[i] = moves[i + 1];
+    moves[i] = MoveNone;
+}
+
 void DisplayPv::Log(LogLevelT logLevel) const
 {
     char tmpStr[kMaxEvalStringLen];
@@ -115,6 +128,14 @@ void DisplayPv::Log(LogLevelT logLevel) const
              level, eval.ToLogString(tmpStr));
     pv.Log(logLevel);
     LogPrint(logLevel, "}");
+}
+
+void DisplayPv::Decrement()
+{
+    pv.Decrement();
+    level--; // I guess we'll allow this to go negative (into quiescing moves
+             //  only)...
+    eval.Invert().RipenFrom(Eval::WinThreshold);
 }
 
 HintPv::HintPv()
@@ -175,7 +196,7 @@ void HintPv::Rewind(int numPlies)
     numPlies = MIN(kMaxPvMoves, numPlies);
 
     std::copy_backward(&moves[0], &moves[kMaxPvMoves - numPlies],
-                       &moves[numPlies]);
+                       &moves[kMaxPvMoves]);
     std::fill(&moves[0], &moves[numPlies], MoveNone);
 
     // We need to clear everything else out, though, because it is no longer
@@ -201,7 +222,7 @@ int HintPv::SuggestSearchStartLevel()
         // Always try to find the shortest mate if we have stumbled
         // onto one.  But normally we start at a deeper level just to
         // save the cycles.
-        gVars.pv.eval.DetectedWinOrLoss() ? 0 :
+        eval.DetectedWinOrLoss() ? 0 :
         // We start the search at the same level as the PV if we did not
         // complete the search, or at the next level if we did.  If the PV
         // level is zero, we just start over because the predicted move may
@@ -209,6 +230,11 @@ int HintPv::SuggestSearchStartLevel()
         // set level = -1 iff Decrement() didn't hit the right move.)
         completedSearch && level > 0 ? level + 1 :
         level;
+}
+
+void HintPv::ResetSearchStartLevel()
+{
+    level = 0;
 }
 
 void HintPv::CompletedSearch()

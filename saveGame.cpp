@@ -44,7 +44,6 @@ void SaveGameMoveCommit(SaveGameT *sgame, MoveT *move, bigtime_t myTime)
     sgame->plies.push_back(ply);
 }
 
-
 // returns: 0, if save successful, otherwise -1.
 int SaveGameSave(SaveGameT *sgame)
 {
@@ -56,7 +55,7 @@ int SaveGameSave(SaveGameT *sgame)
     
     if ((myFile = fopen(SAVEFILE, "w")) == NULL)
     {
-        LOG_DEBUG("SaveGameSave(): Could not open file.\n");
+        LOG_NORMAL("SaveGameSave(): Could not open file.\n");
         return -1;
     }
 
@@ -64,7 +63,7 @@ int SaveGameSave(SaveGameT *sgame)
     {
         if (fwrite(sgame, saveGameElemSize, 1, myFile) < 1)
         {
-            LOG_DEBUG("SaveGameSave(): could not write SaveGameT.\n");
+            LOG_NORMAL("SaveGameSave(): could not write SaveGameT.\n");
             retVal = -1;
             break;
         }
@@ -75,7 +74,7 @@ int SaveGameSave(SaveGameT *sgame)
                  fwrite(&sgame->plies[sgame->plies.size() - elementsLeft],
                         sizeof(GamePlyT), elementsLeft, myFile)) == 0)
             {
-                LOG_DEBUG("SaveGameSave(): could not write GamePlyT.\n");
+                LOG_NORMAL("SaveGameSave(): could not write GamePlyT.\n");
                 retVal = -1;
                 break;
             }
@@ -85,12 +84,11 @@ int SaveGameSave(SaveGameT *sgame)
 
     if (fclose(myFile) == EOF)
     {
-        LOG_DEBUG("SaveGameSave(): could not close file.\n");
+        LOG_NORMAL("SaveGameSave(): could not close file.\n");
         retVal = -1;
     }
     return retVal;
 }
-
 
 void SaveGameInit(SaveGameT *sgame)
 {
@@ -106,7 +104,7 @@ void SaveGamePositionSet(SaveGameT *sgame, Board *board)
     sgame->plies.resize(0);
 }
 
-void SaveGameClocksSet(SaveGameT *sgame, Clock *clocks[])
+void SaveGameClocksSet(SaveGameT *sgame, Clock *clocks)
 {
     int i;
 
@@ -114,9 +112,8 @@ void SaveGameClocksSet(SaveGameT *sgame, Clock *clocks[])
     {
         // Trying to successfully xfer a running clock seems difficult, and
         // we do not have to support it, so ...
-        assert(!clocks[i]->IsRunning());
-
-        sgame->clocks[i] = *clocks[i];  // struct copy
+        assert(!clocks[i].IsRunning());
+        sgame->clocks[i] = clocks[i];
     }
 }
 
@@ -129,9 +126,9 @@ void SaveGameClocksSet(SaveGameT *sgame, Clock *clocks[])
 // are not NULL.  This is the intended main way for the save-game module
 // to communicate with everybody else.
 //
-// Notice 'clocks' is an array of ptrs!  This is for better coordination
+// Notice 'clocks' is an array of clocks!  This is for better coordination
 // w/GameT.
-int SaveGameGotoPly(SaveGameT *sgame, int ply, Board *board, Clock *clocks[])
+int SaveGameGotoPly(SaveGameT *sgame, int ply, Board *board, Clock *clocks)
 {
     int i, plyOffset;
     MoveList moveList;
@@ -183,19 +180,14 @@ int SaveGameGotoPly(SaveGameT *sgame, int ply, Board *board, Clock *clocks[])
     // Success.  Update external variables if they exist.
     if (clocks != NULL)
     {
-        // struct copies.
-        *(clocks[0]) = myClocks[0];
-        *(clocks[1]) = myClocks[1];
+        clocks[0] = myClocks[0];
+        clocks[1] = myClocks[1];
     }
-
     if (board != NULL)
-    {
         *board = myBoard;
-    }
 
     return 0;
 }
-
 
 // Assumes 'sgame' has been initialized (w/SaveGameInit())
 // Returns: 0, if restore successful, otherwise -1.
@@ -220,22 +212,23 @@ int SaveGameRestore(SaveGameT *sgame)
         ;
     if (retVal < 0)
     {
-        LOG_DEBUG("SaveGameRestore(): stat() failed\n");
+        LOG_NORMAL("SaveGameRestore(): stat() failed\n");
         return -1;
     }
     elementsLeft = (buf.st_size - saveGameElemSize) / sizeof(GamePlyT);
 
     if ((myFile = fopen(SAVEFILE, "r")) == NULL)
     {
-        LOG_DEBUG("SaveGameRestore(): Could not open file.\n");
+        LOG_NORMAL("SaveGameRestore(): Could not open file.\n");
         return -1;
     }
 
-    do {
+    do
+    {
         // Read in SaveGameT.  (except for the 'plies' vector)
         if (fread(&mySGame, saveGameElemSize, 1, myFile) < 1)
         {
-            LOG_DEBUG("SaveGameRestore(): could not read SaveGameT.\n");
+            LOG_NORMAL("SaveGameRestore(): could not read SaveGameT.\n");
             retVal = -1;
             break;
         }
@@ -246,7 +239,7 @@ int SaveGameRestore(SaveGameT *sgame)
         std::string errString;
         if (!mySGame.startPosition.IsLegal(errString))
         {
-            LOG_DEBUG("SaveGameRestore(): illegal position read: %s\n",
+            LOG_NORMAL("SaveGameRestore(): illegal position read: %s\n",
                       errString.c_str());
             retVal = -1;
             break;
@@ -256,7 +249,7 @@ int SaveGameRestore(SaveGameT *sgame)
         // to prevent wraparound.
         if (mySGame.startPosition.Ply() > 1000000)
         {
-            LOG_DEBUG("SaveGameRestore(): bad firstPly (%d)\n",
+            LOG_NORMAL("SaveGameRestore(): bad firstPly (%d)\n",
                       mySGame.startPosition.Ply());
             retVal = -1;
             break;
@@ -271,7 +264,7 @@ int SaveGameRestore(SaveGameT *sgame)
                  fread(&mySGame.plies[mySGame.plies.size() - elementsLeft],
                        sizeof(GamePlyT), elementsLeft, myFile)) == 0)
             {
-                LOG_DEBUG("SaveGameRestore(): could not read GamePlyT.\n");
+                LOG_NORMAL("SaveGameRestore(): could not read GamePlyT.\n");
                 retVal = -1;
                 break;
             }
@@ -286,7 +279,7 @@ int SaveGameRestore(SaveGameT *sgame)
             // (going back to, and validating 'currentPly' at the same time)
             SaveGameGotoPly(&mySGame, savedCurrentPly, NULL, NULL) < 0)
         {
-            LOG_DEBUG("SaveGameRestore(): bad GameT or GamePlyT.\n");
+            LOG_NORMAL("SaveGameRestore(): bad GameT or GamePlyT.\n");
             retVal = -1;
             break;
         }
@@ -294,7 +287,7 @@ int SaveGameRestore(SaveGameT *sgame)
 
     if (fclose(myFile) == EOF)
     {
-        LOG_DEBUG("SaveGameRestore(): could not close file.\n");
+        LOG_NORMAL("SaveGameRestore(): could not close file.\n");
         retVal = -1;
     }
 

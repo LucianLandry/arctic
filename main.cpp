@@ -24,11 +24,11 @@
 #include "aSystem.h"
 #include "Board.h"
 #include "clockUtil.h"
-#include "game.h"
-#include "gDynamic.h"
+#include "Game.h"
 #include "gPreCalc.h"
 #include "log.h"
 #include "playloop.h"
+#include "switcher.h"
 #include "Thinker.h"
 #include "TransTable.h"
 #include "ui.h"
@@ -183,15 +183,16 @@ int main(int argc, char *argv[])
 
     gTransTable.SetDesiredSize(hashTableSize);
 
-    srandom(getBigTime() / 1000000);
+    srandom(CurrentTime() / 1000000);
 
     Thinker th; // This is the root thinker.
     ThinkerSearchersCreate(gPreCalc.numProcs, th);
 
-    GameT game;
-    GameInit(&game, &th);
+    SwitcherContextT sw;
+    SwitcherInit(&sw);
+    SwitcherRegister(&sw);
 
-    PlayloopSetThinkerRspHandler(game, th);
+    Game game(&th);
 
     gUI =
         !strcmp(uiString, "juce") ? uiJuceOps() :
@@ -202,19 +203,12 @@ int main(int argc, char *argv[])
         uiNcursesOps() : uiXboardOps();
 
     Semaphore readySem;
-    uiThreadInit(&th, &game, &readySem);
+    uiThreadInit(&game, &sw, &readySem);
     // Wait for the UI to do some initialization.
     readySem.wait();
 
-    GameNew(&game);
-
     gUI->notifyReady();
-
-    game.clocks[0]->Start();
-
-    // Enter main play loop.
-    PlayloopRun(game, th);
-
+    PlayloopRun(game, th, sw); // Enter main play loop.
     gUI->exit();
 
     return 0;

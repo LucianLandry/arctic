@@ -17,25 +17,22 @@
 // Implementation notes:
 //
 // The UCI spec is not completely precise about what "GUI to Engine" commands
-// are allowed when an engine is in active search.  I am specifically concerned
-// about the "ucinewgame" and "position" commands.
-//
+//  are allowed when an engine is in active search.  I am specifically concerned
+//  about the "ucinewgame" and "position" commands.
 // IMO, when a sane GUI wanted to setup a new position during an active search,
-// it would send "stop", wait for a "bestmove" response (and possibly ignore
-// it), then setup a new position/game and "go" from there.
-//
+//  it would send "stop", wait for a "bestmove" response (and possibly ignore
+//  it), then setup a new position/game and "go" from there.
 // However, if "ucinewgame" and/or "position" are allowed during active search,
-// it would imply that when the engine gets these crazy commands, it should
-// continue calculating on its current position while a new position is setup
-// (unless the search terminated due to depth/time limits etc.)
+//  it would imply that when the engine gets these commands, it should continue
+//  calculating on its current position while a new position is setup (unless
+//  the search terminated due to depth/time limits etc.)
 // Then a new "go" command would force the engine to send a bestmove for the
-// original position before it started searching the new position.  (because
-// "for every "go" command a "bestmove" command is needed!")
-//
+//  original position before it started searching the new position.  (because
+//  "for every "go" command a "bestmove" command is needed!")
 // My first instinct in this situation was to force an implicit "stop" command
-// through to the engine, but if such commands are really not supposed to
-// come, then according to the spec we should do the less GUI-friendly thing
-// and ignore them completely.
+//  through to the engine, but if such commands are really not supposed to
+//  come, then according to the spec we should do the less GUI-friendly thing
+//  and ignore them completely.
 //
 // Since:
 // -- I am not familiar w/any UCI GUIs' behavior yet
@@ -50,7 +47,7 @@
 // big fat warnings about it).  If this turns out to be the wrong decision, it
 // will need to be revisited.
 
-// If I was even more of a language lawyer I could claim that two back-to-back
+// If I was even more of a language lawyer I might claim that two back-to-back
 // "go" commands might be acceptable since the language from the spec:
 //
 // 'Before the engine is asked to search on a position, there will always be a
@@ -73,7 +70,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "clockUtil.h"
 #include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
@@ -92,38 +88,92 @@ static const MoveStyleT gMoveStyleUCI = {mnCAN, csK2, false};
 // Still, if we exceed this, we probably have a problem, so bail.
 #define MAXBUFLEN (1 * 1024 * 1024)
 
+// Forward declarations.
+static void uciNotifyMove(Game *game, MoveT move);
 
-static struct {
-    bool bDebug;          // are we in debug mode or not?
-    bool bBadPosition;    // "invalid" position loaded (king in check?
-                          // two kings? etc.) and cannot think on it.
-    bool bGotUciNewGame;  // got a "ucinewgame" command at least once, which
-                          // lets us know the GUI supports it.
+enum class UciState
+{
+    Idle,          // initial state
+    HasPosition,   // received *valid* "position" command (ready to go)
+    // Note: we may be in the below states even if the computer is not
+    //  not technically searching (ex. found mate or draw, or hit depth limit).
+    // In that case we are just waiting for a stop cmd.
+    PonderOneMove, // pondering the pondermove UCI wanted us to ponder
+    PonderAll,     // pondering all moves
+    Thinking       // actually searching (not pondering)
+};
+
+static struct
+{
+    bool bDebug;          // Are we in debug mode or not?
+    bool bGotUciNewGame;  // Got a "ucinewgame" command at least once, which
+                          //  lets us know the GUI supports it.
     int initialTime[2];   // Possible starting times on the w/b clock, in msec
+    MoveT ponderMove;     // Move the GUI wants us to ponder on.  (We sometimes
+                          //  ignore this advice, but we use it to massage
+                          //  reported PVs etc.)
+    UciState state;       // What state are we in?
 
-    MoveT ponderMove;     // Move the UI wants us to ponder on.  (We ignore this
-                          // advice but we use it to massage reported PVs etc.)
-
-    bool bSearching;      // Are we currently supposed to be searching a position?
-                          // (may be true even if the computer technically has
-                          // found mate or resigned, and is not actually
-                          // searching)
-    bool bPonder;         // are we in pondering mode or not.
-    bool bInfinite;       // When true, we are supposed to not stop searching.
-                          // What happens in reality is that if we do stop
-                          // searching, we cache the search results and do not
-                          // inform the UI until it directs us to stop.
-    MoveList searchList;  // list of moves we are supposed to search on.
-
+    // This is preserved state from the "go" command.  We may refer back to this
+    //  when processing 'ponderhit' or responses.
+    struct
+    {
+        Clock clocks[2];
+        MoveList searchList; // list of moves we are supposed to search on.
+        // When true, we are supposed to not stop searching.  In reality, if we
+        //  do stop searching, we cache the search results and do not inform
+        //  the GUI until it directs us to stop.
+        bool isInfinite;
+    } goState;
+    
     // Cached results from the engine.
-    struct {
+    struct
+    {
         MoveT bestMove;
         MoveT ponderMove;
     } result;
+
+    SwitcherContextT *sw;
 } gUciState;
 
-// Forward declarations.
-static void uciNotifyMove(MoveT move);
+static const char *uciStateString()
+{
+    switch (gUciState.state)
+    {
+        case UciState::Idle:          return "idle";
+        case UciState::HasPosition:   return "hasPosition";
+        case UciState::PonderOneMove: return "ponderOneMove";
+        case UciState::PonderAll:    return "ponderAll";
+        case UciState::Thinking:      return "thinking";
+        default: break;
+    }
+    return "(unknown!)";
+}
+
+static bool isSearching()
+{
+    switch (gUciState.state)
+    {
+        case UciState::Idle:
+        case UciState::HasPosition:
+            return false;
+        default:
+            break;
+    }
+    return true;
+}
+
+static void moveToIdleState(Game *game)
+{
+    if (gUciState.state == UciState::Idle)
+        return;
+    game->StopAndForce();
+    game->SetPonder(false);
+    gUciState.ponderMove = MoveNone;
+    gUciState.result.bestMove = MoveNone;
+    gUciState.result.ponderMove = MoveNone;
+    gUciState.state = UciState::Idle;
+}
 
 static void uciNotifyError(char *reason)
 {
@@ -132,7 +182,7 @@ static void uciNotifyError(char *reason)
 
 // Given that we are pointing at a token 'pStr',
 //  return a pointer to the token after it (or NULL, if none).
-static char *findNextToken(char *pStr)
+static const char *findNextToken(const char *pStr)
 {
     return
         pStr == NULL ? NULL :
@@ -140,7 +190,7 @@ static char *findNextToken(char *pStr)
                               findNextWhiteSpace(pStr));
 }
 
-static char *findRecognizedToken(char *pStr)
+static const char *findRecognizedToken(const char *pStr)
 {
     for (; pStr != NULL; pStr = findNextToken(pStr))
     {
@@ -166,14 +216,12 @@ static char *findRecognizedToken(char *pStr)
     return NULL;
 }
 
-static void uciInit(GameT *game)
+static void uciInit(Game *game, SwitcherContextT *sw)
 {
     static bool initialized;
 
     if (initialized)
-    {
         return;
-    }
 
     // Set unbuffered I/O (obviously necessary for output, also necessary for
     // input if we want to poll() correctly.)
@@ -183,25 +231,32 @@ static void uciInit(GameT *game)
     // gUciState is already cleared (since it is global).
     // Initialize whatever fields we need to.
     gUciState.ponderMove = MoveNone;
-
+    gUciState.result.bestMove = MoveNone;
+    gUciState.result.ponderMove = MoveNone;
+    gUciState.sw = sw;
+    
 #if 1 // bldbg: goes out for debugging
     // Use random moves by default.
-    game->th->Config().SetCheckbox(Config::RandomMovesCheckbox, true);
+    game->EngineConfig().SetCheckbox(Config::RandomMovesCheckbox, true);
 #endif
     // There is no standard way I am aware of for a UCI engine to resign
     //  so until I figure out how Polyglot might interpret it, we must play
     //  until the bitter end.  Even then, we probably want to work w/all UCI
     //  interfaces.
-    game->th->Config().SetCheckbox(Config::CanResignCheckbox, false);
+    game->EngineConfig().SetCheckbox(Config::CanResignCheckbox, false);
+    game->SetAutoPlayEngineMoves(false);
+    // FIXME we don't want to do this until later (because initializing the
+    //  transposition table can take some time), but for now it's okay.
+    game->NewGame();
     initialized = true;
 }
 
-void processUciCommand(void)
+void processUciCommand(Game *game, SwitcherContextT *sw)
 {
     char hashString[160];
     int rv;
 
-    uciInit(NULL);
+    uciInit(game, sw);
     rv = snprintf(hashString, sizeof(hashString),
                   "option name Hash type spin default %" PRId64
                   " min 0 max %" PRId64 "\n",
@@ -230,183 +285,97 @@ void processUciCommand(void)
     gUI = uiUciOps();
 }
 
-// Helper function for processPositionCommand().  Process a board once it has
-// started to diverge from the game proper.
-// 'move', if !NULL, was the move that diverged.  Otherwise, the original
-// position changed and we should probably blow away everything.
-static void finishMoves(GameT *game, Board *fenBoard, MoveT *move, char *pToken, Thinker *th)
+// Note: if we receive what we think is a bad 'position' command, we currently
+//  ignore it.  This does mean that if we received a previous 'position' cmd,
+//  we might think on a position the GUI didn't mean for us to.  (By the spec,
+//  I believe the behavior is undefined.)
+static void processPositionCommand(Game *game, const char *pToken)
 {
-    int lastPly, lastCommonPly;
-    MoveT myMove;
-    Board *board = &game->savedBoard;
-    char tmpStr[MOVE_STRING_MAX];
-
-    printf("info string %s: diverged move was: %s\n",
-           __func__,
-           (move && *move != MoveNone ?
-            move->ToString(tmpStr, &gMoveStyleUCI, NULL) :
-            "0000"));
-    if (move != NULL)
-    {
-        lastPly = GameLastPly(game);
-        lastCommonPly = fenBoard->Ply() - 1;
-        assert(lastCommonPly >= 0);
-
-        // I cannot GameNew(Ex)() because it would blow away the savegame.
-        // Goto the ply just before the board started to diverge.
-
-        // Note: this is a little fragile, as GameGotoPly() calls
-        // GameMoveCommit() which would dump bad (for UCI) output for automatic
-        // draws.  We rely on this function not being called when we are
-        // handling such a case.  Fortunately all such (legal) draws must happen
-        // on the last ply and can therefore be handled entirely by
-        // processPositionCommand().
-        GameGotoPly(game, lastCommonPly);
-        GameMoveMake(game, move);
-        if (abs(lastPly - lastCommonPly) > 2)
-        {
-            printf("info string %s: plydiff %d, blowing away hash/hist\n",
-                   __func__, abs(lastPly - lastCommonPly));
-            // Assume the boards have diverged too much to preserve the hash
-            // table, history window, etc.  This should be large enough to
-            // not trigger in a normal case (ponder miss etc.)
-            th->CmdNewGame();
-        }
-    }
-    else
-    {
-        // First position was different.  We always have to blow the hash
-        // etc. away because we do not know exactly how different things were.
-        GameNewEx(game, fenBoard, false);
-    }
-
-    for (;
-         pToken != NULL;
-         pToken = findNextToken(pToken))
-    {
-        // As we find moves, play them on the board.
-        if (!isLegalMove(pToken, &myMove, board))
-        {
-            reportError(false, "%s: illegal move '%s', giving up",
-                        __func__, pToken);
-            gUciState.bBadPosition = true;
-            return;
-        }
-        gUciState.ponderMove = myMove;
-        GameMoveMake(game, &myMove);
-    }
-}
-
-static void processPositionCommand(Thinker *th, GameT *game, char *pToken)
-{
-    Board fenBoard;
-    bool bFen;
-    int i;
-    MoveT myMove;
-    Board *board = &game->savedBoard; // shorthand.
-
-    if (gUciState.bSearching)
+    if (isSearching())
     {
         // See "Implementation Notes" for why we ignore this.
-        reportError(false, "%s: received 'position' while searching, IGNORING",
-                    __func__);
+        reportError(false, "%s: received 'position' in state %s, ignoring",
+                    __func__, uciStateString());
         return;
     }
 
-    // Turn off computer control of all players so that we do not start
-    // automatically thinking when we make moves.
-    setForceMode(th, game);
-    gVars.ponder = false;
-
-    gUciState.bBadPosition = false; // assume the best case
-    gUciState.ponderMove = MoveNone;
-    bFen = matches(pToken, "fen");
-
-    if (!bFen && !matches(pToken, "startpos"))
+    bool isFen = matches(pToken, "fen");
+    if (!isFen && !matches(pToken, "startpos"))
     {
         // got an unknown token where we should have seen "fen" or "startpos".
         reportError(false, "%s: !fen and !startpos, giving up", __func__);
-        gUciState.bBadPosition = true;
         return;
     }
 
     pToken = findNextToken(pToken);
 
-    if (fenToBoard(bFen ? pToken : FEN_STARTSTRING, &fenBoard) < 0)
+    Board fenBoard;
+    if (fenToBoard(isFen ? pToken : FEN_STARTSTRING, &fenBoard) < 0)
     {
         reportError(false, "%s: fenToBoard failed, cannot build position",
                     __func__);
-        gUciState.bBadPosition = true;
         return;
     }    
-    if (bFen)
+    if (isFen)
     {
         // skip past the fenstring
-        for (i = 0; i < 6; i++)
-        {
+        for (int i = 0; i < 6; i++)
             pToken = findNextToken(pToken);
-        }
     }
 
     // Now we expect a 'moves' token.
-    // The document makes it slightly ambiguous whether no
-    // 'moves' token is okay, so we allow it.
+    // The document makes it slightly ambiguous whether no 'moves' token is
+    //  okay if there are no actual moves, so we allow it.
     if (!matches(pToken, "moves") && pToken != NULL)
     {
         reportError(false, "%s: got unknown token where should have seen "
                     "'moves', giving up", __func__);
-        gUciState.bBadPosition = true;
         return;
     }
 
-    // skip past the 'moves' token (if any)
-    pToken = findNextToken(pToken);
+    pToken = findNextToken(pToken); // skip past 'moves' token (if any)
 
-    // If the boards do not match at this ply or the current board does
-    // not go back to this ply, blow everything away.
-    if (SaveGameGotoPly(&game->sgame, fenBoard.Ply(), board, NULL) < 0 ||
-        board->Position() != fenBoard.Position())
+    // 'tmpBoard' represents the starting position of the current game.
+    Board tmpBoard = game->Board();
+    for (int i = tmpBoard.Ply() - tmpBoard.BasePly(); i > 0; i--)
+        tmpBoard.UnmakeMove();
+
+    bool needNewGame = false;
+    if (!gUciState.bGotUciNewGame &&
+        fenBoard.Position() != tmpBoard.Position())
     {
-        finishMoves(game, &fenBoard, NULL, pToken, th);
-        return;
+        // If the new starting position is different, and we haven't received
+        //  "ucinewgame", assume we need a newgame.
+        needNewGame = true;
     }
 
-    for(;
-        pToken != NULL;
-        pToken = findNextToken(pToken))
+    MoveT myMove = MoveNone;
+    for(; pToken != NULL; pToken = findNextToken(pToken))
     {
         // As we find moves, play them on the board.
         if (!isLegalMove(pToken, &myMove, &fenBoard))
         {
             reportError(false, "%s: illegal move '%s', giving up",
                         __func__, pToken);
-            gUciState.bBadPosition = true;
             return;
         }
-        gUciState.ponderMove = myMove;
         fenBoard.MakeMove(myMove);
-        if (SaveGameGotoPly(&game->sgame, fenBoard.Ply(), board, NULL) < 0 ||
-            board->Position() != fenBoard.Position())
-        {
-            // Positions diverged.
-            finishMoves(game, &fenBoard, &myMove, findNextToken(pToken), th);
-            return;
-        }
     }
 
-    // If we backed up some moves, take that into account (manipulate the
-    // PV for instance).  Otherwise, try not to touch anything.
-    if (GameCurrentPly(game) != GameLastPly(game))
-    {
-        finishMoves(game, &fenBoard, &myMove, NULL, th);
-    }
+    // At this point we know the 'position' command is good.  Set everything up.
+    if (needNewGame)
+        game->NewGame(fenBoard, true);
+    else
+        game->SetBoard(fenBoard);
+    gUciState.ponderMove = myMove;
+    gUciState.state = UciState::HasPosition;
 }
 
 // Helper function.  Attempt to convert the next token after this one
 // (presumed to be an argument) to an integer.
 // "atLeast" is a sanity check which is disabled if < 0.
 // Return -1 if we failed, 0 otherwise
-static int convertNextInteger(char **pToken, int *result, int atLeast,
+static int convertNextInteger(const char **pToken, int *result, int atLeast,
                               const char *context)
 {
     *pToken = findNextToken(*pToken);
@@ -422,8 +391,8 @@ static int convertNextInteger(char **pToken, int *result, int atLeast,
 }
 
 // As above, but converts a 64-bit integer.
-static int convertNextInteger64(char **pToken, int64 *result, int64 atLeast,
-                                const char *context)
+static int convertNextInteger64(const char **pToken, int64 *result,
+                                int64 atLeast, const char *context)
 {
     *pToken = findNextToken(*pToken);
     if (*pToken == NULL ||
@@ -437,17 +406,17 @@ static int convertNextInteger64(char **pToken, int64 *result, int64 atLeast,
     return 0;
 }
 
-static void processSetOptionCommand(Thinker *th, char *inputStr)
+static void processSetOptionCommand(Game *game, const char *inputStr)
 {
     int64 hashSizeMB;
-    char *pToken;
+    const char *pToken;
 
-    if (gUciState.bSearching)
+    if (isSearching())
     {
         // The UCI spec says this command "will only be sent when the engine
-        // is waiting".
-        reportError(false, "%s: received 'setoption' while searching, IGNORING",
-                    __func__);
+        //  is waiting".
+        reportError(false, "%s: received 'setoption' in state %s, ignoring",
+                    __func__, uciStateString());
         return;
     }
 
@@ -459,8 +428,8 @@ static void processSetOptionCommand(Thinker *th, char *inputStr)
         (matchesNoCase((pToken = findNextToken(pToken)), "true") ||
          matchesNoCase(pToken, "false")))
     {
-        th->Config().SetCheckbox(Config::RandomMovesCheckbox,
-                                 !strcasecmp(pToken, "true"));
+        game->EngineConfig().SetCheckbox(Config::RandomMovesCheckbox,
+                                         !strcasecmp(pToken, "true"));
     }
     else if (!gPreCalc.userSpecifiedHashSize &&
              matches(inputStr, "name") &&
@@ -477,96 +446,123 @@ static void processSetOptionCommand(Thinker *th, char *inputStr)
              (matchesNoCase((pToken = findNextToken(pToken)), "true") ||
               matchesNoCase(pToken, "false")))
     {
-        // do nothing.  This is just a hint to the engine; UCI controls
-        // when we ponder.
+        // No-op.  This is just a hint to the engine; UCI controls when we
+        //  ponder.
         ; 
     }
     else
     {
-        printf("info string %s: note: got option string \"%s\", ignoring\n",
+        printf("info string %s: ignoring unknown option string \"%s\"\n",
                __func__, inputStr);
     }
 }
 
-static void processGoCommand(Thinker *th, GameT *game, char *pToken)
+static void processUciNewGameCommand(Game *game)
 {
-    MoveT myMove;
-    Board *board = &game->savedBoard; // shorthand.
-    MoveList searchList;
-    int i;
+    if (isSearching())
+    {
+        // See "Implementation Notes" for why we ignore this.
+        reportError(false, "%s: received 'ucinewgame' in state %s, ignoring",
+                    __func__, uciStateString());
+        return;
+    }
+
+    // Just setup a new game.
+    moveToIdleState(game);
+    game->NewGame();
+    gUciState.bGotUciNewGame = true;
+    gUciState.initialTime[0] = 0;
+    gUciState.initialTime[1] = 0;
+    gVars.gameCount++;
+}
+
+static void processGoCommand(Game *game, const char *pToken)
+{
+    if (gUciState.state != UciState::HasPosition)
+    {
+        // See "Implementation Notes" for why we ignore some other states.
+        reportError(false, "%s: received 'go' in state %s, ignoring",
+                    __func__, uciStateString());
+        return;
+    }
+
+    const Board &board = game->Board(); // shorthand.
 
     // Some temp state.  These are all processed at once after the entire
     // command is validated.
     // We take "infinite" to have a special meaning.  The actual search may
     // stop, but we will not report it until we receive a "stop" command.
-    int bPonder = false, bInfinite = false;
+    bool bPonder = false, bInfinite = false;
     // (I am hesitant to use 0 or negative numbers here as special values
     //  since in theory a clock could go negative.)
-    int wtime = INT_MAX, btime = INT_MAX;
-    int winc = 0, binc = 0;
+    int times[2] = {INT_MAX, INT_MAX};
+    int incs[2] = {0, 0};
     int movestogo = -1;
     int depth = 0;
     int nodes = 0;
     int movetime = -1;
     int mate = -1;
-
-    if (gUciState.bSearching)
-    {
-        // See "Implementation Notes" for why we ignore this.
-        reportError(false, "%s: received 'go' while searching, IGNORING",
-                    __func__);
-        return;
-    }
-    if (gUciState.bBadPosition)
-    {
-        reportError(false, "%s: cannot search on bad position, IGNORING",
-                    __func__);
-        return;
-    }
+    MoveList searchList;
 
     for (;
          pToken != NULL;
          pToken = findNextToken(pToken))
     {
         // I do not expect these sub-tokens to come in in any particular order.
+        //  Thus, an "illegal" move for 'searchmoves' might actually be
+        //  something like 'ponder' or 'wtime' (etc.).
         if (matches(pToken, "searchmoves"))
         {
+            MoveT myMove;
             for (;
                  // (we do this check-next-token-instead-of-current-one
                  //  goofiness just to make the outer loop work correctly.)
-                 isLegalMove(findNextToken(pToken), &myMove, board);
+                 isMove(findNextToken(pToken), &myMove, &board);
                  pToken = findNextToken(pToken))
             {
-                searchList.AddMove(myMove, *board);
+                if (!myMove.IsLegal(board))
+                {
+                    char moveStr[MOVE_STRING_MAX];
+                    reportError(false, "%s: illegal move '%s', ignoring "
+                                "entire 'go' command",
+                                __func__,
+                                myMove.ToString(moveStr, &gMoveStyleUCI, NULL));
+                    return;
+                }
+                searchList.AddMove(myMove, board);
             }
         }
         else if (matches(pToken, "ponder"))
         {
+            // The UCI document doesn't specify what to do with this, so I
+            //  suspect it is nonsensical.
+            if (gUciState.ponderMove == MoveNone)
+            {
+                reportError(false, "%s: cannot ponder when no pondermove; "
+                            "ignoring \"go\" command\n", __func__);
+                return;
+            }
             bPonder = true;
         }
         else if (matches(pToken, "wtime"))
         {
-            if (convertNextInteger(&pToken, &wtime, -1, "wtime") < 0)
+            if (convertNextInteger(&pToken, &times[0], -1, "wtime") < 0)
                 return;
         }
         else if (matches(pToken, "btime"))
         {
-            if (convertNextInteger(&pToken, &btime, -1, "btime") < 0)
+            if (convertNextInteger(&pToken, &times[1], -1, "btime") < 0)
                 return;
         }
         else if (matches(pToken, "winc"))
         {
-            if (convertNextInteger(&pToken, &winc, -1, "winc") < 0)
+            if (convertNextInteger(&pToken, &incs[0], -1, "winc") < 0)
                 return;
-            if (winc < 0) // UCI does not strictly forbid this
-                winc = 0;
         }
         else if (matches(pToken, "binc"))
         {
-            if (convertNextInteger(&pToken, &binc, -1, "binc") < 0)
+            if (convertNextInteger(&pToken, &incs[1], -1, "binc") < 0)
                 return;
-            if (binc < 0) // UCI does not strictly forbid this
-                binc = 0;
         }
         else if (matches(pToken, "movestogo"))
         {
@@ -599,117 +595,140 @@ static void processGoCommand(Thinker *th, GameT *game, char *pToken)
         }
         else
         {
-            reportError(false, "%s: unknown token sequence '%s'",
-                        __func__, pToken);
+            reportError(false, "%s: unknown token sequence '%s', ignoring "
+                        "entire 'go' command", __func__, pToken);
             return;
         }
     }
 
-    // At this point we have a valid command.
-    // Reset and/or transfer state.
-    gUciState.searchList = searchList;
-    gUciState.result.bestMove = MoveNone;
-    gUciState.result.ponderMove = MoveNone;
-    gUciState.bPonder = bPonder;
-    gUciState.bInfinite = bInfinite;
-
-    if (bPonder)
-    {
-        // According to the spec "the last move sent in in (sic) the position
-        // string is the ponder move".  Since we like to ponder on different
-        // moves we need to start 1 move back.
-        GameRewind(game, 1);
-    }
-
-    // Setup the clocks.
-    for (i = 0; i < NUM_PLAYERS; i++)
-        game->clocks[i]->ReInit();
-
-    if (wtime != INT_MAX)
-    {
-        // (* 1000: msec -> usec)
-        game->clocks[0]->SetTime(bigtime_t(wtime) * 1000);
-        if (gUciState.bGotUciNewGame && gUciState.initialTime[0] == 0)
-        {
-            gUciState.initialTime[0] = wtime;
-        }
-    }
-    if (btime != INT_MAX)
-    {
-        game->clocks[1]->SetTime(bigtime_t(btime) * 1000);
-        if (gUciState.bGotUciNewGame && gUciState.initialTime[1] == 0)
-        {
-            gUciState.initialTime[1] = btime;
-        }       
-    }
-
-    if (winc > 0)
-        game->clocks[0]->SetIncrement(bigtime_t(winc) * 1000);
-    if (binc > 0)
-        game->clocks[1]->SetIncrement(bigtime_t(binc) * 1000);
-
-    if (movestogo > 0)
-    {
-        // "movestogo" is tricky (and kind of dumb) since there is not
-        // necessarily an indication of how much time we will add when the next
-        // time control begins.  But, in keeping w/biasing more time for
-        // earlier moves, we assume we can (almost) run out the clock and the
-        // next time control will replenish it.
-        //
-        // So for starters, assume a 60-minute time control.  That should be
-        // long enough.
-        //
-        // What happens when we are playing white and we get a ponderhit?
-        // ... Well, we only bump timecontrol after *our* move.
-        for (i = 0; i < NUM_PLAYERS; i++)
-        {
-            game->clocks[i]->
-                SetStartTime(gUciState.initialTime[i] ?
-                             ((bigtime_t) gUciState.initialTime) * 1000 :
-                             ((bigtime_t) 60) * 60 * 1000000)
-                .SetNumMovesToNextTimeControl(movestogo);
-        }
-    }
-
-    th->Config().SetSpin(Config::MaxDepthSpin, depth);
-    th->Config().SetSpin(Config::MaxNodesSpin, nodes);
+    // At this point, we know we have a valid command.
+    game->EngineConfig().SetSpin(Config::MaxDepthSpin, depth);
+    game->EngineConfig().SetSpin(Config::MaxNodesSpin, nodes);
 
     if (mate > 0)
     {
         // We interpret the 'mate' command as
-        // ('we are getting checkmated' || 'we are checkmating') in x moves.
+        //  ('we are getting checkmated' || 'we are checkmating') in x moves.
         // With our current (almost-)full search window, we should not need
-        // any further customization for mates, but if we change that we would.
-        th->Config().SetSpin(Config::MaxDepthSpin,
-                             depth == 0 ? mate * 2 : MIN(depth, mate * 2));
+        //  any further customization for mates, but if we change that we would.
+        // In the future this should be set via a specialized config variable.
+        game->EngineConfig()
+            .SetSpin(Config::MaxDepthSpin,
+                     depth == 0 ? mate * 2 : MIN(depth, mate * 2));
     }
 
-    if (movetime >= 0)
+    // Setup our clocks.
+    Clock *clocks = gUciState.goState.clocks; // shorthand
+
+    for (int i = 0; i < NUM_PLAYERS; i++)
     {
-        for (i = 0; i < NUM_PLAYERS; i++)
+        if (times[i] != INT_MAX)
         {
-            game->clocks[i]->SetPerMoveLimit(bigtime_t(movetime) * 1000);
+            // (* 1000: msec -> usec)
+            clocks[i].SetTime(bigtime_t(times[i]) * 1000);
+            if (gUciState.bGotUciNewGame && gUciState.initialTime[i] == 0)
+                gUciState.initialTime[i] = times[i];
         }
+        // UCI does not strictly forbid negative increment (that would be
+        //  interesting) ... but we can't handle it.
+        incs[i] = MAX(incs[i], 0);
+        clocks[i].SetIncrement(bigtime_t(incs[i]) * 1000);
+
+        if (movestogo > 0)
+        {
+            // "movestogo" is tricky (and kind of dumb) since there is not
+            //  necessarily an indication of how much time we will add when the
+            //  next time control begins.  But, in keeping w/biasing more time
+            //  for earlier moves, we assume we can (almost) run out the clock
+            //  and the next time control will replenish it.
+            // So for starters, assume a 60-minute time control.  That should be
+            //  long enough.
+            // What happens when we are playing white and we get a ponderhit?
+            //  ... Well, we only bump timecontrol after *our* move.
+            clocks[i]
+                .SetStartTime(gUciState.initialTime[i] ?
+                              ((bigtime_t) gUciState.initialTime) * 1000 :
+                              ((bigtime_t) 60) * 60 * 1000000)
+                .SetNumMovesToNextTimeControl(movestogo);
+        }
+        if (movetime >= 0)
+            clocks[i].SetPerMoveLimit(bigtime_t(movetime) * 1000);
+        game->SetClock(i, clocks[i]);
+    }
+    gUciState.goState.searchList = searchList;
+    gUciState.goState.isInfinite = bInfinite;
+    
+    gUciState.state =
+        bPonder && searchList.NumMoves() ? UciState::PonderOneMove :
+        bPonder ? UciState::PonderAll :
+        UciState::Thinking;
+
+    if (gUciState.state == UciState::Thinking)
+    {
+        game->SetEngineControl(board.Turn(), true);
+    }
+    else // we are pondering
+    {
+        if (gUciState.state == UciState::PonderAll)
+        {
+            // According to the spec "the last move sent in in (sic) the
+            //  position string is the ponder move".  Since we want to ponder on
+            //  different moves, we need to start 1 move back.
+            game->Rewind(1);
+        }
+        game->SetPonder(true);
+        game->SetEngineControl(board.Turn() ^ 1, true);
+    }
+    game->Go(searchList);
+}
+
+static void processPonderHitCommand(Game *game)
+{
+    if (gUciState.state != UciState::PonderOneMove &&
+        gUciState.state != UciState::PonderAll)
+    {
+        reportError(false, "%s: received 'ponderhit' in state %s, ignoring",
+                    __func__, uciStateString());
+        return;
     }
 
-    if (bPonder)
+    if (gUciState.state == UciState::PonderAll)
     {
-        gVars.ponder = true;
-        game->control[board->Turn() ^ 1] = 1;
-        game->clocks[board->Turn() ^ 1]->Start();
-        th->CmdSetBoard(*board);
-        th->CmdPonder(searchList);
+        // Assumes searchList is empty.  Just let the engine proceed.
+        game->MakeMove(gUciState.ponderMove);
     }
-    else
+    else // We were pondering on one move
     {
-        game->control[board->Turn()] = 1;
-        game->clocks[board->Turn()]->Start();
-        GoaltimeCalc(game);
-        th->CmdSetBoard(*board);
-        th->CmdThink(searchList);
+        game->StopAndForce();
+        int turn = game->Board().Turn(); // shorthand
+        // Our own clock was run down; we should restore it.
+        game->SetClock(turn, gUciState.goState.clocks[turn]);
+        game->SetEngineControl(turn, true);
+    }
+    game->Go(gUciState.goState.searchList);
+    // We preserve the rest of our state (infinite, mate, etc)
+    gUciState.state = UciState::Thinking;
+}
+
+static void processStopCommand(Game *game)
+{
+    if (!isSearching())
+    {
+        reportError(false, "%s: received 'stop' in state %s, ignoring",
+                    __func__, uciStateString());
+        return;
     }
 
-    gUciState.bSearching = true;
+    game->MoveNow();
+    if (gUciState.goState.isInfinite || gUciState.state != UciState::Thinking)
+    {
+        gUciState.goState.isInfinite = false;
+        // Kludgy, just get us out of pondering state so we can actually send
+        //  the bestmove.
+        gUciState.state = UciState::Thinking;
+        // Could not notify of the move while infinite; so try again now.
+        uciNotifyMove(game, gUciState.result.bestMove);
+    }
 }
 
 // This runs as a coroutine with the main thread, and can switch off to it at
@@ -718,24 +737,23 @@ static void processGoCommand(Thinker *th, GameT *game, char *pToken)
 // One possibility if we set a bad position or otherwise get into a bad
 // state is to just let the computer play null moves until a good position
 // is set.
-static void uciPlayerMove(Thinker *th, GameT *game)
+static void uciPlayerMove(Game *game)
 {
-    char *inputStr;
-    Board *board = &game->savedBoard; // shorthand.
+    const char *inputStr;
 
     // Skip past any unrecognized stuff.
     inputStr =
         findRecognizedToken(
-            ChopBeforeNewLine(getStdinLine(MAXBUFLEN, &game->sw)));
+            ChopBeforeNewLine(getStdinLine(MAXBUFLEN, gUciState.sw)));
 
     if (matches(inputStr, "xboard"))
     {
         // Special case: switch to xboard interface.
-        return processXboardCommand();
+        return processXboardCommand(game, gUciState.sw);
     }
     else if (matches(inputStr, "uci"))
     {
-        processUciCommand();
+        processUciCommand(game, gUciState.sw);
     }
     else if (matches(inputStr, "debug"))
     {
@@ -750,7 +768,7 @@ static void uciPlayerMove(Thinker *th, GameT *game)
     }
     else if (matches(inputStr, "setoption"))
     {
-        processSetOptionCommand(th, findNextToken(inputStr));
+        processSetOptionCommand(game, findNextToken(inputStr));
     }
     else if (matches(inputStr, "register"))
     {
@@ -760,81 +778,53 @@ static void uciPlayerMove(Thinker *th, GameT *game)
     }
     else if (matches(inputStr, "ucinewgame"))
     {
-        if (gUciState.bSearching)
-        {
-            // See "Implementation Notes" for why we ignore this.
-            reportError(false, "%s: received 'ucinewgame' while searching, "
-                        "IGNORING", __func__);
-        }
-        else
-        {
-            // Just setup a new game.
-            gVars.gameCount++;
-            setForceMode(th, game);
-            gUciState.bBadPosition = false;
-            gUciState.bGotUciNewGame = true;
-            gUciState.initialTime[0] = 0;
-            gUciState.initialTime[1] = 0;
-            gUciState.ponderMove = MoveNone;
-            GameNew(game);
-        }
+        processUciNewGameCommand(game);
     }
     else if (matches(inputStr, "position"))
     {
-        processPositionCommand(th, game, findNextToken(inputStr));
+        processPositionCommand(game, findNextToken(inputStr));
     }
     else if (matches(inputStr, "go"))
     {
-        processGoCommand(th, game, findNextToken(inputStr));
+        processGoCommand(game, findNextToken(inputStr));
     }
-    else if (matches(inputStr, "ponderhit") && gUciState.bPonder)
+    else if (matches(inputStr, "ponderhit"))
     {
-        th->CmdBail();
-        // We preserve the rest of our state (bInfinite, mate, etc)
-        gUciState.bPonder = false;
-        // GameFastForward(game, 1) does not work here, since the clock
-        // is restored to infinite time.  So:
-        if (gUciState.ponderMove != MoveNone)
-        {
-            GameMoveMake(game, &gUciState.ponderMove);
-        }
-        game->clocks[board->Turn()]->Start();
-        GoaltimeCalc(game);
-        th->CmdSetBoard(*board);
-        th->CmdThink(gUciState.searchList);
+        processPonderHitCommand(game);
     }
-    else if (matches(inputStr, "stop") && gUciState.bSearching)
+    else if (matches(inputStr, "stop"))
     {
-        PlayloopCompMoveNowAndSync(*th);
-        gUciState.bPonder = false;
-        gUciState.bInfinite = false;
-        // Print the result that we just cached away.
-        uciNotifyMove(gUciState.result.bestMove);
+        processStopCommand(game);
     }
     else if (matches(inputStr, "quit"))
     {
-        th->CmdBail();
+        game->StopAndForce();
         exit(0);
     }
 
     // Wait for more input.
-    SwitcherSwitch(&game->sw);
+    SwitcherSwitch(gUciState.sw);
 }
 
-
-static void uciNotifyMove(MoveT move)
+static void uciNotifyMove(Game *game, MoveT move)
 {
     char tmpStr[MOVE_STRING_MAX], tmpStr2[MOVE_STRING_MAX];
-    MoveT ponderMove = gUciState.result.ponderMove;
-    bool bShowPonderMove = move != MoveNone && ponderMove != MoveNone;
 
-    if (gUciState.bPonder || gUciState.bInfinite)
-    {
-        // Store away the result for later.
+    MoveT ponderMove = gUciState.result.ponderMove;
+    bool bShowPonderMove = move != MoveNone;
+    
+    // When ponderAll, cannot actually show this as bestmove.
+    // Hopefully we recorded something in the PV, though.
+    if (gUciState.state != UciState::PonderAll)
         gUciState.result.bestMove = move;
+    if (gUciState.goState.isInfinite ||
+        // We are not supposed to return a move when pondering, either..
+        gUciState.state != UciState::Thinking)
+    {
         return;
     }
-
+        
+    move = gUciState.result.bestMove;
     printf("bestmove %s%s%s\n",
            (move != MoveNone ?
             move.ToString(tmpStr, &gMoveStyleUCI, NULL) :
@@ -842,11 +832,10 @@ static void uciNotifyMove(MoveT move)
            bShowPonderMove ? " ponder " : "",
            (bShowPonderMove ?
             ponderMove.ToString(tmpStr2, &gMoveStyleUCI, NULL) : ""));
-    gUciState.bSearching = false;
+    moveToIdleState(game);
 }
 
-
-static void uciNotifyDraw(const char *reason, MoveT *move)
+static void uciNotifyDraw(Game *game, const char *reason, MoveT *move)
 {
     // UCI seems to rely on a GUI arbiter to claim draws, simply because there
     // is no designated way for the engine to do it.  Nevertheless, when we
@@ -856,29 +845,27 @@ static void uciNotifyDraw(const char *reason, MoveT *move)
     // in order to justify complicating the engine code to say "I cannot claim
     // a draw but my opponent can, what is my best move".
     printf("info string engine claims a draw (reason: %s)\n", reason);
-    uciNotifyMove(move != NULL ? *move : MoveNone);
+    uciNotifyMove(game, move != NULL ? *move : MoveNone);
 }
 
-
-static void uciNotifyResign(int turn)
+static void uciNotifyResign(Game *game, int turn)
 {
-    // This is just for the benefit of a human trying to understand our output.
-    // Since our resignation threshold is so low, we normally do not "resign"
-    // unless we are actually mated.
+    // The info string is just for the benefit of a human trying to understand
+    //  our output.  Since our resignation threshold is so low, we normally do
+    //  not "resign" unless we are actually mated.
     printf("info string engine (turn %d) resigns\n", turn);
-    uciNotifyMove(MoveNone);
+    uciNotifyMove(game, MoveNone);
 }
-
 
 // Assumes "result" is long enough to hold the actual result (say 80 chars to
 // be safe).  Returns "result".
-static char *buildStatsString(char *result, GameT *game,
+static char *buildStatsString(char *result, Game *game,
                               const ThinkerStatsT *stats)
 {
     int nodes = stats->nodes;
     // (Convert bigtime_t to milliseconds)
     int timeTaken =
-        game->clocks[game->savedBoard.Turn()]->TimeTaken() / 1000;
+        game->Clock(game->Board().Turn()).TimeTaken() / 1000;
     int nps = (int) (((uint64) nodes) * 1000 / (timeTaken ? timeTaken : 1));
     int charsWritten;
 
@@ -893,98 +880,93 @@ static char *buildStatsString(char *result, GameT *game,
     return result;
 }
 
-// Returns whether a move was chopped or not.
-static bool chopFirstMove(char *moveString)
+static void uciNotifyPV(Game *game, const RspPvArgsT *pvArgs)
 {
-    char *space = strchr(moveString, ' ');
-    if (space)
+    bool bDisplayPv = true, bDisplayEval = true;
+    DisplayPv pv = pvArgs->pv; // copy for modification
+    Board board = game->Board(); // copy for modification
+    
+    if (gUciState.state == UciState::PonderAll)
     {
-        strcpy(moveString, space + 1);
-        return true;
-    }
-    return false;
-}
-
-static void uciNotifyPV(GameT *game, const RspPvArgsT *pvArgs)
-{
-    char lanString[65];
-    char evalString[20];
-    char statsString[80];
-    bool bDisplayPv = true;
-    const DisplayPv &pv = pvArgs->pv; // shorthand
-    bool chopFirst = false;
-    int moveCount;
-
-    // Save away a next move to ponder on, if possible.
-    gUciState.result.ponderMove = pv.Moves(1);
-
-    if (gUciState.bPonder)
-    {
-        // If we are not actually pondering on the move the UI wanted us to,
-        // do not advertise the PV (to avoid confusing the UI).
-        // (If the UI is mean and tries to make us ponder on the first move,
-        // this just means we will never display the PV since ponderMove ==
-        // MoveNone)
+#if 1
+        char lanString[kMaxPvStringLen];
+        int moveCount = pv.BuildMoveString(lanString, sizeof(lanString),
+                                           gMoveStyleUCI, board);
+        printf("info string uciNotifyPV: moveCount %d actual pv of %s\n",
+               moveCount, lanString);
+#endif
+        // If we are not actually pondering on the suggested GUI move,
+        // do not advertise the PV or eval (to avoid confusing the GUI).
         if (pv.Moves(0) != gUciState.ponderMove)
         {
+            bDisplayEval = false;
             bDisplayPv = false;
         }
-        // Chop off the first (ponder) move since the UI does not expect it.
-        // This is not spelled out by the UCI spec, just observed from
-        // interaction between Polyglot and (Fruit,Stockfish).  This does mean
-        // we will actually ponder 1 ply deeper than advertised (in a sense,
-        // because we are searching all moves from the root, not just the ponder
-        // move ... unless a movelist was sent).
-        chopFirst = true;
+        else
+        {
+            // should always be legal, since it is the pondermove
+            board.MakeMove(pv.Moves(0));
+        }
+        pv.Decrement(); // always do this since we want to display pv.level
     }
 
-    moveCount = pv.BuildMoveString(lanString, sizeof(lanString), gMoveStyleUCI,
-                                   game->savedBoard);
-    if (chopFirst && chopFirstMove(lanString))
+    // Save away a next move to ponder on, if possible.
+    // (we may not be able to record bestMove from uciNotifyMove when
+    // PonderAll).
+    if (bDisplayEval && pv.Moves(0) != MoveNone)
     {
-        moveCount--;
+        gUciState.result.bestMove = pv.Moves(0);
+        if (pv.Moves(1) != MoveNone)
+            gUciState.result.ponderMove = pv.Moves(1);
     }
-    if (moveCount < 1)
+    
+    char lanString[kMaxPvStringLen];
+    if (bDisplayPv)
     {
-        bDisplayPv = false;
-    }
-
-    if (pv.Eval().DetectedWinOrLoss())
-    {
-        int movesToMate = pv.Eval().MovesToWinOrLoss();
-        snprintf(evalString, sizeof(evalString), "mate %d",
-                 pv.Eval().DetectedLoss() ? -movesToMate : movesToMate);
-
-    }
-    else
-    {
-        snprintf(evalString, sizeof(evalString), "cp %d", pv.Eval().LowBound());
+        int moveCount = pv.BuildMoveString(lanString, sizeof(lanString),
+                                           gMoveStyleUCI, board);
+        if (moveCount < 1)
+            bDisplayPv = false;
     }
 
+    char evalString[20];
+    if (bDisplayEval)
+    {
+        if (pv.Eval().DetectedWinOrLoss())
+        {
+            int movesToMate = pv.Eval().MovesToWinOrLoss();
+            snprintf(evalString, sizeof(evalString), "mate %d",
+                     pv.Eval().DetectedLoss() ? -movesToMate : movesToMate);
+        }
+        else
+        {
+            snprintf(evalString, sizeof(evalString), "cp %d",
+                     pv.Eval().LowBound());
+        }
+    }
+
+    char statsString[80];
     // Sending a fairly basic string here.
-    printf("info depth %d score %s %s%s%s\n",
-           pv.Level() + 1, evalString,
+    printf("info depth %d %s%s%s%s%s%s\n",
+           pv.Level() + 1,
+           bDisplayEval ? "score " : "", bDisplayEval ? evalString : "",
+               bDisplayEval ? " " : "",
            buildStatsString(statsString, game, &pvArgs->stats),
            bDisplayPv ? " pv " : "", bDisplayPv ? lanString : "");
 }
 
 
-static void uciNotifyComputerStats(GameT *game, const ThinkerStatsT *stats)
+static void uciNotifyComputerStats(Game *game, const ThinkerStatsT *stats)
 {
     char statsString[80];
 
     printf("info %s\n", buildStatsString(statsString, game, stats));
 }
 
-static bool uciShouldNotCommitMoves(void)
-{
-    return false;
-}
-
 static void uciPositionRefresh(const Position &position) { }
 static void uciNoop(void) { }
-static void uciStatusDraw(GameT *game) { }
-static void uciNotifyTick(GameT *game) { }
+static void uciStatusDraw(Game *game) { }
+static void uciNotifyTick(Game *game) { }
 static void uciNotifyCheckmated(int turn) { }
 
 UIFuncTableT *uiUciOps(void)
@@ -1007,7 +989,6 @@ UIFuncTableT *uiUciOps(void)
         .notifyDraw = uciNotifyDraw,
         .notifyCheckmated = uciNotifyCheckmated,
         .notifyResign = uciNotifyResign,
-        .shouldCommitMoves = uciShouldNotCommitMoves
     };
 
     return &uciUIFuncTable;

@@ -39,12 +39,12 @@ public:
 
     const MoveList &operator=(const MoveList &other);
 
-    inline int NumMoves();
+    inline int NumMoves() const;
 
     // Must be fast, so as with normal arrays, 'idx' is not sanity-checked.
     // We implement this instead of operator[] since the latter would normally
     // return a reference.
-    inline MoveT Moves(int idx);
+    inline MoveT Moves(int idx) const;
     
     void SortByCapWorth(const Board &board);
     
@@ -55,11 +55,11 @@ public:
     // If there is a move in the movelist that matches the same src and dst,
     //  return a pointer to it, otherwise NULL.  (I'd return an index, but
     //  indexing off -1 is worse than dereferencing NULL).
-    MoveT *SearchSrcDst(MoveT move);
+    const MoveT *SearchSrcDst(MoveT move) const;
     // As above, but this version must also match for the 'promote' field.
     MoveT *SearchSrcDstPromote(MoveT move);
     // Search for an exact match for 'move'.
-    MoveT *Search(MoveT move);
+    const MoveT *Search(MoveT move) const;
     
     // Add the move 'move'.  Useful mostly when one wants to search a restricted
     //  set of moves.  Note: *all* fields in 'move' must be valid (because check
@@ -80,10 +80,10 @@ public:
     // Returns: is the move at index 'idx' a 'preferred' (ie capture/check/
     //  history window) move or not.
     // It is (currently) safe to go out of bounds on the upper end, here.
-    inline bool IsPreferredMove(int idx);
+    inline bool IsPreferredMove(int idx) const;
 
     // Log an entire movelist.  Usually you should use MOVELIST_LOGDEBUG().
-    void Log(LogLevelT level);
+    void Log(LogLevelT level) const;
 
 protected:
     int insrt; // index of spot to insert 'preferred' move.
@@ -100,17 +100,17 @@ private:
     void useAsFirstMove(MoveT move);
 };
 
-inline bool MoveList::IsPreferredMove(int idx)
+inline bool MoveList::IsPreferredMove(int idx) const
 {
     return idx < insrt;
 }
 
-inline int MoveList::NumMoves()
+inline int MoveList::NumMoves() const
 {
     return moves.size();
 }
 
-inline MoveT MoveList::Moves(int idx)
+inline MoveT MoveList::Moves(int idx) const
 {
     return moves[idx];
 }

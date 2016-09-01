@@ -76,8 +76,8 @@ public:
     void CmdMakeMove(MoveT move);
     void CmdUnmakeMove();
     
-    void CmdThink(const MoveList &mvlist);
-    void CmdThink();
+    void CmdThink(const Clock &myClock, const MoveList &mvlist);
+    void CmdThink(const Clock &myClock);
     void CmdPonder(const MoveList &mvlist);
     void CmdPonder();
     void CmdSearch(int alpha, int beta, MoveT move);
@@ -90,6 +90,14 @@ public:
     bool CompIsSearching() const;
     bool CompIsBusy() const;
 
+    // Return *clock* time we want to move at.  For instance if == 30000000, we
+    //  want to move when there is 30 seconds left on our clock.  When
+    //  CLOCK_TIME_INFINITE, we should rely on the Thinker to move itself.
+    // This is a bit bizarre compared to just returning the absolute time we
+    //  want to move at, but it helps us with displaying ticks, and time
+    //  management should be internal in the future anyway.
+    inline bigtime_t GoalTime() const;
+    
     // return a poll()able object that says 'you can call RecvRsp()'
     int MasterSock() const;
 
@@ -118,6 +126,8 @@ public:
     // ---------------------------------------------------------------------
     // Server/engine-side methods:
 
+    // Currently, only claimed draws use RspDraw().  Automatic draws use
+    // RspMove().
     void RspDraw(MoveT move) const;
     void RspMove(MoveT move) const;
     void RspResign() const;
@@ -128,6 +138,7 @@ public:
     eThinkMsgT CompWaitThinkOrPonder() const;
     void CompWaitSearch() const;
     inline bool IsRootThinker() const;
+    inline Thinker &RootThinker() const;
 
     struct ContextT
     {
@@ -157,6 +168,7 @@ public:
         volatile int maxNodes;
         volatile bool randomMoves;
         volatile bool canResign;
+        HintPv pv; // Attempts to track the principal variation.
     };
     // (used by engine to track/manipulate internal state)
     inline ContextT &Context();
@@ -179,6 +191,7 @@ private:
     };
 
     State state;
+    bigtime_t goalTime;
     volatile bool moveNow;
 
     struct SearchArgsT
@@ -204,7 +217,8 @@ private:
     std::thread *thread;
 
     RspHandlerT rspHandler;
-    
+
+    void calcGoalTime(const Clock &myClock);
     void compSendCmd(eThinkMsgT cmd) const;
     void compSendRsp(eThinkMsgT rsp, const void *buffer, int bufLen) const;
     eThinkMsgT recvCmd(void *buffer, int bufLen) const;
@@ -251,9 +265,19 @@ inline bool Thinker::IsRootThinker() const
     return this == rootThinker;
 }
 
+inline Thinker &Thinker::RootThinker() const
+{
+    return *rootThinker;
+}
+
 inline Thinker::ContextT &Thinker::Context()
 {
     return context;
+}
+
+inline bigtime_t Thinker::GoalTime() const
+{
+    return CompIsThinking() ? goalTime : CLOCK_TIME_INFINITE;
 }
 
 inline class Config &Thinker::Config()

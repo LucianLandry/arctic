@@ -31,7 +31,8 @@ class Board; // forward decl
 
 // max PV moves we care to display.
 // I want this to be at least 20 (because I have seen depth 18 in endgames).
-static const int kMaxPvMoves = 16;
+static const int kMaxPvMoves = 20;
+static const int kMaxPvStringLen = (kMaxPvMoves * MOVE_STRING_MAX);
 
 // A "fast" but limited version of PV tracking.  Used by the thinker to track
 //  its PV as it is searching.  Could be used for other variations than the
@@ -55,6 +56,7 @@ public:
     MoveT Moves(int idx) const;
     void Log(LogLevelT logLevel) const;
     void SetStartDepth(int depth);
+    void Decrement(); // assumes we play the move at Moves(0) (if any)
 
 private:
     int startDepth; // depth of the node this object was instantiated at (root
@@ -88,7 +90,8 @@ public:
     //  it's easier to do it this way.
     void Set(int level, class Eval eval, const SearchPv &pv);
     void Log(LogLevelT logLevel) const;
-
+    void Decrement(); // assumes we play the first move (if any)
+    
 private:
     int level;    // nominal search depth. (not including quiescing)
     class Eval eval; // evaluation of the position.  Normally an exact value.
@@ -118,6 +121,7 @@ public:
 
     inline MoveT Hint(int depth); // Assumes 'depth' >= 0.
     int SuggestSearchStartLevel();
+    void ResetSearchStartLevel();
     
     // Call this when you are finished calling Update() for a given search
     //  level.  Allows SuggestSearchStartLevel() to be more aggressive.

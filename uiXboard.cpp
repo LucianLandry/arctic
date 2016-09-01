@@ -49,29 +49,22 @@ static struct {
     bool badPosition; // can be triggered by editing a bad position
     bool newgame;     // turned on every "new", turned off every "go"
     bool ponder;
+    SwitcherContextT *sw;
+    int engineLastPlayed; // player engine last played for (0 -> white,
+                          //  1 -> black).  The engine might not be currently
+                          //  playing for either side, but that is irrelevant.
+    bool icsClocks;
 } gXboardState;
-
-#define OPPONENT_CLOCK (&game->actualClocks[0])
-#define ENGINE_CLOCK (&game->actualClocks[1])
-
-
-#if 0 // not needed, presently
-// bool, and hopefully self-explanatory.  The "force mode" definition is
-// more or less given in the documentation for the "force" command.
-static int inForceMode(GameT *game)
-{
-    return !game->control[0] && !game->control[1];
-}
-#endif
-
 
 static void xboardNotifyError(char *reason)
 {
-    printf("tellusererror Illegal position: %s\n", reason);
+    // Generally, we should only communicate carefully crafted errors to the
+    //  GUI so that it's not interpreted specially.  We may have arbitrary
+    //  errors here, so, we just forward everything as a comment.
+    printf("# Error: %s\n", reason);
 }
 
-
-static void xboardEditPosition(Position &position, SwitcherContextT *sw)
+static void xboardEditPosition(Position &position)
 {
     char *inputStr;
 
@@ -84,9 +77,9 @@ static void xboardEditPosition(Position &position, SwitcherContextT *sw)
     position.SetPly(0);
     position.SetNcpPlies(0);
 
-    while(1)
+    while (1)
     {
-        inputStr = getStdinLine(MAXBUFLEN, sw);
+        inputStr = getStdinLine(MAXBUFLEN, gXboardState.sw);
 
         if (matches(inputStr, "#"))
         {
@@ -123,7 +116,7 @@ static void xboardEditPosition(Position &position, SwitcherContextT *sw)
         case 'K':
             if ((coord = asciiToCoord(&inputStr[1])) == FLAG)
             {
-                printf("Error (edit: %c: bad coord): %s",
+                printf("Error (edit: %c: bad coord): %s\n",
                        inputStr[0], &inputStr[1]);
                 break;
             }
@@ -137,13 +130,13 @@ static void xboardEditPosition(Position &position, SwitcherContextT *sw)
             position.SetPiece(coord, piece);
             break;
         default:
-            printf("Error (edit: unknown command): %s", inputStr);
+            printf("Error (edit: unknown command): %s\n", inputStr);
             break;
         }
     }
 }
 
-static void xboardInit(GameT *game)
+static void xboardInit(Game *game, SwitcherContextT *sw)
 {
     static bool initialized;
     if (initialized)
@@ -153,11 +146,28 @@ static void xboardInit(GameT *game)
     // input if we want to poll() correctly.)
     setbuf(stdout, NULL);
     setbuf(stdin, NULL);
-
+    gXboardState.sw = sw;
+    // UCI may have clobbered autoplay, so reset
+    game->SetAutoPlayEngineMoves(true);
+    // The spec does not mention that a "new" must come in before anything else,
+    //  so playing it safe and doing some initialization here.
+    game->NewGame();
     initialized = true;
 }
 
-void processXboardCommand(void)
+static void setIcsClocks(Game *game, bool enabled)
+{
+    gXboardState.icsClocks = enabled;
+    for (int i = 0; i < NUM_PLAYERS; i++)
+    {
+        Clock myClock = game->InitialClock(i);
+        game->SetInitialClock(i, myClock.SetIsFirstMoveFree(enabled));
+        myClock = game->Clock(i);
+        game->SetClock(i, myClock.SetIsFirstMoveFree(enabled));
+    }
+}
+
+void processXboardCommand(Game *game, SwitcherContextT *sw)
 {
     struct sigaction ignoreSig;
     int err;
@@ -165,7 +175,7 @@ void processXboardCommand(void)
     // We are definitely doing xboard.  So do some xboard-specific
     // stuff. ... such as ignoring SIGINT.  Also switch to uiXboard
     // if we have not already.
-    xboardInit(NULL);
+    xboardInit(game, sw);
     memset(&ignoreSig, 0, sizeof(struct sigaction));
     ignoreSig.sa_flags = SA_RESTART;
     ignoreSig.sa_handler = SIG_IGN;
@@ -176,13 +186,12 @@ void processXboardCommand(void)
 
 // This runs as a coroutine with the main thread, and can switch off to it
 // at any time.  If it simply exits, it will immediately be called again.
-static void xboardPlayerMove(Thinker *th, GameT *game)
+static void xboardPlayerMove(Game *game)
 {
     char *inputStr;
     int protoVersion, myLevel, turn;
-    int i, err;
+    int i;
     int64 i64;
-    Board *board = &game->savedBoard; // shorthand.
     Board tmpBoard;
 
     // Move-related stuff.
@@ -199,8 +208,9 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
     int base;
     bigtime_t baseTime = 0;
     int inc, perMoveLimit;
-
-    inputStr = getStdinLine(MAXBUFLEN, &game->sw);
+    const Board &board = game->Board(); // shorthand
+    
+    inputStr = getStdinLine(MAXBUFLEN, gXboardState.sw);
 
     // I tried (when practical) to handle commands in the order they are
     // documented in engine-intf.html, in other words, fairly random...
@@ -208,9 +218,8 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
     if (matches(inputStr, "uci"))
     {
         // Special case.  Switch to UCI interface.
-        return processUciCommand();
+        return processUciCommand(game, gXboardState.sw);
     }
-
     // Ignore certain commands...
     else if (matches(inputStr, "accepted") ||
              matches(inputStr, "rejected") ||
@@ -222,30 +231,25 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
     {
         LOG_DEBUG("ignoring cmd: %s", inputStr);
     }
-
     // Return others as unimplemented...
     else if (matches(inputStr, "variant") ||
              matches(inputStr, "playother") ||
-
              matches(inputStr, "usermove") ||
              matches(inputStr, "bk") ||
              matches(inputStr, "analyze") ||
              matches(inputStr, "pause") ||
              matches(inputStr, "resume") ||
-
-             // (bughouse commands.)
+             // (bughouse commands:)
              matches(inputStr, "partner") ||
              matches(inputStr, "ptell") ||
              matches(inputStr, "holding"))
     {
-        printf("Error (unimplemented command): %s", inputStr);
+        printf("Error (unimplemented command): %s\n", inputStr);
     }
-
     else if (matches(inputStr, "xboard"))
     {
-        processXboardCommand();
+        processXboardCommand(game, gXboardState.sw);
     }
-
     else if (sscanf(inputStr, "protover %d", &protoVersion) == 1 &&
              protoVersion >= 2)
     {
@@ -256,278 +260,238 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
                VERSION_STRING_MAJOR, VERSION_STRING_MINOR,
                VERSION_STRING_PHASE, !gPreCalc.userSpecifiedHashSize);
     }
-
     else if (matches(inputStr, "new"))
     {
         gVars.gameCount++;
 
         // New game, computer is Black.
+        game->StopAndForce();
+        game->EngineConfig().SetSpin(Config::MaxDepthSpin, 0);
+        game->EngineConfig().SetCheckbox(Config::RandomMovesCheckbox, false);
+        game->SetEngineControl(1, true);
+        game->NewGame();
+        gXboardState.engineLastPlayed = 1;
         gXboardState.badPosition = false; // hope for the best.
-        setForceMode(th, game);
-
-        // associate clocks correctly.
-        game->clocks[0] = OPPONENT_CLOCK;
-        game->clocks[1] = ENGINE_CLOCK;
-
-        gVars.ponder = false; // disable pondering on first ply.
-        th->Config().SetSpin(Config::MaxDepthSpin, 0);
-        game->control[1] = 1;
-
-        GameNew(game);
-
-        th->Config().SetCheckbox(Config::RandomMovesCheckbox, false);
         gXboardState.newgame = true;
     }
-
     else if (matches(inputStr, "quit"))
     {
-        th->CmdBail();
+        game->StopAndForce();
         exit(0);
     }
-
     else if (matches(inputStr, "random"))
     {
-        const Config::CheckboxItem *cbItem =
-            th->Config().CheckboxItemAt(Config::RandomMovesCheckbox);
-        bool randomMoves = cbItem ? cbItem->Value() : false;
 #if 1 // bldbg: goes out for debugging
-        th->Config().SetCheckbox(Config::RandomMovesCheckbox,
-                                 !randomMoves); // toggle random moves.
+        // toggle random moves.
+        game->EngineConfig().ToggleCheckbox(Config::RandomMovesCheckbox);
 #endif
     }
-
     else if (matches(inputStr, "force"))
     {
         // Stop everything.
-        setForceMode(th, game);
+        game->StopAndForce();
     }
-
     else if (matches(inputStr, "white") ||
              matches(inputStr, "black"))
     {
         // Stop everything.  Engine plays the other color.  This is not
         // exactly as specified.  Too bad, I'm not going to change whose
         // turn it is to move!
-        setForceMode(th, game);
+        game->StopAndForce();
         turn = matches(inputStr, "white");
-        game->control[turn ^ 1] = 1;
+        game->SetEngineControl(turn ^ 1, true);
+        gXboardState.engineLastPlayed = turn ^ 1;
     }
-
     else if (sscanf(inputStr, "level %d %20s %d", &mps, baseStr, &inc) == 3)
     {
-        err = 0;
+        // The spec states that future time parameters might be in the form
+        //  '40 25+5 0' (to specify additional time control periods).  We do not
+        //  always handle extra characters for now, but we could if necessary.
+        // Hopefully any change like that would be negotiated as a feature.
         if ((strchr(baseStr, ':') && !TimeStringIsValid(baseStr)) ||
             (!strchr(baseStr, ':') && sscanf(baseStr, "%d", &base) != 1))
         {
-            printf("Error (bad parameter '%s'): %s", baseStr, inputStr);
-            err = 1;
+            printf("Error (bad parameter '%s'): %s\n", baseStr, inputStr);
+            return;
         }
-        else if (!strchr(baseStr, ':'))
-        {
-            // 'base' is in minutes (and is already filled out).
-            baseTime = ((bigtime_t) base) * 60 * 1000000;
-        }
-        else
-        {
+        baseTime =
+            !strchr(baseStr, ':') ?
+            // 'base' is in minutes (and is already filled out).            
+            ((bigtime_t) base) * 60 * 1000000 :
             // base is in more-or-less standard time format.
-            baseTime = TimeStringToBigTime(baseStr);
-        }
+            TimeStringToBigTime(baseStr);
 
-        for (i = 0; !err && i < NUM_PLAYERS; i++)
-        {
-            game->origClocks[i].ReInit()
-                .SetStartTime(baseTime)
-                .Reset()
-                .SetTimeControlPeriod(mps)
-                // Incremental time control.
-                .SetIncrement(bigtime_t(inc) * 1000000);
-        }
+        Clock myClock;
+        myClock.SetStartTime(baseTime)
+            .Reset()
+            .SetIsFirstMoveFree(gXboardState.icsClocks)
+            .SetTimeControlPeriod(mps)
+            // Incremental time control.
+            .SetIncrement(bigtime_t(inc) * 1000000);            
+        for (i = 0; i < NUM_PLAYERS; i++)
+            game->SetInitialClock(i, myClock);
+        // FIXME: read the documents again and figure out if 'level' in a game
+        //  implies we should always set new time controls.  It looks like we
+        //  should.
         if (gXboardState.newgame)
         {
             // Game has not started yet.  Under xboard this means "set
             // clocks in addition to time controls"
-            ClocksReset(game);
+            game->ResetClocks();
         }
-        // ClocksPrint(game, "level");
+        // game->LogClocks("level");
     }
     else if (sscanf(inputStr, "st %d", &perMoveLimit) == 1)
     {
         // Note: 'st' and 'level' are mutually exclusive, according to the
         // documentation.
-        if (perMoveLimit < 0)
-        {
-            perMoveLimit = 0;
-        }
+        perMoveLimit = MAX(perMoveLimit, 0);
+        Clock myClock;
+        myClock.SetIsFirstMoveFree(gXboardState.icsClocks)
+            .SetPerMoveLimit(bigtime_t(perMoveLimit) * 1000000);
         for (i = 0; i < NUM_PLAYERS; i++)
-        {
-            game->origClocks[i].ReInit()
-                .SetPerMoveLimit(bigtime_t(perMoveLimit) * 1000000);
-        }
+            game->SetInitialClock(i, myClock);
         if (gXboardState.newgame)
         {
             // Game has not started yet.  Under xboard this means "set
             // clocks in addition to time controls"
-            ClocksReset(game);
+            game->ResetClocks();
         }
     }
-
     else if (sscanf(inputStr, "sd %d", &myLevel) == 1)
     {
         // Set depth.  I took out an upper limit check.  If you want
         // depth 5000, okay ...
         if (myLevel > 0)
         {
-            if (th->Config().SetSpinClamped(Config::MaxDepthSpin, myLevel) !=
+            if (game->EngineConfig().SetSpinClamped(Config::MaxDepthSpin,
+                                                    myLevel) !=
                 Config::Error::None)
             {
-                printf("Error (cannot set maxDepth for this engine): %s",
+                printf("Error (cannot set maxDepth for this engine): %s\n",
                        inputStr);
             }
         }
         else
         {
-            printf("Error (bad parameter %d): %s", myLevel, inputStr);
+            printf("Error (bad parameter %d): %s\n", myLevel, inputStr);
         }
     }
-
     else if (sscanf(inputStr, "time %d", &centiSeconds) == 1)
     {
         // Set engine clock.
-        ENGINE_CLOCK->SetTime(bigtime_t(centiSeconds) * 10000);
-
-        // I interpret the xboard doc's "idioms" section as saying the computer
-        // will not be on move when this command comes in.  But just in case
-        // it is ...
-        GoaltimeCalc(game);
-        // ClocksPrint(game, "time");
+        Clock myClock = game->Clock(gXboardState.engineLastPlayed);
+        game->SetClock(gXboardState.engineLastPlayed,
+                       myClock.SetTime(bigtime_t(centiSeconds) * 10000));
+        // game->LogClocks("time");
     }
-
     else if (sscanf(inputStr, "otim %d", &centiSeconds) == 1)
     {
         // Set opponent clock.
-        OPPONENT_CLOCK->SetTime(bigtime_t(centiSeconds) * 10000);
-        // ClocksPrint(game, "otim");
+        Clock myClock = game->Clock(gXboardState.engineLastPlayed ^ 1);
+        game->SetClock(gXboardState.engineLastPlayed ^ 1,
+                       myClock.SetTime(bigtime_t(centiSeconds) * 10000));
+        // game->LogClocks("otim");
     }
-
     else if (matches(inputStr, "?"))
     {
-        // Move now.
-        PlayloopCompMoveNowAndSync(*th);
+        game->MoveNow(); // Move now.
     }
-
     else if (sscanf(inputStr, "ping %d", &i) == 1)
     {
-        // xboard docs imply it is very unlikely we will see a ping while
-        //  moving.  "However, if you do..." then we still try to do the right
-        //  thing.  Still, reading the protocol strictly, it is possible we
-        //  might hang here forever if there is no search limit at all and no
-        //  preceeding "move now".
-        if (th->CompIsThinking())
-            PlayloopCompProcessRspUntilIdle(*th);
+        // Reading the protocol strictly, it is possible we might hang here
+        //  forever if there is no search limit at all and no preceeding
+        //  "move now".  xboard documentation for "ping" implies this should
+        //  never happen.
+        if (game->EngineControl(board.Turn())) // assume we are thinking
+            game->WaitForEngineIdle();
 
         printf("pong %d\n", i);
     }
-
     else if (matches(inputStr, "result"))
     {
         // We don't care if we won, lost, or drew.  Just stop thinking.
-        th->CmdBail();
+        game->StopAndForce();
     }
-
     else if (matches(inputStr, "setboard"))
     {
+        bool wasRunning = game->Stop();
         gXboardState.badPosition = false; // hope for the best.
-        th->CmdBail();
-
         if (fenToBoard(inputStr + strlen("setboard "), &tmpBoard) < 0)
         {
             gXboardState.badPosition = true;
         }
         else
         {
-            // We could attempt to detect if we are more or less in the
-            // same game and not clear the hash, like we do w/uci "position"
-            // command.
-            GameNewEx(game, &tmpBoard, false);
+            // The documentation implies the user sets up positions with this
+            //  command.  Therefore we force a new game, but we could instead
+            //  attempt to detect if we are more or less in the same game and
+            //  not clear the hash, like we do w/uci "position" command.
+            game->NewGame(tmpBoard, false);
+            if (wasRunning)
+                game->Go();
         }
     }
-
     else if (matches(inputStr, "edit"))
     {
+        bool wasRunning = game->Stop();
         gXboardState.badPosition = false; // hope for the best.
-        th->CmdBail();
-
-        Position tmpPosition = board->Position();
+        Position tmpPosition = board.Position();
         std::string errString;
-        xboardEditPosition(tmpPosition, &game->sw);
+        xboardEditPosition(tmpPosition);
 
         if (tmpPosition.IsLegal(errString))
         {
             tmpBoard.SetPosition(tmpPosition);
-            GameNewEx(game, &tmpBoard, false);
+            game->NewGame(tmpBoard, false);
+            if (wasRunning)
+                game->Go();
         }
         else
         {
-            reportError(false, "Error: illegal position: %s",
-                        errString.c_str());
+            printf("tellusererror Illegal position: %s\n", errString.c_str());
             gXboardState.badPosition = true;
         }
     }
-
     else if (matches(inputStr, "undo"))
     {
-        if (GameRewind(game, 1) < 0)
-        {
-            printf("Error (undo: start of game): %s", inputStr);
-        }
+        if (game->Rewind(1) < 0)
+            printf("Error (start of game): %s\n", inputStr);
     }
-
     else if (matches(inputStr, "remove"))
     {
-        if (GameRewind(game, 2) < 0)
-        {
-            printf("Error (remove: ply %d): %s",
-                   GameCurrentPly(game), inputStr);
-        }
+        // We assume here that we want to back up the clocks as well (since
+        //  that is only fair).  However, xboard mentions nothing about that :|
+        if (game->Rewind(2) < 0)
+            printf("Error (ply %d): %s\n", game->CurrentPly(), inputStr);
     }
-
     else if (matches(inputStr, "hard"))
     {
         gXboardState.ponder = true;
-        if (!gXboardState.newgame)
-        {
-            // Activate pondering, if necessary.
-            gVars.ponder = true;
-            GameCompRefresh(game);
-        }
+        game->SetPonder(true); // Activate pondering, if necessary.
     }
-
     else if (matches(inputStr, "easy"))
     {
         gXboardState.ponder = false;
-        gVars.ponder = false;
-        GameCompRefresh(game);
+        game->SetPonder(false);
     }
-
     else if (matches(inputStr, "post"))
     {
         gXboardState.post = true;
     }
-
     else if (matches(inputStr, "nopost"))
     {
         gXboardState.post = false;
     }
-
     else if (sscanf(inputStr, "rating %d %d", &ourRating, &oppRating) == 2)
     {
         // 'rating' could be useful to implement when determining how
-        // to evaluate a draw.  However, right now I only use it to force
-        // ICS mode as a backup for when the xboard UI does not understand the
-        // "ics" command.
-        game->icsClocks = 1;
+        //  to evaluate a draw.  However, right now I only use it to force
+        //  ICS mode as a backup for when the GUI does not understand the "ics"
+        //  command.  FIXME: the spec says in the future, this might not be
+        //  sent only for ICS games.  Ignore this if we get 'accepted ics'.
+        setIcsClocks(game, true);
     }
-
     else if (sscanf(inputStr, "ics %20s", icsStr) == 1)
     {
         // Turn this on iff not playing against a local opponent.
@@ -535,87 +499,66 @@ static void xboardPlayerMove(Thinker *th, GameT *game)
         // does the funky "clocks do not start ticking on the first move, and
         // no increment is applied after the first move" thing.  If some servers
         // differ (ICC?) then we'll just have to adjust.
-        game->icsClocks = strcmp(icsStr, "-");
+        setIcsClocks(game, strcmp(icsStr, "-"));
     }
-
     else if (sscanf(inputStr, "memory %" PRId64, &i64) == 1)
     {
         // If user overrode, it cannot be set here.
         if (gPreCalc.userSpecifiedHashSize)
         {
-            printf("Error (unimplemented command): %s", inputStr);
+            printf("Error (unimplemented command): %s\n", inputStr);
+            return;
         }
-        else if (th->CompIsThinking())
-        {
-            printf("Error (command received while thinking): %s", inputStr);
-        }
-        else
-        {
-            gTransTable.Reset(i64 * 1024 * 1024); // MB -> bytes
-        }
+        bool wasRunning = game->Stop();
+        gTransTable.Reset(i64 * 1024 * 1024); // MB -> bytes        
+        if (wasRunning)
+            game->Go();
     }
 
     // (Anything below this case needs a decent position.)
     else if (gXboardState.badPosition)
     {
-        printf("Illegal move (bad position): %s", inputStr);
+        printf("Illegal move (bad position): %s\n", inputStr);
         return;
     }
-
     else if (matches(inputStr, "go"))
     {
         // Play the color on move, and start thinking.
         gXboardState.newgame = false;
-        gVars.ponder = gXboardState.ponder;
-        setForceMode(th, game); // Just in case.
-
-        turn = board->Turn();
-        game->control[turn] = 1;
-        game->clocks[turn] = ENGINE_CLOCK;
-        game->clocks[turn ^ 1] = OPPONENT_CLOCK;
-        ENGINE_CLOCK->Start();
-        // ClocksPrint(game, "go");
-        GoaltimeCalc(game);
-        th->CmdSetBoard(*board);
-        th->CmdThink();
+        game->StopAndForce(); // Just in case.
+        turn = board.Turn();
+        game->SetEngineControl(turn, true);
+        gXboardState.engineLastPlayed = turn;
+        // game->LogClocks("go");
+        game->Go();
     }
-
-    else if (isMove(inputStr, &myMove, board))
+    else if (isMove(inputStr, &myMove, &board))
     {
-        if (!isLegalMove(inputStr, &myMove, board))
+        if (!isLegalMove(inputStr, &myMove, &board))
         {
-            printf("Illegal move: %s", inputStr);
+            printf("Illegal move: %s\n", inputStr);
             return;
         }
 
         // At this point, we must have a valid move.
-        th->CmdBail();
-
+        game->MakeMove(myMove);
         gXboardState.newgame = false;
-        gVars.ponder = gXboardState.ponder;
-#if 0 // I think GameMoveCommit takes care of this, and in any case,
-      // would override it.
-        if (!inForceMode(game))
-        {
-            ClockStop(OPPONENT_CLOCK);
-            ClockStart(ENGINE_CLOCK);
-        }
-#endif
-        GameMoveCommit(game, &myMove, false);
     }
-
     else
     {
-        /* Default case. */
-        printf("Error (unknown command): %s", inputStr);
+        // Default case.
+        // FIXME: implement some subhandler commands for the scanf() calls
+        //  above.  We don't want 'unknown command' popping up for bad
+        //  parameters passed.
+        printf("Error (unknown command): %s\n", inputStr);
     }
 
-    /* Wait for more input. */
-    SwitcherSwitch(&game->sw);
+    // Wait for more input.
+    SwitcherSwitch(gXboardState.sw);
 }
 
 
-static void xboardNotifyMove(MoveT move)
+static void xboardNotifyMove(Game *game, MoveT move)
 {
     char tmpStr[MOVE_STRING_MAX];
     // This should switch on the fly to csOO if we ever implement chess960.
@@ -625,28 +568,25 @@ static void xboardNotifyMove(MoveT move)
 }
 
 
-void xboardNotifyDraw(const char *reason, MoveT *move)
+void xboardNotifyDraw(Game *game, const char *reason, MoveT *move)
 {
-    /* I do not know of a way to claim a draw w/move atomically with Xboard
-       (for instance, we know this next move will get us draw by repetition
-       or draw by fifty-move rule).  So, there is a race where the opponent
-       can make a move before we can claim the draw.  This only matters
-       when playing on a chess server.  FIXME.
-    */
+    // I do not know of a way to claim a draw w/move atomically with Xboard
+    //  (for instance, we know this next move will get us draw by repetition
+    //  or draw by fifty-move rule).  So, there is a race where the opponent
+    //  can make a move before we can claim the draw.  This only matters
+    //  when playing on a chess server.  FIXME.
     if (move != NULL && *move != MoveNone)
     {
-        xboardNotifyMove(*move);
+        xboardNotifyMove(game, *move);
     }
     printf("1/2-1/2 {%s}\n", reason);
 }
 
-
-static void xboardNotifyResign(int turn)
+static void xboardNotifyResign(Game *game, int turn)
 {
     printf("%d-%d {%s resigns}\n",
            turn, turn ^ 1, turn ? "Black" : "White");
 }
-
 
 static void xboardNotifyCheckmated(int turn)
 {
@@ -654,12 +594,11 @@ static void xboardNotifyCheckmated(int turn)
            turn, turn ^ 1, turn ? "White" : "Black");
 }
 
-
-static void xboardNotifyPV(GameT *game, const RspPvArgsT *pvArgs)
+static void xboardNotifyPV(Game *game, const RspPvArgsT *pvArgs)
 {
-    char mySanString[65];
+    char mySanString[kMaxPvStringLen];
     const DisplayPv &pv = pvArgs->pv; // shorthand
-    Board &board = game->savedBoard; // shorthand
+    const Board &board = game->Board(); // shorthand
     MoveStyleT pvStyle = {mnSAN, csOO, true};
 
     if (!gXboardState.post ||
@@ -672,21 +611,16 @@ static void xboardNotifyPV(GameT *game, const RspPvArgsT *pvArgs)
     printf("%d %d %u %d %s.\n",
            pv.Level() + 1, pv.Eval().LowBound(),
            // (Convert bigtime to centiseconds)
-           uint32(game->clocks[board.Turn()]->TimeTaken() / 10000),
+           uint32(game->Clock(board.Turn()).TimeTaken() / 10000),
            pvArgs->stats.nodes, mySanString);
 }
 
-static bool xboardShouldCommitMoves(void)
-{
-    return true;
-}
-
-static void xboardNotifyComputerStats(GameT *game,
+static void xboardNotifyComputerStats(Game *game,
                                       const ThinkerStatsT *stats) { }
 static void xboardPositionRefresh(const Position &position) { }
 static void xboardNoop(void) { }
-static void xboardStatusDraw(GameT *game) { }
-static void xboardNotifyTick(GameT *game) { }
+static void xboardStatusDraw(Game *game) { }
+static void xboardNotifyTick(Game *game) { }
 
 UIFuncTableT *uiXboardOps(void)
 {
@@ -708,7 +642,6 @@ UIFuncTableT *uiXboardOps(void)
         .notifyDraw = xboardNotifyDraw,
         .notifyCheckmated = xboardNotifyCheckmated,
         .notifyResign = xboardNotifyResign,
-        .shouldCommitMoves = xboardShouldCommitMoves
     };
 
     return &xboardUIFuncTable;

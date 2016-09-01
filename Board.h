@@ -104,6 +104,12 @@ public:
     // Syntactic sugar; relative strength of player vs all other player(s).
     inline int RelativeMaterialStrength() const;
 
+    // Ply that we can UnmakeMove() to.
+    inline int BasePly() const;
+    // Returns the last ply that this board has in common with 'other' (or
+    //  -1 if no such ply).  This is (relatively) slow.
+    int LastCommonPly(const Board &other) const;
+    
     // Ply of first repeated position that might contribute to a draw.  If any,
     //  then this is the ply of the 1st repeat, not the original position.
     // If there is no repeated position, this is -1.
@@ -115,6 +121,10 @@ public:
     void GenerateLegalMoves(MoveList &mvlist, bool generateCapturesOnly) const;
     
     void Log(LogLevelT level) const;
+
+    // Returns move made at ply 'ply'.  Currently asserts if that move has not
+    //  been recorded.
+    MoveT MoveAt(int ply) const;
 
 protected:
     // Says if side to move is currently in check.
@@ -263,6 +273,11 @@ inline int Board::MaterialStrength(uint8 player) const
 inline int Board::RelativeMaterialStrength() const
 {
     return materialStrength[turn] - materialStrength[turn ^ 1];
+}
+
+inline int Board::BasePly() const
+{
+    return Ply() - unmakes.size();
 }
 
 inline int Board::RepeatPly() const
