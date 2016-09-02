@@ -130,6 +130,13 @@ static_assert(sizeof(uint32) == sizeof(MoveT), "MoveT.operator== is broken");
 // "No" move (fails moveIsSane(), so do not try to print it)
 const MoveT MoveNone(FLAG, 0, PieceType::Empty, FLAG);
 
+// Writes out a sequence of moves using style 'moveStyle'.
+// Returns the number of moves successfully converted.
+int MovesToString(char *dstStr, int dstLen,
+                  const MoveT *moves, int numMoves,
+                  const MoveStyleT &moveStyle,
+                  const Board &board);
+
 inline MoveStyleT::MoveStyleT(MoveNotationT notation,
                               MoveCastleStyleT castleStyle,
                               bool showCheck) :
@@ -149,13 +156,6 @@ inline bool MoveT::operator!=(const MoveT &other) const
 {
     return !(*this == other);
 }
-
-// Writes out a sequence of moves using style 'moveStyle'.
-// Returns the number of moves successfully converted.
-int MovesToString(char *dstStr, int dstLen,
-                  const MoveT *moves, int numMoves,
-                  const MoveStyleT &moveStyle,
-                  const Board &board);
 
 inline bool MoveT::IsCastle() const
 {
