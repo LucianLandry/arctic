@@ -109,7 +109,6 @@ struct /* alignas(uint32) makes things slower */ MoveT
     inline bool IsCastleOOO() const;
     inline bool IsEnPassant() const; // Is this an en passant capture?
     inline bool IsPromote() const;   // Is this a pawn promotion?
-    bool IsLegal(const Board &board) const;
 
     // This is only a partial move creation routine as it does not fill in
     //  'chk', and in fact, clobbers it.

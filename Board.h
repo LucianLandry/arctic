@@ -119,6 +119,8 @@ public:
     //  'generateCapturesOnly' == true *and* we are not in check, then
     //  generates capture moves only.)
     void GenerateLegalMoves(MoveList &mvlist, bool generateCapturesOnly) const;
+
+    bool IsLegalMove(MoveT move) const;
     
     void Log(LogLevelT level) const;
 

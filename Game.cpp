@@ -129,7 +129,7 @@ void Game::makeMove(MoveT move, bool moveThinkers)
     class Board &board = savedBoard; // shorthand.
     uint8 turn = board.Turn();
 
-    assert(move.IsLegal(board));
+    assert(board.IsLegalMove(move));
 
     // Give computer a chance to re-evaluate the position, if we insist
     // on changing the board.

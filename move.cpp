@@ -275,14 +275,6 @@ static int moveToStringMnSAN(char *result, MoveT move, const Board &board)
     return sanStr - result; // return number of non-NULL bytes written
 }
 
-bool MoveT::IsLegal(const Board &board) const
-{
-    MoveList moveList;
-
-    board.GenerateLegalMoves(moveList, false);
-    return moveList.Search(*this) != nullptr;
-}
-
 char *MoveT::ToString(char *result,
                       const MoveStyleT *style,
                       // Used for disambiguation + legality checks, when !NULL.
@@ -303,7 +295,7 @@ char *MoveT::ToString(char *result,
         //  whatever).
         return moveToStringInsane(result, *this);
     }
-    if (board != nullptr && !IsLegal(*board))
+    if (board != nullptr && !board->IsLegalMove(*this))
     {
         result[0] = '\0';
         return result;

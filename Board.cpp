@@ -962,6 +962,14 @@ int Board::CalcCapWorth(MoveT move) const
     return capWorth;
 }
 
+bool Board::IsLegalMove(MoveT move) const
+{
+    MoveList moveList;
+
+    GenerateLegalMoves(moveList, false);
+    return moveList.Search(move) != nullptr;
+}
+
 void Board::Log(LogLevelT level) const
 {
     if (level > LogLevel())
