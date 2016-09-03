@@ -184,30 +184,231 @@ void processXboardCommand(Game *game, SwitcherContextT *sw)
     gUI = uiXboardOps();
 }
 
+void processProtoverCommand(Game *game, const char *inputStr)
+{
+    int protoVersion;
+    
+    if (sscanf(inputStr, "protover %d", &protoVersion) < 1)
+    {
+        printf("Error (bad args): %s\n", inputStr);
+        return;
+    }
+    if (protoVersion >= 2)
+    {
+        // We currently do not care if these features are accepted or
+        //  rejected.  We try to handle all input as well as possible.
+        printf("feature analyze=0 myname=arctic%s.%s-%s variants=normal "
+               "colors=0 ping=1 setboard=1 memory=%d done=1 debug=1 ics=1\n",
+               VERSION_STRING_MAJOR, VERSION_STRING_MINOR,
+               VERSION_STRING_PHASE, !gPreCalc.userSpecifiedHashSize);
+    }
+}
+
+void processLevelCommand(Game *game, const char *inputStr)
+{
+    int inc, mptc; // moves per time control
+    char baseStr[20];
+    
+    if (sscanf(inputStr, "level %d %20s %d", &mptc, baseStr, &inc) < 3 ||
+        mptc < 0 || inc < 0)
+    {
+        printf("Error (bad args): %s\n", inputStr);
+        return;
+    }
+
+    int base;
+    
+    // The spec states that future time parameters might be in the form
+    //  '40 25+5 0' (to specify additional time control periods).  We do not
+    //  always handle extra characters for now, but we could if necessary.
+    // Hopefully any change like that would be negotiated as a feature.
+    if ((strchr(baseStr, ':') && !TimeStringIsValid(baseStr)) ||
+        (!strchr(baseStr, ':') && sscanf(baseStr, "%d", &base) != 1))
+    {
+        printf("Error (bad parameter '%s'): %s\n", baseStr, inputStr);
+        return;
+    }
+    bigtime_t baseTime =
+        !strchr(baseStr, ':') ?
+        // 'base' is in minutes (and is already filled out).            
+        ((bigtime_t) base) * 60 * 1000000 :
+        // base is in more-or-less standard time format.
+        TimeStringToBigTime(baseStr);
+
+    Clock myClock;
+    myClock.SetStartTime(baseTime)
+        .Reset()
+        .SetIsFirstMoveFree(gXboardState.icsClocks)
+        .SetTimeControlPeriod(mptc)
+        // Incremental time control.
+        .SetIncrement(bigtime_t(inc) * 1000000);            
+    for (int i = 0; i < NUM_PLAYERS; i++)
+        game->SetInitialClock(i, myClock);
+    // FIXME: read the documents again and figure out if 'level' in a game
+    //  implies we should always set new time controls.  It looks like we
+    //  should.
+    if (gXboardState.newgame)
+    {
+        // Game has not started yet.  Under xboard this means "set clocks in
+        //  addition to time controls"
+        game->ResetClocks();
+    }
+    // game->LogClocks("level");
+}
+
+void processStCommand(Game *game, const char *inputStr)
+{
+    int perMoveLimit;
+    
+    if (sscanf(inputStr, "st %d", &perMoveLimit) < 1 || perMoveLimit < 1)
+    {
+        printf("Error (bad args): %s\n", inputStr);
+        return;
+    }
+    
+    // Note: 'st' and 'level' are "not used together", per the spec.  FIXME:
+    //  the latest spec makes no mention of that.
+    perMoveLimit = MAX(perMoveLimit, 0);
+    Clock myClock;
+    myClock.SetIsFirstMoveFree(gXboardState.icsClocks)
+        .SetPerMoveLimit(bigtime_t(perMoveLimit) * 1000000);
+    for (int i = 0; i < NUM_PLAYERS; i++)
+        game->SetInitialClock(i, myClock);
+    if (gXboardState.newgame)
+    {
+        // Game has not started yet.  Under xboard this means "set
+        // clocks in addition to time controls"
+        game->ResetClocks();
+    }
+}
+
+void processSdCommand(Game *game, const char *inputStr)
+{
+    int myLevel;
+
+    if (sscanf(inputStr, "sd %d", &myLevel) < 1 || myLevel <= 0)
+    {
+        printf("Error (bad args): %s\n", inputStr);
+        return;
+    }
+    
+    // Set depth.  I took out an upper limit check.  If you want
+    // depth 5000, okay ...
+    if (game->EngineConfig().SetSpinClamped(Config::MaxDepthSpin,
+                                            myLevel) != Config::Error::None)
+    {
+        printf("Error (cannot set maxDepth for this engine): %s\n", inputStr);
+    }
+}
+
+void processTimeCommand(Game *game, const char *inputStr, bool opponent)
+{
+    int centiSeconds;
+
+    // Clocks might go negative, so we allow centiSeconds < 0.
+    if (sscanf(inputStr,
+               opponent ? "otim %d" : "time %d",
+               &centiSeconds) < 1)
+    {
+        printf("Error (bad args): %s\n", inputStr);
+        return;
+    }
+
+    // Set the engine clock (or the opponent clock, if opponent).
+    Clock myClock = game->Clock(gXboardState.engineLastPlayed ^ opponent);
+    game->SetClock(gXboardState.engineLastPlayed ^ opponent,
+                   myClock.SetTime(bigtime_t(centiSeconds) * 10000));
+    // game->LogClocks("time");
+}
+
+void processPingCommand(Game *game, const char *inputStr)
+{
+    int i;
+    
+    if (sscanf(inputStr, "ping %d", &i) < 1)
+    {
+        printf("Error (bad args): %s\n", inputStr);
+        return;
+    }
+
+    // Reading the spec strictly, it is possible we might hang here forever if
+    //  there is no search limit at all and no preceeding "move now".  xboard
+    //  documentation for "ping" implies this should never happen.
+    if (game->EngineControl(game->Board().Turn())) // assume we are thinking
+        game->WaitForEngineIdle();
+
+    printf("pong %d\n", i);
+}
+
+void processRatingCommand(Game *game, const char *inputStr)
+{
+    int ourRating, oppRating;
+
+    if (sscanf(inputStr, "rating %d %d", &ourRating, &oppRating) < 2)
+    {
+        printf("Error (bad args): %s\n", inputStr);
+        return;
+    }
+
+    // 'rating' could be useful to implement when determining how to evaluate a
+    //  draw.  However, right now I only use it to force ICS mode as a backup
+    //  for when the GUI does not understand the "ics" command.
+    // FIXME: the spec says in the future, this might not be sent only for ICS
+    //  games.  Ignore this if we get 'accepted ics'.
+    setIcsClocks(game, true);
+}
+
+void processIcsCommand(Game *game, const char *inputStr)
+{
+    char icsStr[255];
+
+    if (sscanf(inputStr, "ics %255s", icsStr) < 1)
+    {
+        printf("Error (bad args): %s\n", inputStr);
+        return;
+    }
+
+    // Turn this on iff not playing against a local opponent.
+    // Assuming for now that every ICS server we care about (namely, FICS)
+    // does the funky "clocks do not start ticking on the first move, and
+    // no increment is applied after the first move" thing.  If some servers
+    // differ (ICC?) then we'll just have to adjust.
+    setIcsClocks(game, strcmp(icsStr, "-"));
+}
+
+void processMemoryCommand(Game *game, const char *inputStr)
+{
+    // If user overrode, it cannot be set here.
+    if (gPreCalc.userSpecifiedHashSize)
+    {
+        printf("Error (unimplemented command): %s\n", inputStr);
+        return;
+    }
+
+    int64 memMB;
+    if (sscanf(inputStr, "memory %" PRId64, &memMB) < 1 || memMB < 0)
+    {
+        printf("Error (bad args): %s\n", inputStr);
+        return;
+    }
+
+    bool wasRunning = game->Stop();
+    gTransTable.Reset(memMB * 1024 * 1024); // MB -> bytes        
+    if (wasRunning)
+        game->Go();
+}
+
+
 // This runs as a coroutine with the main thread, and can switch off to it
 // at any time.  If it simply exits, it will immediately be called again.
 static void xboardPlayerMove(Game *game)
 {
     char *inputStr;
-    int protoVersion, myLevel, turn;
-    int i;
-    int64 i64;
+    int turn;
     Board tmpBoard;
-
-    // Move-related stuff.
     MoveT myMove;
 
-    // These are for time controls.
-    int centiSeconds, mps;
-    char baseStr[20];
-
     // Other various commands' vars.
-    char icsStr[255];
-    int ourRating, oppRating;
-
-    int base;
-    bigtime_t baseTime = 0;
-    int inc, perMoveLimit;
     const Board &board = game->Board(); // shorthand
     
     inputStr = getStdinLine(MAXBUFLEN, gXboardState.sw);
@@ -250,15 +451,9 @@ static void xboardPlayerMove(Game *game)
     {
         processXboardCommand(game, gXboardState.sw);
     }
-    else if (sscanf(inputStr, "protover %d", &protoVersion) == 1 &&
-             protoVersion >= 2)
+    else if (matches(inputStr, "protover"))
     {
-        // Note: we do not care if these features are accepted or rejected.
-        // We try to handle all input as well as possible.
-        printf("feature analyze=0 myname=arctic%s.%s-%s variants=normal "
-               "colors=0 ping=1 setboard=1 memory=%d done=1 debug=1 ics=1\n",
-               VERSION_STRING_MAJOR, VERSION_STRING_MINOR,
-               VERSION_STRING_PHASE, !gPreCalc.userSpecifiedHashSize);
+        processProtoverCommand(game, inputStr);
     }
     else if (matches(inputStr, "new"))
     {
@@ -302,111 +497,33 @@ static void xboardPlayerMove(Game *game)
         game->SetEngineControl(turn ^ 1, true);
         gXboardState.engineLastPlayed = turn ^ 1;
     }
-    else if (sscanf(inputStr, "level %d %20s %d", &mps, baseStr, &inc) == 3)
+    else if (matches(inputStr, "level"))
     {
-        // The spec states that future time parameters might be in the form
-        //  '40 25+5 0' (to specify additional time control periods).  We do not
-        //  always handle extra characters for now, but we could if necessary.
-        // Hopefully any change like that would be negotiated as a feature.
-        if ((strchr(baseStr, ':') && !TimeStringIsValid(baseStr)) ||
-            (!strchr(baseStr, ':') && sscanf(baseStr, "%d", &base) != 1))
-        {
-            printf("Error (bad parameter '%s'): %s\n", baseStr, inputStr);
-            return;
-        }
-        baseTime =
-            !strchr(baseStr, ':') ?
-            // 'base' is in minutes (and is already filled out).            
-            ((bigtime_t) base) * 60 * 1000000 :
-            // base is in more-or-less standard time format.
-            TimeStringToBigTime(baseStr);
-
-        Clock myClock;
-        myClock.SetStartTime(baseTime)
-            .Reset()
-            .SetIsFirstMoveFree(gXboardState.icsClocks)
-            .SetTimeControlPeriod(mps)
-            // Incremental time control.
-            .SetIncrement(bigtime_t(inc) * 1000000);            
-        for (i = 0; i < NUM_PLAYERS; i++)
-            game->SetInitialClock(i, myClock);
-        // FIXME: read the documents again and figure out if 'level' in a game
-        //  implies we should always set new time controls.  It looks like we
-        //  should.
-        if (gXboardState.newgame)
-        {
-            // Game has not started yet.  Under xboard this means "set
-            // clocks in addition to time controls"
-            game->ResetClocks();
-        }
-        // game->LogClocks("level");
+        processLevelCommand(game, inputStr);
     }
-    else if (sscanf(inputStr, "st %d", &perMoveLimit) == 1)
+    else if (matches(inputStr, "st"))
     {
-        // Note: 'st' and 'level' are mutually exclusive, according to the
-        // documentation.
-        perMoveLimit = MAX(perMoveLimit, 0);
-        Clock myClock;
-        myClock.SetIsFirstMoveFree(gXboardState.icsClocks)
-            .SetPerMoveLimit(bigtime_t(perMoveLimit) * 1000000);
-        for (i = 0; i < NUM_PLAYERS; i++)
-            game->SetInitialClock(i, myClock);
-        if (gXboardState.newgame)
-        {
-            // Game has not started yet.  Under xboard this means "set
-            // clocks in addition to time controls"
-            game->ResetClocks();
-        }
+        processStCommand(game, inputStr);
     }
-    else if (sscanf(inputStr, "sd %d", &myLevel) == 1)
+    else if (matches(inputStr, "sd"))
     {
-        // Set depth.  I took out an upper limit check.  If you want
-        // depth 5000, okay ...
-        if (myLevel > 0)
-        {
-            if (game->EngineConfig().SetSpinClamped(Config::MaxDepthSpin,
-                                                    myLevel) !=
-                Config::Error::None)
-            {
-                printf("Error (cannot set maxDepth for this engine): %s\n",
-                       inputStr);
-            }
-        }
-        else
-        {
-            printf("Error (bad parameter %d): %s\n", myLevel, inputStr);
-        }
+        processSdCommand(game, inputStr);
     }
-    else if (sscanf(inputStr, "time %d", &centiSeconds) == 1)
+    else if (matches(inputStr, "time"))
     {
-        // Set engine clock.
-        Clock myClock = game->Clock(gXboardState.engineLastPlayed);
-        game->SetClock(gXboardState.engineLastPlayed,
-                       myClock.SetTime(bigtime_t(centiSeconds) * 10000));
-        // game->LogClocks("time");
+        processTimeCommand(game, inputStr, false);
     }
-    else if (sscanf(inputStr, "otim %d", &centiSeconds) == 1)
+    else if (matches(inputStr, "otim"))
     {
-        // Set opponent clock.
-        Clock myClock = game->Clock(gXboardState.engineLastPlayed ^ 1);
-        game->SetClock(gXboardState.engineLastPlayed ^ 1,
-                       myClock.SetTime(bigtime_t(centiSeconds) * 10000));
-        // game->LogClocks("otim");
+        processTimeCommand(game, inputStr, true);
     }
     else if (matches(inputStr, "?"))
     {
         game->MoveNow(); // Move now.
     }
-    else if (sscanf(inputStr, "ping %d", &i) == 1)
+    else if (matches(inputStr, "ping"))
     {
-        // Reading the protocol strictly, it is possible we might hang here
-        //  forever if there is no search limit at all and no preceeding
-        //  "move now".  xboard documentation for "ping" implies this should
-        //  never happen.
-        if (game->EngineControl(board.Turn())) // assume we are thinking
-            game->WaitForEngineIdle();
-
-        printf("pong %d\n", i);
+        processPingCommand(game, inputStr);
     }
     else if (matches(inputStr, "result"))
     {
@@ -483,38 +600,18 @@ static void xboardPlayerMove(Game *game)
     {
         gXboardState.post = false;
     }
-    else if (sscanf(inputStr, "rating %d %d", &ourRating, &oppRating) == 2)
+    else if (matches(inputStr, "rating"))
     {
-        // 'rating' could be useful to implement when determining how
-        //  to evaluate a draw.  However, right now I only use it to force
-        //  ICS mode as a backup for when the GUI does not understand the "ics"
-        //  command.  FIXME: the spec says in the future, this might not be
-        //  sent only for ICS games.  Ignore this if we get 'accepted ics'.
-        setIcsClocks(game, true);
+        processRatingCommand(game, inputStr);
     }
-    else if (sscanf(inputStr, "ics %20s", icsStr) == 1)
+    else if (matches(inputStr, "ics"))
     {
-        // Turn this on iff not playing against a local opponent.
-        // Assuming for now that every ICS server we care about (namely, FICS)
-        // does the funky "clocks do not start ticking on the first move, and
-        // no increment is applied after the first move" thing.  If some servers
-        // differ (ICC?) then we'll just have to adjust.
-        setIcsClocks(game, strcmp(icsStr, "-"));
+        processIcsCommand(game, inputStr);
     }
-    else if (sscanf(inputStr, "memory %" PRId64, &i64) == 1)
+    else if (matches(inputStr, "memory"))
     {
-        // If user overrode, it cannot be set here.
-        if (gPreCalc.userSpecifiedHashSize)
-        {
-            printf("Error (unimplemented command): %s\n", inputStr);
-            return;
-        }
-        bool wasRunning = game->Stop();
-        gTransTable.Reset(i64 * 1024 * 1024); // MB -> bytes        
-        if (wasRunning)
-            game->Go();
+        processMemoryCommand(game, inputStr);
     }
-
     // (Anything below this case needs a decent position.)
     else if (gXboardState.badPosition)
     {
@@ -551,9 +648,6 @@ static void xboardPlayerMove(Game *game)
     else
     {
         // Default case.
-        // FIXME: implement some subhandler commands for the scanf() calls
-        //  above.  We don't want 'unknown command' popping up for bad
-        //  parameters passed.
         printf("Error (unknown command): %s\n", inputStr);
     }
 
