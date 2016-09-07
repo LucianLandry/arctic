@@ -20,7 +20,7 @@
 #include "aTypes.h"
 #include "Board.h"
 #include "Clock.h"
-#include "saveGame.h"
+#include "SaveGame.h"
 #include "Thinker.h"
 
 class Game
@@ -99,7 +99,7 @@ private:
     bool done;
     bool engineControl[NUM_PLAYERS]; // true iff engine plays for that side
     
-    SaveGameT sgame;
+    SaveGame sgame;
 
     // Clocks are reset to these values at beginning of new game.  They can be
     //  set w/out affecting saveGame's start clocks.
@@ -130,18 +130,18 @@ private:
     void setThinkerRspHandler(Thinker &th);
 };
 
-// These are wrappers for SaveGameT.
+// These are wrappers for SaveGame.
 inline int Game::CurrentPly() const
 {
-    return SaveGameCurrentPly(&sgame);
+    return sgame.CurrentPly();
 }
 inline int Game::FirstPly() const
 {
-    return SaveGameFirstPly(&sgame);
+    return sgame.FirstPly();
 }
 inline int Game::LastPly() const
 {
-    return SaveGameLastPly(&sgame);
+    return sgame.LastPly();
 }
 
 inline const class Board &Game::Board() const

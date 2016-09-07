@@ -31,7 +31,6 @@
 #include "HistoryWindow.h"
 #include "log.h"
 #include "Pv.h"
-#include "saveGame.h"
 #include "ui.h"
 #include "uiUtil.h"
 #include "Variant.h"

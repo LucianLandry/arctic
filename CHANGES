@@ -49,7 +49,8 @@ Bugfix: fix think time w/infinite clock but per-move limit.
 Bugfix: crash when switching on the fly from xboard to uci interface
 uiUci: attempt to report a bestmove when we stop pondering; handle
     'ponder + searchmoves' sanely; more correct ponder info and score
-Refactored GameT into a C++ 'Game' class; UIs now drive engines through it.
+Refactored GameT into a C++ 'Game' class; UIs now drive the engine through it.
+Refactored SaveGame into a C++ class.
 
 Version 1.1:
 Build improvements: use Git for version control, cmake for building

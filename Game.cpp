@@ -23,18 +23,16 @@
 
 Game::Game(Thinker *th) : th(th)
 {
-    // origClocks[], clocks[], and savedBoard are automatically
+    // origClocks[], clocks[], sgame, and savedBoard are automatically
     //  constructed.
     done = false;
     ponder = false;
     state = State::Stopped;
     autoPlayEngineMoves = true;
 
-    SaveGameInit(&sgame);
-
     for (int i = 0; i < NUM_PLAYERS; i++)
         engineControl[i] = false;
-    ResetClocks(); // necessary (need to set initial clocks for savegame)
+    ResetClocks(); // necessary (to set initial clocks for savegame)
 
     setThinkerRspHandler(*th);
 }
@@ -147,7 +145,7 @@ void Game::makeMove(MoveT move, bool moveThinkers)
     board.MakeMove(move);
     if (wasRunning)
         myClock.ApplyIncrement(board.Ply());
-    SaveGameMoveCommit(&sgame, &move, myClock.Time());
+    sgame.CommitMove(move, myClock.Time());
 
     board.ConsistencyCheck(__func__);
     refresh();
@@ -167,7 +165,7 @@ void Game::NewGame(const class Board &board, bool resetClocks)
     bool wasRunning = Stop();
     done = false;
     savedBoard = board;
-    SaveGamePositionSet(&sgame, &savedBoard);
+    sgame.SetStartPosition(savedBoard);
     if (resetClocks)
         ResetClocks();
     th->CmdNewGame();
@@ -196,7 +194,7 @@ int Game::GotoPly(int ply)
         
     done = false;
     int origPly = CurrentPly();
-    SaveGameGotoPly(&sgame, ply, &savedBoard, clocks);
+    sgame.GotoPly(ply, &savedBoard, clocks);
 
     if (plyDiff < 0)
     {
@@ -206,7 +204,7 @@ int Game::GotoPly(int ply)
     else
     {
         // Need to move forward.  I guess I prefer querying a Board over a
-        //  SaveGameT to get the proper move.
+        //  SaveGame to get the proper move.
         for (int i = origPly; i < ply; i++)
             th->CmdMakeMove(savedBoard.MoveAt(i));
     }
@@ -239,7 +237,7 @@ void Game::SetBoard(const class Board &other)
         // Attempt the 'shortcut'.
         // This replicates a bit of what GotoPly() does, but w/out messing with
         //  the clocks.
-        SaveGameGotoPly(&sgame, lastCommonPly, &savedBoard, NULL);
+        sgame.GotoPly(lastCommonPly, &savedBoard, nullptr);
         for (int i = 0; i < myPlyDiff; i++)
             th->CmdUnmakeMove();
         for (int i = lastCommonPly; i < other.Ply(); i++)
@@ -255,7 +253,7 @@ void Game::SetBoard(const class Board &other)
         while (tmpBoard.Ply() != tmpBoard.BasePly()) // goto the base position
             tmpBoard.UnmakeMove();
         savedBoard = tmpBoard;
-        SaveGamePositionSet(&sgame, &tmpBoard);
+        sgame.SetStartPosition(tmpBoard);
         for (int i = other.BasePly(); i < other.Ply(); i++)
             makeMove(other.MoveAt(i), false);
     }
@@ -281,9 +279,9 @@ void Game::ResetClocks()
     
     if (CurrentPly() == 0)
     {
-        // Propagate changes to the SaveGameT -- we assume the game is not
+        // Propagate changes to the SaveGame -- we assume the game is not
         // in progress.
-        SaveGameClocksSet(&sgame, clocks);
+        sgame.SetClocks(clocks);
     }
     refresh();
 }
@@ -553,24 +551,24 @@ void Game::setThinkerRspHandler(Thinker &th)
 
 int Game::Save()
 {
-    return SaveGameSave(&sgame);
+    return sgame.Save();
 }
 
 int Game::Restore()
 {
-    if (SaveGameRestore(&sgame) < 0)
+    if (sgame.Restore() < 0)
         return -1;
     bool wasRunning = Stop();
     done = false;
     // We can't call ::NewGame() here since that clobbers savegame info.
-    // We can't call ::SetBoard(), since that assumes the saveGame and the
+    // We can't call ::SetBoard(), since that assumes the SaveGame and the
     //  savedBoard are in sync.
     // And we can't call ::GotoPly(), since that assumes the Thinker is in sync.
 
     // Could goto current ply instead of numPlies.  I am assuming
     // here that the user is absent-minded and might forget (or might not
     // know) the current ply is persistent.
-    SaveGameGotoPly(&sgame, LastPly(), &savedBoard, clocks);
+    sgame.GotoPly(LastPly(), &savedBoard, clocks);
     th->CmdNewGame(); // Reset thinkers, etc.
     th->CmdSetBoard(savedBoard);
     if (wasRunning)

@@ -21,12 +21,12 @@
 
 #include "aTypes.h"
 #include "Board.h"
+#include "Clock.h"
 #include "Config.h"
 #include "Eval.h"
 #include "MoveList.h"
 #include "Pv.h"
 #include "ref.h"
-#include "saveGame.h"
 #include "ThinkerTypes.h"
 
 // FIXME, external code should not need to be aware of this.

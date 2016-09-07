@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//                 saveGame.cpp - saveable game structures.
+//                    SaveGame.cpp - saveable game class.
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -16,54 +16,51 @@
 
 #include <assert.h>
 #include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>    // malloc(3)
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h> // stat(2)
-#include <unistd.h>
 
 #include "Board.h"
 #include "log.h"
 #include "MoveList.h"
-#include "saveGame.h"
+#include "SaveGame.h"
 
 #define SAVEFILE "arctic.sav"
 
-void SaveGameMoveCommit(SaveGameT *sgame, MoveT *move, bigtime_t myTime)
-{
-    GamePlyT ply;
-    int plyOffset = sgame->currentPly++ - sgame->startPosition.Ply();
+SaveGame::SaveGame() : currentPly(0) {}
 
-    ply.move = *move; // struct assign
+void SaveGame::CommitMove(MoveT move, bigtime_t myTime)
+{
+    int plyOffset = currentPly++ - startPosition.Ply();
+    GamePlyT ply;
+
+    ply.move = move;
     ply.myTime = myTime;
 
-    // Dump any redo information.
-    sgame->plies.resize(plyOffset);
-
-    sgame->plies.push_back(ply);
+    plies.resize(plyOffset); // Dump any redo information.
+    plies.push_back(ply);
 }
 
 // returns: 0, if save successful, otherwise -1.
-int SaveGameSave(SaveGameT *sgame)
+int SaveGame::Save() const
 {
     FILE *myFile;
     int retVal = 0;
-    int elementsLeft = sgame->plies.size();
+    int elementsLeft = plies.size();
     int elementsWritten = 0;
-    int saveGameElemSize = offsetof(SaveGameT, plies);
+    int saveGameElemSize = offsetof(SaveGame, plies);
     
     if ((myFile = fopen(SAVEFILE, "w")) == NULL)
     {
-        LOG_NORMAL("SaveGameSave(): Could not open file.\n");
+        LOG_NORMAL("%s: Could not open file.\n", __func__);
         return -1;
     }
 
     do
     {
-        if (fwrite(sgame, saveGameElemSize, 1, myFile) < 1)
+        if (fwrite(this, saveGameElemSize, 1, myFile) < 1)
         {
-            LOG_NORMAL("SaveGameSave(): could not write SaveGameT.\n");
+            LOG_NORMAL("%s: could not write SaveGameT.\n", __func__);
             retVal = -1;
             break;
         }
@@ -71,10 +68,10 @@ int SaveGameSave(SaveGameT *sgame)
         while (elementsLeft > 0)
         {
             if ((elementsWritten =
-                 fwrite(&sgame->plies[sgame->plies.size() - elementsLeft],
+                 fwrite(&plies[plies.size() - elementsLeft],
                         sizeof(GamePlyT), elementsLeft, myFile)) == 0)
             {
-                LOG_NORMAL("SaveGameSave(): could not write GamePlyT.\n");
+                LOG_NORMAL("%s: could not write GamePlyT.\n", __func__);
                 retVal = -1;
                 break;
             }
@@ -84,36 +81,27 @@ int SaveGameSave(SaveGameT *sgame)
 
     if (fclose(myFile) == EOF)
     {
-        LOG_NORMAL("SaveGameSave(): could not close file.\n");
+        LOG_NORMAL("%s: could not close file.\n", __func__);
         retVal = -1;
     }
     return retVal;
 }
 
-void SaveGameInit(SaveGameT *sgame)
+void SaveGame::SetStartPosition(const Board &board)
 {
-    // Everything besides this should be automatically constructed.
-    sgame->currentPly = 0;
+    startPosition = board.Position();
+    currentPly = startPosition.Ply();
+    plies.resize(0);
 }
 
-// Reset a position (w/out adjusting clocks)
-void SaveGamePositionSet(SaveGameT *sgame, Board *board)
+void SaveGame::SetClocks(const Clock *clocks)
 {
-    sgame->startPosition = board->Position();
-    sgame->currentPly = sgame->startPosition.Ply();
-    sgame->plies.resize(0);
-}
-
-void SaveGameClocksSet(SaveGameT *sgame, Clock *clocks)
-{
-    int i;
-
-    for (i = 0; i < NUM_PLAYERS; i++)
+    for (int i = 0; i < NUM_PLAYERS; i++)
     {
         // Trying to successfully xfer a running clock seems difficult, and
         // we do not have to support it, so ...
         assert(!clocks[i].IsRunning());
-        sgame->clocks[i] = clocks[i];
+        this->clocks[i] = clocks[i];
     }
 }
 
@@ -128,62 +116,59 @@ void SaveGameClocksSet(SaveGameT *sgame, Clock *clocks)
 //
 // Notice 'clocks' is an array of clocks!  This is for better coordination
 // w/GameT.
-int SaveGameGotoPly(SaveGameT *sgame, int ply, Board *board, Clock *clocks)
+int SaveGame::GotoPly(int ply, Board *board, Clock *clocks)
 {
-    int i, plyOffset;
-    MoveList moveList;
-    MoveT move;
-    
     Board myBoard;     // temp variables.
     Clock myClocks[2];
     
-    if (ply < SaveGameFirstPly(sgame) || ply > SaveGameLastPly(sgame))
+    if (ply < FirstPly() || ply > LastPly())
     {
-        LOG_DEBUG("SaveGameGotoPly(): ply %d out of range (%d, %d)\n",
+        LOG_DEBUG("%s: ply %d out of range (%d, %d)\n", __func__,
                   ply, SaveGameFirstPly(sgame), SaveGameLastPly(sgame));
         return -1;
     }
 
     // struct copies.
-    myClocks[0] = sgame->clocks[0];
-    myClocks[1] = sgame->clocks[1];
+    for (int i = 0; i < NUM_PLAYERS; i++)
+        myClocks[i] = this->clocks[i];
 
     // Sanity check: SaveGameT structure.
-    if (!myBoard.SetPosition(sgame->startPosition))
+    if (!myBoard.SetPosition(startPosition))
     {
-        LOG_DEBUG("SaveGameGotoPly(): bad board.\n");
+        LOG_DEBUG("%s: bad board.\n", __func__);
         return -1;
     }
 
     // Sanity check: each move.
     // (We do not sanity check clock time because:
-    // -- it would be difficult
-    // -- it is possible somebody gave us more time in the middle of the
-    // savegame.
-    plyOffset = ply - sgame->startPosition.Ply();
-    for (i = 0; i < plyOffset; i++)
+    //  -- it would be difficult
+    //  -- it is possible somebody gave us more time in the middle of the
+    //     savegame.)
+    int plyOffset = ply - startPosition.Ply();
+    for (int i = 0; i < plyOffset; i++)
     {
-        move = sgame->plies[i].move;
+        MoveList moveList;
+        MoveT move = plies[i].move;
         myBoard.GenerateLegalMoves(moveList, false);
-        if (moveList.Search(move) == NULL)
+        if (moveList.Search(move) == nullptr)
         {
-            LOG_DEBUG("SaveGameGotoPly(): bad move %d\n", i);
+            LOG_DEBUG("%s: bad move %d\n", __func__, i);
             return -1;
         }
         
-        myClocks[i & 1].SetTime(sgame->plies[i].myTime);
+        myClocks[i & 1].SetTime(plies[i].myTime);
         myBoard.MakeMove(move);
     }
 
-    sgame->currentPly = ply;
+    currentPly = ply;
 
     // Success.  Update external variables if they exist.
-    if (clocks != NULL)
+    if (clocks != nullptr)
     {
-        clocks[0] = myClocks[0];
-        clocks[1] = myClocks[1];
+        for (int i = 0; i < NUM_PLAYERS; i++)
+            clocks[i] = myClocks[i];
     }
-    if (board != NULL)
+    if (board != nullptr)
         *board = myBoard;
 
     return 0;
@@ -192,7 +177,7 @@ int SaveGameGotoPly(SaveGameT *sgame, int ply, Board *board, Clock *clocks)
 // Assumes 'sgame' has been initialized (w/SaveGameInit())
 // Returns: 0, if restore successful, otherwise -1.
 // 'sgame' is guaranteed to be 'sane' after return, regardless of result.
-int SaveGameRestore(SaveGameT *sgame)
+int SaveGame::Restore()
 {
     FILE *myFile;
     int retVal;
@@ -200,46 +185,44 @@ int SaveGameRestore(SaveGameT *sgame)
     int elementsRead;
     int savedCurrentPly;
     struct stat buf;
-    SaveGameT mySGame;
+    SaveGame mySGame;
 
     // We read in the entire savegame -- except the 'plies' vector -- in one
     //  chunk.  Rather hacky.
-    int saveGameElemSize = offsetof(SaveGameT, plies);
+    int saveGameElemSize = offsetof(SaveGame, plies);
     
-    SaveGameInit(&mySGame);
-
     while ((retVal = stat(SAVEFILE, &buf)) < 0 && errno == EINTR)
         ;
     if (retVal < 0)
     {
-        LOG_NORMAL("SaveGameRestore(): stat() failed\n");
+        LOG_NORMAL("%s: stat() failed\n", __func__);
         return -1;
     }
     elementsLeft = (buf.st_size - saveGameElemSize) / sizeof(GamePlyT);
 
     if ((myFile = fopen(SAVEFILE, "r")) == NULL)
     {
-        LOG_NORMAL("SaveGameRestore(): Could not open file.\n");
+        LOG_NORMAL("%s: Could not open file.\n", __func__);
         return -1;
     }
 
     do
     {
-        // Read in SaveGameT.  (except for the 'plies' vector)
+        // Read in the SaveGame.  (except for the 'plies' vector)
         if (fread(&mySGame, saveGameElemSize, 1, myFile) < 1)
         {
-            LOG_NORMAL("SaveGameRestore(): could not read SaveGameT.\n");
+            LOG_NORMAL("%s: could not read SaveGameT.\n", __func__);
             retVal = -1;
             break;
         }
 
         // Sanity check: we should have read a legal position.
-        //  (SaveGameGotoPly would also catch this below; we just want to be
+        //  (GotoPly() would also catch this below; we just want to be
         //   obvious about it.)
         std::string errString;
         if (!mySGame.startPosition.IsLegal(errString))
         {
-            LOG_NORMAL("SaveGameRestore(): illegal position read: %s\n",
+            LOG_NORMAL("%s: illegal position read: %s\n", __func__,
                       errString.c_str());
             retVal = -1;
             break;
@@ -249,7 +232,7 @@ int SaveGameRestore(SaveGameT *sgame)
         // to prevent wraparound.
         if (mySGame.startPosition.Ply() > 1000000)
         {
-            LOG_NORMAL("SaveGameRestore(): bad firstPly (%d)\n",
+            LOG_NORMAL("%s: bad firstPly (%d)\n", __func__,
                       mySGame.startPosition.Ply());
             retVal = -1;
             break;
@@ -264,7 +247,7 @@ int SaveGameRestore(SaveGameT *sgame)
                  fread(&mySGame.plies[mySGame.plies.size() - elementsLeft],
                        sizeof(GamePlyT), elementsLeft, myFile)) == 0)
             {
-                LOG_NORMAL("SaveGameRestore(): could not read GamePlyT.\n");
+                LOG_NORMAL("%s: could not read GamePlyT.\n", __func__);
                 retVal = -1;
                 break;
             }
@@ -274,12 +257,11 @@ int SaveGameRestore(SaveGameT *sgame)
         savedCurrentPly = mySGame.currentPly;
 
         // Sanity check: SaveGameT and GamePlyT structures.
-        if (SaveGameGotoPly(&mySGame, SaveGameLastPly(&mySGame), NULL,
-                            NULL) < 0 ||
+        if (mySGame.GotoPly(mySGame.LastPly(), nullptr, nullptr) < 0 ||
             // (going back to, and validating 'currentPly' at the same time)
-            SaveGameGotoPly(&mySGame, savedCurrentPly, NULL, NULL) < 0)
+            mySGame.GotoPly(savedCurrentPly, nullptr, nullptr) < 0)
         {
-            LOG_NORMAL("SaveGameRestore(): bad GameT or GamePlyT.\n");
+            LOG_NORMAL("%s: bad GameT or GamePlyT.\n", __func__);
             retVal = -1;
             break;
         }
@@ -287,28 +269,12 @@ int SaveGameRestore(SaveGameT *sgame)
 
     if (fclose(myFile) == EOF)
     {
-        LOG_NORMAL("SaveGameRestore(): could not close file.\n");
+        LOG_NORMAL("%s: could not close file.\n", __func__);
         retVal = -1;
     }
 
     if (retVal != -1)
-    {
-        // Everything checks out.  Overwrite 'sgame'.
-        SaveGameCopy(sgame, &mySGame);
-    }
+        *this = mySGame; // Everything checks out, so update ourselves.
 
     return retVal;
-}
-
-// Assumes 'src' and 'dst' are both non-NULL, and have both been initialized
-//  w/SaveGameInit().  Clobbers 'dst', but in a safe fashion.
-void SaveGameCopy(SaveGameT *dst, SaveGameT *src)
-{
-    // Basically we just do a memberwise copy here.
-    for (int i = 0; i < NUM_PLAYERS; i++)
-        dst->clocks[i] = src->clocks[i];
-
-    dst->startPosition = src->startPosition;
-    dst->currentPly = src->currentPly;
-    dst->plies = src->plies;
 }
