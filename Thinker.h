@@ -158,7 +158,14 @@ public:
 
         // Searchers dump their results into here.
         RspSearchDoneArgsT searchResult;
+    };
 
+    // (used by engine to track/manipulate internal state)
+    inline ContextT &Context();
+
+    struct SharedContextT
+    {
+        SharedContextT();      // ctor
         // The following are currently only meaningful for the root thinker:
         // Config variable.  -1 == no limit.  Like 'maxDepth', except 'maxDepth'
         //  is manipulated by the engine.
@@ -170,9 +177,10 @@ public:
         volatile bool canResign;
         HintPv pv; // Attempts to track the principal variation.
     };
-    // (used by engine to track/manipulate internal state)
-    inline ContextT &Context();
-
+    // (used by engine to track/manipulate internal state shared between
+    //  threads)
+    inline SharedContextT &SharedContext();
+    
     // ---------------------------------------------------------------------
     // methods common to both client and engine:
     inline class Config &Config();
@@ -211,6 +219,7 @@ private:
     } searchArgs;
 
     ContextT context;
+    std::shared_ptr<SharedContextT> sharedContext;
     class Config config;
     
     void threadFunc();
@@ -273,6 +282,11 @@ inline Thinker &Thinker::RootThinker() const
 inline Thinker::ContextT &Thinker::Context()
 {
     return context;
+}
+
+inline Thinker::SharedContextT &Thinker::SharedContext()
+{
+    return *sharedContext;
 }
 
 inline bigtime_t Thinker::GoalTime() const

@@ -125,7 +125,7 @@ static void notifyNewPv(Thinker *th, const SearchPv &goodPv, Eval eval)
     th->RspNotifyPv(gStats, pv);
 
     // Update the tracked principal variation.
-    th->Context().pv.Update(pv);
+    th->SharedContext().pv.Update(pv);
 }
 
 static Eval tryMove(Thinker *th, MoveT move, int alpha, int beta,
@@ -500,7 +500,7 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
         // mvlist->SortByCapWorth(board);
         
         // Try the principal variation move (if applicable) first.
-        mvlist.UseAsFirstMove(th->RootThinker().Context().pv.Hint(curDepth));
+        mvlist.UseAsFirstMove(th->SharedContext().pv.Hint(curDepth));
 
         // If we find no better moves ...
         retVal.Set(Eval::Loss, alpha);
@@ -626,8 +626,8 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
         // If we need to move, we cannot trust (and should not hash) 'myEval'.
         // We must go with the best value/move we already had ... if any.
         if (th->CompNeedsToMove() ||
-            (th->RootThinker().Context().maxNodes &&
-             gStats.nodes >= th->RootThinker().Context().maxNodes))
+            (th->SharedContext().maxNodes &&
+             gStats.nodes >= th->SharedContext().maxNodes))
         {
             if (masterNode)
                 ThinkerSearchersBail(); // Wait for any searchers to terminate.
@@ -752,6 +752,7 @@ static void computermove(Thinker *th, bool bPonder)
     Eval myEval;
     SearchPv pv(0);
     Thinker::ContextT &context = th->Context();
+    Thinker::SharedContextT &sharedContext = th->SharedContext();
     Board &board = context.board;
     bool resigned = false;
     MoveList mvlist;
@@ -762,7 +763,7 @@ static void computermove(Thinker *th, bool bPonder)
     // of an elegant (not compute-hogging) way to detect that further-depth
     // searches would be futile, I would implement it.
     int maxSearchDepth =
-        context.maxLevel == NO_LIMIT ? 100 : context.maxLevel;
+        sharedContext.maxLevel == NO_LIMIT ? 100 : sharedContext.maxLevel;
 
     context.depth = 0; // start search from root depth.
 
@@ -775,14 +776,14 @@ static void computermove(Thinker *th, bool bPonder)
         return;
     }
 
-    if (context.randomMoves)
+    if (sharedContext.randomMoves)
         board.Randomize();
 
     board.GenerateLegalMoves(mvlist, false);
 
     // Use the principal variation move (if it exists) if we run out of
     // time before we figure out a move to recommend.
-    mvlist.UseAsFirstMove(context.pv.Hint(0));
+    mvlist.UseAsFirstMove(sharedContext.pv.Hint(0));
 
     // Use this move if we cannot (or choose not to) come up with a better one.
     move = mvlist.Moves(0);
@@ -801,7 +802,7 @@ static void computermove(Thinker *th, bool bPonder)
 
         int &maxDepth = context.maxDepth;
         
-        for (maxDepth = context.pv.SuggestSearchStartLevel();
+        for (maxDepth = sharedContext.pv.SuggestSearchStartLevel();
              maxDepth <= maxSearchDepth;
              maxDepth++)
         {
@@ -838,9 +839,9 @@ static void computermove(Thinker *th, bool bPonder)
             }
 #endif
             
-            context.pv.CompletedSearch();
+            sharedContext.pv.CompletedSearch();
 
-            if (context.canResign && shouldResign(board, myEval, bPonder))
+            if (sharedContext.canResign && shouldResign(board, myEval, bPonder))
             {
                 // we're in a really bad situation
                 resigned = true;

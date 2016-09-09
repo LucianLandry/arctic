@@ -96,31 +96,31 @@ Thinker::SearchArgsT::SearchArgsT() :
 {
 }
 
-Thinker::ContextT::ContextT() :
-    maxDepth(0), depth(0), maxLevel(NO_LIMIT), maxNodes(0), randomMoves(false),
-    canResign(true) {}
+Thinker::ContextT::ContextT() : maxDepth(0), depth(0) {}
+
+Thinker::SharedContextT::SharedContextT() :
+    maxLevel(NO_LIMIT), maxNodes(0), randomMoves(false), canResign(true) {}
 
 static void onMaxDepthChanged(const Config::SpinItem &item, Thinker &th)
 {
-    Thinker::ContextT &context = th.Context(); // shorthand
-
-    context.maxLevel = item.Value() - 1;
-    if (context.maxLevel != NO_LIMIT && context.maxDepth > context.maxLevel)
+    int maxLevel = item.Value() - 1;
+    th.SharedContext().maxLevel = maxLevel;
+    if (maxLevel != NO_LIMIT && th.Context().maxDepth > maxLevel)
         th.CmdMoveNow();
 }
 static void onMaxNodesChanged(const Config::SpinItem &item, Thinker &th)
 {
-    th.Context().maxNodes = item.Value();
+    th.SharedContext().maxNodes = item.Value();
     // The engine itself should shortly notice that it has exceeded
     //  maxNodes (if applicable), and return.
 }
 static void onRandomMovesChanged(const Config::CheckboxItem &item, Thinker &th)
 {
-    th.Context().randomMoves = item.Value();
+    th.SharedContext().randomMoves = item.Value();
 }
 static void onCanResignChanged(const Config::CheckboxItem &item, Thinker &th)
 {
-    th.Context().canResign = item.Value();
+    th.SharedContext().canResign = item.Value();
 }
 
 // ctor.
@@ -140,8 +140,15 @@ Thinker::Thinker()
 
     // Assume the first Thinker created is the rootThinker.
     if (rootThinker == nullptr)
+    {
         rootThinker = this;
-
+        sharedContext = std::make_shared<SharedContextT>();
+    }
+    else
+    {
+        sharedContext = rootThinker->sharedContext;
+    }
+    
     // Register config callbacks.
     Config().Register(
         Config::SpinItem(Config::MaxDepthSpin, Config::MaxDepthDescription,
@@ -308,7 +315,7 @@ void Thinker::CmdNewGame()
     CmdBail();
     gTransTable.Reset();
     gHistoryWindow.Clear();
-    context.pv.Clear();
+    sharedContext->pv.Clear();
     if (!context.board.SetPosition(Variant::Current()->StartingPosition()))
         assert(0);
 }
@@ -320,10 +327,10 @@ void Thinker::CmdSetBoard(const Board &board)
     // Make a best effort at PV tracking (in case the boards are similar).  
     if (IsRootThinker())
     {
-        context.pv.Rewind(context.board.Ply() - board.Ply());
+        sharedContext->pv.Rewind(context.board.Ply() - board.Ply());
         // If the ply happened to be the same, we still want to start the search
         //  over.
-        context.pv.ResetSearchStartLevel();
+        sharedContext->pv.ResetSearchStartLevel();
     }
     context.board = board;
 }
@@ -334,7 +341,7 @@ void Thinker::CmdMakeMove(MoveT move)
 
     context.board.MakeMove(move);
     if (IsRootThinker())
-        context.pv.Decrement(move);
+        sharedContext->pv.Decrement(move);
 }
 
 void Thinker::CmdUnmakeMove()
@@ -342,7 +349,7 @@ void Thinker::CmdUnmakeMove()
     CmdBail(); // If we were previously thinking, just start over.
     context.board.UnmakeMove();
     if (IsRootThinker())
-        context.pv.Rewind(1);
+        sharedContext->pv.Rewind(1);
 }
 
 void Thinker::doThink(eThinkMsgT cmd, const MoveList *mvlist)
