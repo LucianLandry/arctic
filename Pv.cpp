@@ -89,6 +89,33 @@ int SearchPv::BuildMoveString(char *dstStr, int dstLen,
     return retVal;
 }
 
+bool SearchPv::Sanitize(const Board &board)
+{
+    Board tmpBoard(board);
+
+    for (int i = 0; i < numMoves; i++)
+    {
+        if (!tmpBoard.IsLegalMove(moves[i]))
+        {
+            MoveStyleT badMoveStyle = {mnDebug, csOO, false};
+            char tmpStr[MOVE_STRING_MAX];
+
+            // Illegal move found, probably a zobrist collision.  This can
+            //  happen, but not very often.
+            LogPrint(eLogNormal, "%s: illegal move %s (%d/%d) "
+                     "baseply %d (probably zobrist collision), ignoring\n",
+                     __func__,
+                     moves[i].ToString(tmpStr, &badMoveStyle, nullptr),
+                     i, numMoves, board.Ply());
+            numMoves = i;
+            return false;
+        }
+        // Advance to next move so we can check it.
+        tmpBoard.MakeMove(moves[i]);
+    }
+    return true;
+}
+
 void SearchPv::Log(LogLevelT logLevel) const
 {
     LogPrint(logLevel, "{(SearchPv) startDepth %d numMoves %d moves {",

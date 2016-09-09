@@ -19,9 +19,4 @@
 
 #define NO_LIMIT (-1)
 
-typedef struct {
-    int gameCount;    // for stats keeping.
-} GDynamicT;
-extern GDynamicT gVars;
-
 #endif // GDYNAMIC_H

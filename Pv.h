@@ -53,6 +53,10 @@ public:
     // Returns the number of moves successfully converted.
     int BuildMoveString(char *dstStr, int dstLen,
                         const MoveStyleT &moveStyle, const Board &board) const;
+    // Adjusts the PV to contain only legal moves (might be necessary due to
+    //  zobrist collisions in the transposition table, for instance).  Returns
+    //  'true' iff no illegal moves were found.
+    bool Sanitize(const Board &board);
     MoveT Moves(int idx) const;
     void Log(LogLevelT logLevel) const;
     void SetStartDepth(int depth);
@@ -63,7 +67,7 @@ private:
                     //  node == depth 0; increases with search depth).
     int numMoves; // including quiescing.  Not tied to level (could be lower if
                   //  using hashedmove or mate was found or ran into
-                  //  kMaxPvDepth, could be higher as well with a lot of
+                  //  kMaxPvDepth; could be higher as well with a lot of
                   //  q-moves.)
     MoveT moves[kMaxPvMoves];
 
@@ -82,6 +86,7 @@ public:
     // Returns the number of moves successfully converted.
     int BuildMoveString(char *dstStr, int dstLen,
                         const MoveStyleT &moveStyle, const Board &board) const;
+    bool Sanitize(const Board &board);
     int Level() const; // Getters.
     Eval Eval() const;
     MoveT Moves(int idx) const;
@@ -195,6 +200,11 @@ inline int DisplayPv::BuildMoveString(char *dstStr, int dstLen,
                                       const Board &board) const
 {
     return pv.BuildMoveString(dstStr, dstLen, moveStyle, board);
+}
+
+inline bool DisplayPv::Sanitize(const Board &board)
+{
+    return pv.Sanitize(board);
 }
 
 inline MoveT DisplayPv::Moves(int idx) const

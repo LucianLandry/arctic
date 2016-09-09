@@ -473,7 +473,6 @@ static void processUciNewGameCommand(Game *game)
     gUciState.bGotUciNewGame = true;
     gUciState.initialTime[0] = 0;
     gUciState.initialTime[1] = 0;
-    gVars.gameCount++;
 }
 
 static void processGoCommand(Game *game, const char *pToken)

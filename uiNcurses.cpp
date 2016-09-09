@@ -1048,7 +1048,6 @@ static void UIPlayerMove(Game *game)
             exit(0);
             break;
         case 'n':    // new game
-            gVars.gameCount++;
             game->NewGame();
             return;
         case 'l':    // switch computer level

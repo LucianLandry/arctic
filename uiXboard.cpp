@@ -457,8 +457,6 @@ static void xboardPlayerMove(Game *game)
     }
     else if (matches(inputStr, "new"))
     {
-        gVars.gameCount++;
-
         // New game, computer is Black.
         game->StopAndForce();
         game->EngineConfig().SetSpin(Config::MaxDepthSpin, 0);

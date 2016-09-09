@@ -99,7 +99,8 @@ Thinker::SearchArgsT::SearchArgsT() :
 Thinker::ContextT::ContextT() : maxDepth(0), depth(0) {}
 
 Thinker::SharedContextT::SharedContextT() :
-    maxLevel(NO_LIMIT), maxNodes(0), randomMoves(false), canResign(true) {}
+    maxLevel(NO_LIMIT), maxNodes(0), randomMoves(false), canResign(true),
+    gameCount(0) {}
 
 static void onMaxDepthChanged(const Config::SpinItem &item, Thinker &th)
 {
@@ -316,6 +317,7 @@ void Thinker::CmdNewGame()
     gTransTable.Reset();
     gHistoryWindow.Clear();
     sharedContext->pv.Clear();
+    sharedContext->gameCount++;
     if (!context.board.SetPosition(Variant::Current()->StartingPosition()))
         assert(0);
 }
@@ -627,6 +629,12 @@ void Thinker::RspNotifyStats(const ThinkerStatsT &stats) const
 void Thinker::RspNotifyPv(const ThinkerStatsT &stats, const DisplayPv &pv) const
 {
     RspPvArgsT args = { stats, pv };
+    if (!args.pv.Sanitize(context.board))
+    {
+        LogPrint(eLogNormal, "%s: game %d: note: illegal move detected, "
+                 "probably zobrist collision\n",
+                 __func__, sharedContext->gameCount);
+    }
     compSendRsp(eRspPv, &args,
                 // We (lazily) copy the full struct.  We could have dug into
                 //  the pv and only sent the number of valid moves.

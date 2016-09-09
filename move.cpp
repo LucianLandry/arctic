@@ -387,14 +387,13 @@ int MovesToString(char *dstStr, int dstStrSize,
             MoveStyleT badMoveStyle = {mnDebug, csOO, false};
             char tmpStr[MOVE_STRING_MAX];
 
-            // Illegal move found, probably a zobrist collision.  This can
-            //  happen, but not very often.
-            LogPrint(eLogNormal, "%s: game %d: illegal move %s "
-                     "baseply %d depth %d numMoves %d (probably zobrist "
-                     "collision), ignoring\n",
-                     __func__, gVars.gameCount,
+            // Sanity check for illegal moves.
+            // Shouldn't happen with a well-behaved engine.
+            LogPrint(eLogNormal,
+                     "%s: illegal move %s (%d/%d) baseply %d, ignoring\n",
+                     __func__,
                      moves[i].ToString(tmpStr, &badMoveStyle, nullptr),
-                     board.Ply(), i, numMoves);
+                     i, numMoves, board.Ply());
             break;
         }
 
