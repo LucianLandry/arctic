@@ -153,7 +153,7 @@ protected:
 
     // This MUST be a power of 2 (to make our hashing work), and MUST be at
     //  least 128 to account for the 50-move rule (100 plies == 50 moves)
-    static const int NumSavedPositions = 128;
+    static const int kNumSavedPositions = 128;
     
     // Saved positions.  Used to detect 3-fold repetition.  The fifty-move
     //  rule limits the number I need to 100, and 128 is the next power-of-2
@@ -163,13 +163,13 @@ protected:
     //  game would still be drawn by the fifty-move rule.  However for exotic
     //  variants like Crazyhouse, it would be theoretically possible to repeat
     //  the position thrice w/out invoking the fifty-move rule.  FIXME?
-    PositionInfoElementT positions[NumSavedPositions];
+    PositionInfoElementT positions[kNumSavedPositions];
 
     // This acts as a hash table to store positions that potentially repeat
     // each other.  There are only 128 elements ('positions', above) that are
     // spread among each entry, so hopefully each list here is about 1
     // element in length.
-    ListT posList[NumSavedPositions];
+    ListT posList[kNumSavedPositions];
 
     // This is is filled in by MakeMove() and used by UnmakeMove().
     struct UnMakeT
