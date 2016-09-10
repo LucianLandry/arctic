@@ -21,7 +21,6 @@
 
 #include "Board.h"
 #include "Eval.h"
-#include "gDynamic.h"
 #include "gPreCalc.h"
 #include "HistoryWindow.h"
 #include "log.h"
@@ -763,7 +762,8 @@ static void computermove(Thinker *th, bool bPonder)
     // of an elegant (not compute-hogging) way to detect that further-depth
     // searches would be futile, I would implement it.
     int maxSearchDepth =
-        sharedContext.maxLevel == NO_LIMIT ? 100 : sharedContext.maxLevel;
+        sharedContext.maxLevel == Thinker::DepthNoLimit ? 100 :
+        sharedContext.maxLevel;
 
     context.depth = 0; // start search from root depth.
 

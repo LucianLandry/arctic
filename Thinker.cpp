@@ -25,7 +25,6 @@
 #include <type_traits>  // std::is_trivially_copyable<>
 #include <unistd.h>     // close(2)
 
-#include "gDynamic.h"   // gameCount
 #include "HistoryWindow.h"
 #include "log.h"
 #include "Thinker.h"
@@ -99,14 +98,14 @@ Thinker::SearchArgsT::SearchArgsT() :
 Thinker::ContextT::ContextT() : maxDepth(0), depth(0) {}
 
 Thinker::SharedContextT::SharedContextT() :
-    maxLevel(NO_LIMIT), maxNodes(0), randomMoves(false), canResign(true),
+    maxLevel(DepthNoLimit), maxNodes(0), randomMoves(false), canResign(true),
     gameCount(0) {}
 
 static void onMaxDepthChanged(const Config::SpinItem &item, Thinker &th)
 {
-    int maxLevel = item.Value() - 1;
-    th.SharedContext().maxLevel = maxLevel;
-    if (maxLevel != NO_LIMIT && th.Context().maxDepth > maxLevel)
+    volatile int &maxLevel = th.SharedContext().maxLevel; // shorthand
+    maxLevel = item.Value() - 1;
+    if (maxLevel != Thinker::DepthNoLimit && th.Context().maxDepth > maxLevel)
         th.CmdMoveNow();
 }
 static void onMaxNodesChanged(const Config::SpinItem &item, Thinker &th)

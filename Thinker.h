@@ -163,12 +163,13 @@ public:
     // (used by engine to track/manipulate internal state)
     inline ContextT &Context();
 
+    static const int DepthNoLimit = -1;
     struct SharedContextT
     {
-        SharedContextT();      // ctor
+        SharedContextT(); // ctor
         // The following are currently only meaningful for the root thinker:
-        // Config variable.  -1 == no limit.  Like 'maxDepth', except 'maxDepth'
-        //  is manipulated by the engine.
+        // Config variable.  DepthNoLimit == no limit.  Like 'maxDepth', except
+        //  'maxDepth' is manipulated by the engine.
         volatile int maxLevel;
         // Config variable.  0 == no limit.  Max nodes we are authorized to
         //  search.

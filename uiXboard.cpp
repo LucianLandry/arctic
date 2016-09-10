@@ -33,7 +33,6 @@
 #include <string.h>
 
 #include "clockUtil.h"
-#include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
 #include "MoveList.h"

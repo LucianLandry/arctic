@@ -26,7 +26,6 @@
 #include "Clock.h"
 #include "clockUtil.h"
 #include "conio.h"
-#include "gDynamic.h"
 #include "gPreCalc.h"
 #include "HistoryWindow.h"
 #include "log.h"

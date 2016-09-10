@@ -20,7 +20,6 @@
 #include <stdlib.h>
 
 #include "Board.h"
-#include "gDynamic.h"
 #include "move.h"
 #include "MoveList.h"
 #include "uiUtil.h"

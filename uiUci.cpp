@@ -70,7 +70,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gDynamic.h"
 #include "gPreCalc.h"
 #include "log.h"
 #include "MoveList.h"
