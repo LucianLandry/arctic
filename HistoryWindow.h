@@ -19,8 +19,8 @@
 
 #include <stdlib.h> // abs(3)
 
-#include "ref.h"
 #include "move.h"
+#include "ref.h"
 
 // For a better description of the history heuristic, see (for example):
 // https://chessprogramming.wikispaces.com/History+Heuristic

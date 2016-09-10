@@ -44,7 +44,8 @@ public:
         *const MaxDepthSpin, *const MaxDepthDescription,
         *const MaxNodesSpin, *const MaxNodesDescription,
         *const RandomMovesCheckbox, *const RandomMovesDescription,
-        *const CanResignCheckbox, *const CanResignDescription;
+        *const CanResignCheckbox, *const CanResignDescription,
+        *const HistoryWindowSpin, *const HistoryWindowDescription;
     
     Config() = default;
     Config(const Config &other) = default;

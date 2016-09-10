@@ -27,7 +27,6 @@
 #include "clockUtil.h"
 #include "conio.h"
 #include "gPreCalc.h"
-#include "HistoryWindow.h"
 #include "log.h"
 #include "Pv.h"
 #include "ui.h"
@@ -316,6 +315,9 @@ static void UIOptionsDraw(Game *game)
     const Config::CheckboxItem *cbItem =
         game->EngineConfig().CheckboxItemAt(Config::RandomMovesCheckbox);
     bool randomMoves = cbItem == nullptr ? false : cbItem->Value();
+
+    sItem = game->EngineConfig().SpinItemAt(Config::HistoryWindowSpin);
+    int histWindow = sItem == nullptr ? -1 : sItem->Value();
     
     UIWindowClear(OPTIONS_X, 1, SCREEN_WIDTH - OPTIONS_X, 12);
     gotoxy(OPTIONS_X, 1);
@@ -331,8 +333,7 @@ static void UIOptionsDraw(Game *game)
     prettyprint(6,  "Quit",           "Ponder (%s)",
                 game->Ponder() ? "On" : "Off");
 
-    prettyprint(8,  "Generate moves", "History window (%d)",
-                gHistoryWindow.Window());
+    prettyprint(8,  "Generate moves", "History window (%d)", histWindow);
     prettyprint(9,  "Move now",       "Time control");
     prettyprint(10, "Flip board",     "Undo");
     prettyprint(11, "Color",          "redO");
@@ -493,9 +494,9 @@ static int modal(const char *format, ...)
     va_list ap;
 
     va_start(ap, format);
-    len = vsnprintf(message, 80, format, ap);
+    len = vsnprintf(message, sizeof(message), format, ap);
     va_end(ap);
-    assert(len < 80);
+    assert(len < sizeof(message));
 
     // Display the message.
     gotoxy((SCREEN_WIDTH / 2) - len / 2, 25);
@@ -527,7 +528,7 @@ static int modal(const char *format, ...)
 // bytes long.
 // Returns 'myStr'.
 static char *modalString(char *myStr, int myStrLen,
-                          const char *validChars, const char *format, ...)
+                         const char *validChars, const char *format, ...)
 {
     int chr, i;
     int len;
@@ -728,7 +729,7 @@ static void UITimeMenu(Game *game)
                 do
                 {
                     modalString(timeStr, 9, /* xx:yy:zz\0 */
-                                 "0123456789:inf", "Set start time to? >");
+                                "0123456789:inf", "Set start time to? >");
                 } while (!TimeStringIsValid(timeStr));
 
                 for (i = 0; i < NUM_PLAYERS; i++)
@@ -746,7 +747,7 @@ static void UITimeMenu(Game *game)
                 do
                 {
                     modalString(timeStr, 9, /* xx:yy:zz\0 */
-                                 "0123456789:", "Set increment to? >");
+                                "0123456789:", "Set increment to? >");
                 } while (!TimeStringIsValid(timeStr));
 
                 for (i = 0; i < NUM_PLAYERS; i++)
@@ -763,7 +764,7 @@ static void UITimeMenu(Game *game)
                 do
                 {
                     modalString(timeStr, 9, /* xx:yy:zz\0 */
-                                 "0123456789", "Set time control period to? >");
+                                "0123456789", "Set time control period to? >");
                 } while (sscanf(timeStr, "%d", &timeControlPeriod) < 1);
 
                 for (i = 0; i < NUM_PLAYERS; i++)
@@ -780,7 +781,7 @@ static void UITimeMenu(Game *game)
                 do
                 {
                     modalString(timeStr, 9, /* xx:yy:zz\0 */
-                                 "0123456789:inf", "Set per-move limit to? >");
+                                "0123456789:inf", "Set per-move limit to? >");
                 } while (!TimeStringIsValid(timeStr));
 
                 for (i = 0; i < NUM_PLAYERS; i++)
@@ -923,7 +924,6 @@ static void UIPlayerColorChange(void)
         do
         {
             modalString(myStr, 3, "0123456789", "%s color? >", colors[i]);
-            
         } while (sscanf(myStr, "%d", &myColor) < 1 ||
                  myColor < 1 || myColor > 15 ||
                  (i == 1 && myColor == gBoardIf.col[0]));
@@ -1031,7 +1031,6 @@ static void UIPlayerMove(Game *game)
     uint8 comstr[2] = {FLAG, FLAG};
     MoveT myMove = MoveNone;
     int myLevel;
-    int myHiswin;
     char myStr[3];
 
     const Board &board = game->Board(); // shorthand
@@ -1059,14 +1058,18 @@ static void UIPlayerMove(Game *game)
             UIOptionsDraw(game);
             return;
         case 'h':    // change history window
+        {
+            int myHiswin;
             while ((myHiswin = modal("Set to x moves (0-9)? >") - '0') < 0 ||
                    myHiswin > 9)
             {
                 ; // noop
             }
-            gHistoryWindow.SetWindow(myHiswin);
+            game->EngineConfig().SetSpinClamped(Config::HistoryWindowSpin,
+                                                myHiswin);
             UIOptionsDraw(game);
             return;
+        }
         case 'w':    // toggle computer control
         case 'b':
             game->ToggleEngineControl(comstr[0] == 'b');

@@ -25,7 +25,7 @@
 #include <type_traits>  // std::is_trivially_copyable<>
 #include <unistd.h>     // close(2)
 
-#include "HistoryWindow.h"
+#include "HistoryWindow.h" // gHistoryWindow
 #include "log.h"
 #include "Thinker.h"
 #include "TransTable.h" // gTransTable
@@ -71,7 +71,7 @@ struct is_trivially_copyable : integral_constant<bool, __has_trivial_copy(T)> {
                   (bundled into RspSearchDoneArgsT)>
 */   
 
-#define MAXBUFLEN 160
+static const int kMaxBufLen = 160;
 
 Thinker *Thinker::rootThinker = nullptr;
 
@@ -121,6 +121,10 @@ static void onRandomMovesChanged(const Config::CheckboxItem &item, Thinker &th)
 static void onCanResignChanged(const Config::CheckboxItem &item, Thinker &th)
 {
     th.SharedContext().canResign = item.Value();
+}
+static void onHistoryWindowChanged(const Config::SpinItem &item, Thinker &th)
+{
+    gHistoryWindow.SetWindow(item.Value());
 }
 
 // ctor.
@@ -174,6 +178,12 @@ Thinker::Thinker()
                              std::bind(onCanResignChanged,
                                        std::placeholders::_1,
                                        std::ref(*this))));
+    Config().Register(
+        Config::SpinItem(Config::HistoryWindowSpin,
+                         Config::HistoryWindowDescription,
+                         0, gHistoryWindow.Window(), INT_MAX,
+                         std::bind(onHistoryWindowChanged, std::placeholders::_1,
+                                   std::ref(*this))));
     
     goalTime = CLOCK_TIME_INFINITE;
 
@@ -224,7 +234,7 @@ static void compSend(int sock, eThinkMsgT msg, const void *buffer, int bufLen)
 {
     uint8 msgLen = sizeof(eThinkMsgT) + bufLen;
     assert(msgLen >= sizeof(eThinkMsgT) &&
-           msgLen <= sizeof(eThinkMsgT) + MAXBUFLEN);
+           msgLen <= sizeof(eThinkMsgT) + kMaxBufLen);
 
     LOG_DEBUG("%s: sock %d msg %d len %d\n", __func__, sock, msg, msgLen);
 
@@ -250,31 +260,31 @@ static eThinkMsgT compRecv(int sock, void *buffer, int bufLen)
 {
     uint8 msgLen;
     eThinkMsgT msg;
-    char myBuf[MAXBUFLEN];
+    char myBuf[kMaxBufLen];
 
     LOG_DEBUG("%s: sock %d start\n", __func__, sock);
 
-    /* Wait for the msgLen, response, and buffer (if any). */
+    // Wait for the msgLen, response, and buffer (if any).
     recvBuf(sock, &msgLen, 1);
     assert(msgLen >= sizeof(eThinkMsgT) &&
-           msgLen <= sizeof(eThinkMsgT) + MAXBUFLEN);
+           msgLen <= sizeof(eThinkMsgT) + kMaxBufLen);
     LOG_DEBUG("%s: sock %d len %d wait msg\n", __func__, sock, msgLen);
 
     recvBuf(sock, &msg, sizeof(eThinkMsgT));
     LOG_DEBUG("%s: sock %d msg %d len %d\n", __func__, sock, msg, msgLen);
 
     msgLen -= sizeof(eThinkMsgT);
-    if (msgLen) /* any buffer to recv? */
+    if (msgLen) // any buffer to recv?
     {
-        /* Yes, there is. */
-        if (msgLen <= bufLen) /* Can we get the full message? */
+        // Yes, there is.
+        if (msgLen <= bufLen) // Can we get the full message?
         {
-            /* Yes, just recv directly into the buffer. */
+            // Yes, just recv directly into the buffer.
             recvBuf(sock, buffer, msgLen);
         }
         else
         {
-            /* No -- get as much as we can. */
+            // No -- get as much as we can.
             recvBuf(sock, myBuf, msgLen);
             if (buffer)
             {

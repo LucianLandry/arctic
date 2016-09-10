@@ -34,6 +34,10 @@ const char *const Config::CanResignCheckbox = "canResign";
 const char *const Config::CanResignDescription =
     "True iff engine may resign.";
 
+const char *const Config::HistoryWindowSpin = "historyWindow";
+const char *const Config::HistoryWindowDescription =
+    "History heuristic (0 -> disabled, 1 -> killer moves, etc.)";
+
 const char *Config::ErrorString(Config::Error error) const
 {
     switch (error)
