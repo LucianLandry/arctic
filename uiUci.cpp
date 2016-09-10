@@ -132,7 +132,7 @@ static struct
         MoveT ponderMove;
     } result;
 
-    SwitcherContextT *sw;
+    Switcher *sw;
 } gUciState;
 
 static const char *uciStateString()
@@ -215,7 +215,7 @@ static const char *findRecognizedToken(const char *pStr)
     return NULL;
 }
 
-static void uciInit(Game *game, SwitcherContextT *sw)
+static void uciInit(Game *game, Switcher *sw)
 {
     static bool initialized;
 
@@ -250,7 +250,7 @@ static void uciInit(Game *game, SwitcherContextT *sw)
     initialized = true;
 }
 
-void processUciCommand(Game *game, SwitcherContextT *sw)
+void processUciCommand(Game *game, Switcher *sw)
 {
     char hashString[160];
     int rv;
@@ -800,8 +800,7 @@ static void uciPlayerMove(Game *game)
         exit(0);
     }
 
-    // Wait for more input.
-    SwitcherSwitch(gUciState.sw);
+    gUciState.sw->Switch(); // Wait for more input.
 }
 
 static void uciNotifyMove(Game *game, MoveT move)

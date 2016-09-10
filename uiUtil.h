@@ -23,7 +23,7 @@
 #include "Game.h"
 #include "Piece.h"
 #include "ref.h"       // Rank(), File()
-#include "switcher.h"
+#include "Switcher.h"
 #include "Thinker.h"
 
 // Piece conversion routines.
@@ -83,13 +83,13 @@ bool matchesNoCase(const char *str, const char *needle);
 
 // Get a line of input from stdin, of max string length "maxLen"
 // (or unlimited if maxLen <= 0)
-char *getStdinLine(int maxLen, SwitcherContextT *sw);
+char *getStdinLine(int maxLen, Switcher *sw);
 
 // Terminate a string 's' at the 1st occurence of newline.  Returns 's' as a
 // convenience.
 char *ChopBeforeNewLine(char *s);
 
-void uiThreadInit(Game *game, SwitcherContextT *sw,
+void uiThreadInit(Game *game, Switcher *sw,
                   arctic::Semaphore *readySem);
 
 #endif // UIUTIL_H

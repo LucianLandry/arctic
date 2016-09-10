@@ -499,7 +499,7 @@ static char *myFgets(char *s, int size, FILE *stream)
     return (chr == EOF && i == 0) ? NULL : s;
 }
 
-char *getStdinLine(int maxLen, SwitcherContextT *sw)
+char *getStdinLine(int maxLen, Switcher *sw)
 {
     // Polyglot likes to send long "position" commands (the startpos and all
     // the moves, not just the FEN position after the last capture/pawn push.
@@ -547,24 +547,24 @@ char *getStdinLine(int maxLen, SwitcherContextT *sw)
             // but that would screw up when handling a single Mac-style CR
             // (0x0d) which is explicitly allowed by the UCI spec.
             bytesRead = 0;
-            SwitcherSwitch(sw);
+            sw->Switch();
         }
     }
 
     return buf;
 }
 
-static void uiThread(Game *game, SwitcherContextT *sw, Semaphore *readySem)
+static void uiThread(Game *game, Switcher *sw, Semaphore *readySem)
 {
     gUI->init(game, sw);
     // Let the main thread know it is safe to continue.
     readySem->post();
-    SwitcherRegister(sw);
+    sw->Register();
     while (1)
         gUI->playerMove(game);
 }
 
-void uiThreadInit(Game *game, SwitcherContextT *sw, Semaphore *readySem)
+void uiThreadInit(Game *game, Switcher *sw, Semaphore *readySem)
 {
     std::thread *mainUiThread =
         new std::thread(uiThread, game, sw, readySem);

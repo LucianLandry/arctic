@@ -53,7 +53,7 @@ static struct {
     int col[2];    // player colors.
     int flipped;   // bool, is the board inverted (black on the bottom)
     int cursCoord; // coordinate cursor is at.
-    SwitcherContextT *sw;
+    Switcher *sw;
 } gBoardIf;
 
 
@@ -832,7 +832,7 @@ static void UIGetCommand(uint8 command[], Game *game)
     {
         // Wait for actual input.
         while (!kbhit())
-            SwitcherSwitch(gBoardIf.sw);
+            gBoardIf.sw->Switch();
         c = getch();
         if (strchr(validChars, c) != NULL)
         {
@@ -1002,7 +1002,7 @@ static void UIMovelistShow(const MoveList &mvlist, const Board &board)
 }
 
 // Do any UI-specific initialization.
-static void UIInit(Game *game, SwitcherContextT *sw)
+static void UIInit(Game *game, Switcher *sw)
 {
     setlocale(LC_CTYPE, ""); // necessary for a UTF-8 console cursor
     initconio();

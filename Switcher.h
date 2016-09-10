@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//          switcher.h - rudimentary context-switching functionality.
+//          Switcher.h - rudimentary context-switching functionality.
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -19,16 +19,17 @@
 
 #include "aSemaphore.h" // arctic::Semaphore
 
-#define SWITCHER_MAX_USERS 2
-
-typedef struct {
-    arctic::Semaphore sems[SWITCHER_MAX_USERS];
+class Switcher
+{
+public:
+    Switcher();
+    void Register();
+    void Switch();   // Switches between threads, round-robin style.
+private:
+    static const int kMaxUsers = 2;
+    arctic::Semaphore sems[kMaxUsers];
     int currentUser;
     int numUsers;
-} SwitcherContextT;
+};
 
-void SwitcherInit(SwitcherContextT *sw);
-void SwitcherRegister(SwitcherContextT *sw);
-void SwitcherSwitch(SwitcherContextT *sw);
-
-#endif /* SWITCHER_H */
+#endif // SWITCHER_H

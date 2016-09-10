@@ -48,7 +48,7 @@ static struct {
     bool badPosition; // can be triggered by editing a bad position
     bool newgame;     // turned on every "new", turned off every "go"
     bool ponder;
-    SwitcherContextT *sw;
+    Switcher *sw;
     int engineLastPlayed; // player engine last played for (0 -> white,
                           //  1 -> black).  The engine might not be currently
                           //  playing for either side, but that is irrelevant.
@@ -135,7 +135,7 @@ static void xboardEditPosition(Position &position)
     }
 }
 
-static void xboardInit(Game *game, SwitcherContextT *sw)
+static void xboardInit(Game *game, Switcher *sw)
 {
     static bool initialized;
     if (initialized)
@@ -166,7 +166,7 @@ static void setIcsClocks(Game *game, bool enabled)
     }
 }
 
-void processXboardCommand(Game *game, SwitcherContextT *sw)
+void processXboardCommand(Game *game, Switcher *sw)
 {
     struct sigaction ignoreSig;
     int err;
@@ -648,8 +648,7 @@ static void xboardPlayerMove(Game *game)
         printf("Error (unknown command): %s\n", inputStr);
     }
 
-    // Wait for more input.
-    SwitcherSwitch(gXboardState.sw);
+    gXboardState.sw->Switch(); // Wait for more input.
 }
 
 

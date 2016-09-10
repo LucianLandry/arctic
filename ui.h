@@ -20,11 +20,11 @@
 #include "aTypes.h"
 #include "Board.h"
 #include "Game.h"
-#include "switcher.h"
+#include "Switcher.h"
 #include "Thinker.h"
 
 typedef struct {
-    void (*init)(Game *game, SwitcherContextT *sw);
+    void (*init)(Game *game, Switcher *sw);
     void (*playerMove)(Game *game);
     void (*positionRefresh)(const Position &position);
     void (*exit)(void);
@@ -48,11 +48,11 @@ UIFuncTableT *uiNcursesOps(void);
 
 // uiXboard.c
 UIFuncTableT *uiXboardOps(void);
-void processXboardCommand(Game *game, SwitcherContextT *sw);
+void processXboardCommand(Game *game, Switcher *sw);
 
 // uiUci.c
 UIFuncTableT *uiUciOps(void);
-void processUciCommand(Game *game, SwitcherContextT *sw);
+void processUciCommand(Game *game, Switcher *sw);
 
 // uiJuce.c
 UIFuncTableT *uiJuceOps(void);

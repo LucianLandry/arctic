@@ -18,10 +18,10 @@
 #define PLAYLOOP_H
 
 #include "Game.h"
-#include "switcher.h"
+#include "Switcher.h"
 #include "Thinker.h"
 
 // Main play loop.
-void PlayloopRun(Game &game, Thinker &th, SwitcherContextT &sw);
+void PlayloopRun(Game &game, Thinker &th, Switcher &sw);
 
 #endif // PLAYLOOP_H

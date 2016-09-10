@@ -26,7 +26,7 @@
 #include "ui.h"
 
 // Main play loop.
-void PlayloopRun(Game &game, Thinker &th, SwitcherContextT &sw)
+void PlayloopRun(Game &game, Thinker &th, Switcher &sw)
 {
     struct pollfd pfds[2];
     int res;
@@ -118,7 +118,7 @@ void PlayloopRun(Game &game, Thinker &th, SwitcherContextT &sw)
 
         if (pfds[0].revents & POLLIN)
         {
-            SwitcherSwitch(&sw);
+            sw.Switch();
         }
         // 'else' because user-input handler may change the state on us,
         // so we need to re-poll...

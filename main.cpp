@@ -28,7 +28,7 @@
 #include "gPreCalc.h"
 #include "log.h"
 #include "playloop.h"
-#include "switcher.h"
+#include "Switcher.h"
 #include "Thinker.h"
 #include "TransTable.h"
 #include "ui.h"
@@ -174,9 +174,8 @@ int main(int argc, char *argv[])
     Thinker th; // This is the root thinker.
     ThinkerSearchersCreate(gPreCalc.numProcs, th);
 
-    SwitcherContextT sw;
-    SwitcherInit(&sw);
-    SwitcherRegister(&sw);
+    Switcher sw;
+    sw.Register();
 
     Game game(&th);
 

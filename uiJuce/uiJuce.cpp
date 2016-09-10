@@ -27,7 +27,7 @@ static juce::JUCEApplicationBase *createArcticInstance()
     return new ArcticApp();
 }
 
-static void juceInit(Game *game, SwitcherContextT *sw)
+static void juceInit(Game *game, Switcher *sw)
 {
     // This is the dance we do to get around needing a START_JUCE_APPLICATION()
     // macro.  It is platform-specific.
