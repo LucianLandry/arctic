@@ -177,7 +177,8 @@ public:
         volatile bool randomMoves;
         volatile bool canResign;
         HintPv pv; // Attempts to track the principal variation.
-        int gameCount; // for stats keeping.
+        ThinkerStatsT stats;
+        int gameCount; // for debugging.
     };
     // (used by engine to track/manipulate internal state shared between
     //  threads)

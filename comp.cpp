@@ -76,12 +76,6 @@
 // So, that was hashed.  But we did not complete the Ra2 evaluation before
 // time expired.
 
-
-// Globals.
-// FIXME 'gStats' should maybe not be a global ...
-// but I'm trying to avoid passing extra args to updatePv(), minimax(), and trymove().
-static ThinkerStatsT gStats;
-
 #define HASH_MISS 1
 #define HASH_HIT 0
 
@@ -121,7 +115,7 @@ static void notifyNewPv(Thinker *th, const SearchPv &goodPv, Eval eval)
     // Searching at root level, so let user know the updated line.
     DisplayPv pv;
     pv.Set(th->Context().maxDepth, eval, goodPv);
-    th->RspNotifyPv(gStats, pv);
+    th->RspNotifyPv(th->SharedContext().stats, pv);
 
     // Update the tracked principal variation.
     th->SharedContext().pv.Update(pv);
@@ -333,13 +327,14 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
     int searchDepth = th->Context().maxDepth - curDepth;
     uint16 basePly = board.Ply() - curDepth;
     int strgh = board.RelativeMaterialStrength();
+    ThinkerStatsT &stats = th->SharedContext().stats; // shorthand
 #define QUIESCING (searchDepth < 0)
 
     // I'm trying to use lazy initialization for this function.
-    gStats.nodes++;
+    stats.nodes++;
     if (!QUIESCING)
     {
-        gStats.nonQNodes++;
+        stats.nonQNodes++;
     }
     goodPv->Clear();
 
@@ -414,7 +409,7 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
     // Is there a suitable hit in the transposition table?
     if ((!mightDraw || board.NcpPlies() == 0) &&
         gTransTable.IsHit(&hashEval, &hashMove, board.Zobrist(), searchDepth,
-                          basePly, alpha, beta, &gStats))
+                          basePly, alpha, beta, &stats))
     {
         // record the move (if there is one).
         if (goodPv->Update(hashMove))
@@ -434,7 +429,7 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
     if (curDepth || !th->Context().mvlist.NumMoves())
     {
         // At this point, (expensive) move generation is required.
-        gStats.moveGenNodes++;
+        stats.moveGenNodes++;
         board.GenerateLegalMoves(mvlist, QUIESCING && !inCheck);
     }
     else
@@ -467,7 +462,7 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
 
         // Update the transposition table entry if needed.
         gTransTable.ConditionalUpdate(retVal, MoveNone, board.Zobrist(),
-                                      searchDepth, basePly, &gStats);
+                                      searchDepth, basePly, &stats);
         return retVal;
     }
 
@@ -479,7 +474,7 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
             retVal.Set(strgh, Eval::Win);
             // Update the transposition table entry if needed.
             gTransTable.ConditionalUpdate(retVal, MoveNone, board.Zobrist(),
-                                          searchDepth, basePly, &gStats);
+                                          searchDepth, basePly, &stats);
             return retVal;
         }
 
@@ -626,7 +621,7 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
         // We must go with the best value/move we already had ... if any.
         if (th->CompNeedsToMove() ||
             (th->SharedContext().maxNodes &&
-             gStats.nodes >= th->SharedContext().maxNodes))
+             stats.nodes >= th->SharedContext().maxNodes))
         {
             if (masterNode)
                 ThinkerSearchersBail(); // Wait for any searchers to terminate.
@@ -706,7 +701,7 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
 
     // Update the transposition table entry if needed.
     gTransTable.ConditionalUpdate(retVal, bestMove, board.Zobrist(),
-                                  searchDepth, basePly, &gStats);
+                                  searchDepth, basePly, &stats);
 
     return retVal;
 }
@@ -767,7 +762,7 @@ static void computermove(Thinker *th, bool bPonder)
 
     context.depth = 0; // start search from root depth.
 
-    gStats.Clear();
+    sharedContext.stats.Clear();
 
     // If we can claim a draw without moving, do so w/out thinking.
     if (canClaimDraw(board))
@@ -865,7 +860,7 @@ static void computermove(Thinker *th, bool bPonder)
         context.maxDepth = 0; // reset this
     }
 
-    th->RspNotifyStats(gStats);
+    th->RspNotifyStats(sharedContext.stats);
 
     if (resigned)
     {
