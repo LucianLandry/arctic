@@ -27,10 +27,6 @@
 #include "Position.h"
 #include "ref.h"
 
-// This MUST be a power of 2 (to make our hashing work), and MUST be at least
-// 128 to account for the 50-move rule (100 plies == 50 moves)
-#define NUM_SAVED_POSITIONS 128
-
 class MoveList; // forward declaration for GenerateLegalMoves()
 
 // Using protected inheritance since we do not want to give the user the ability
@@ -155,6 +151,10 @@ protected:
     // repeat, not the original), otherwise -1).
     int repeatPly;
 
+    // This MUST be a power of 2 (to make our hashing work), and MUST be at
+    //  least 128 to account for the 50-move rule (100 plies == 50 moves)
+    static const int NumSavedPositions = 128;
+    
     // Saved positions.  Used to detect 3-fold repetition.  The fifty-move
     //  rule limits the number I need to 100, and 128 is the next power-of-2
     //  which makes calculating the appropriate position for a given ply easy.
@@ -163,16 +163,17 @@ protected:
     //  game would still be drawn by the fifty-move rule.  However for exotic
     //  variants like Crazyhouse, it would be theoretically possible to repeat
     //  the position thrice w/out invoking the fifty-move rule.  FIXME?
-    PositionInfoElementT positions[NUM_SAVED_POSITIONS];
+    PositionInfoElementT positions[NumSavedPositions];
 
     // This acts as a hash table to store positions that potentially repeat
     // each other.  There are only 128 elements ('positions', above) that are
     // spread among each entry, so hopefully each list here is about 1
     // element in length.
-    ListT posList[NUM_SAVED_POSITIONS];
+    ListT posList[NumSavedPositions];
 
     // This is is filled in by MakeMove() and used by UnmakeMove().
-    typedef struct {
+    struct UnMakeT
+    {
         MoveT  move;      // saved move
         Piece  capPiece;  // any captured piece.. does not include en passant.
         // Saved-off values from the Board.
@@ -184,7 +185,7 @@ protected:
         uint64 zobrist;
 
         bool   mightDraw;
-    } UnMakeT;
+    };
     
     std::vector<UnMakeT> unmakes; 
 

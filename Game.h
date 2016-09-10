@@ -26,7 +26,7 @@
 class Game
 {
 public:
-    Game(Thinker *th); // ctor
+    explicit Game(Thinker *th); // ctor
 
     void MakeMove(MoveT move);
     void NewGame(const Board &board, bool resetClocks);

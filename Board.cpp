@@ -35,9 +35,6 @@ static constexpr bool isPow2(int c)
 {
     return c > 0 && (c & (c - 1)) == 0;
 }
-// Sanity check.
-static_assert(NUM_SAVED_POSITIONS >= 128 && isPow2(NUM_SAVED_POSITIONS),
-              "NUM_SAVED_POSITIONS must be >= 128 and a power of 2");
 
 namespace // start unnamed namespace
 {
@@ -157,19 +154,19 @@ void PrivBoard::movePiece(cell_t src, cell_t dst, Piece piece)
 
 inline void PrivBoard::positionSave()
 {
-    PositionInfoElementT *myElem = &positions[ply & (NUM_SAVED_POSITIONS - 1)];
+    PositionInfoElementT *myElem = &positions[ply & (NumSavedPositions - 1)];
     myElem->zobrist = zobrist;
-    ListPush(&posList[zobrist & (NUM_SAVED_POSITIONS - 1)], myElem);
+    ListPush(&posList[zobrist & (NumSavedPositions - 1)], myElem);
 }
 
 inline void PrivBoard::positionRestore()
 {
-    if (unmakes.size() < NUM_SAVED_POSITIONS)
+    if (unmakes.size() < NumSavedPositions)
         return;
 
-    PositionInfoElementT *myElem = &positions[ply & (NUM_SAVED_POSITIONS - 1)];
-    myElem->zobrist = unmakes[unmakes.size() - NUM_SAVED_POSITIONS].zobrist;
-    ListPush(&posList[zobrist & (NUM_SAVED_POSITIONS - 1)], myElem);
+    PositionInfoElementT *myElem = &positions[ply & (NumSavedPositions - 1)];
+    myElem->zobrist = unmakes[unmakes.size() - NumSavedPositions].zobrist;
+    ListPush(&posList[zobrist & (NumSavedPositions - 1)], myElem);
 }
 
 // This is useful for generating a hash for the initial board position, or
@@ -371,7 +368,7 @@ void PrivBoard::setEmptyBoard()
     }
     repeatPly = -1;
 
-    for (i = 0; i < NUM_SAVED_POSITIONS; i++)
+    for (i = 0; i < NumSavedPositions; i++)
     {
         ListInit(&posList[i]);
         ListElementInit(&positions[i].el);
@@ -412,6 +409,9 @@ bool Board::SetPosition(const class Position &position)
 
 Board::Board()
 {
+    // Sanity check.
+    static_assert(NumSavedPositions >= 128 && isPow2(NumSavedPositions),
+                  "NumSavedPositions must be >= 128 and a power of 2");
     if (!SetPosition(Variant::Current()->StartingPosition()))
         assert(0);
 }
@@ -420,7 +420,7 @@ Board::Board(const Board &other)
 {
     if (!other.ConsistencyCheck("Board::Board(const Board &)"))
         assert(0);
-    this->operator=(other);
+    *this = other;
 }
 
 Board &Board::operator=(const Board &other)
@@ -439,7 +439,7 @@ Board &Board::operator=(const Board &other)
 
     // (note: the current position is not put into the hash until a later
     //  positionSave() call.)
-    for (int i = 0; i < NUM_SAVED_POSITIONS; i++)
+    for (int i = 0; i < NumSavedPositions; i++)
     {
         PositionInfoElementT *myElem = &positions[i];
 
@@ -447,7 +447,7 @@ Board &Board::operator=(const Board &other)
         // check against them.
         if ((myElem->zobrist = other.positions[i].zobrist) != 0)
         {
-            ListPush(&posList[myElem->zobrist & (NUM_SAVED_POSITIONS - 1)],
+            ListPush(&posList[myElem->zobrist & (NumSavedPositions - 1)],
                      myElem);
         }
     }
@@ -672,15 +672,15 @@ void Board::MakeMove(MoveT move)
         PositionInfoElementT *myElem;
         
         // We might need to set repeatPly.
-        ListT *myList = &posList[zobrist & (NUM_SAVED_POSITIONS - 1)];
+        ListT *myList = &posList[zobrist & (NumSavedPositions - 1)];
         LIST_DOFOREACH(myList, myElem) // Hopefully a short loop.
         {
             // idx(myElem) must be between board->ply - board->ncpPlies and
             // board->ply - 4 (inclusive) to be counted.
             if (serialBetween(priv->positionInfoElementIndex(*myElem),
                               ((ply - ncpPlies) &
-                               (NUM_SAVED_POSITIONS - 1)),
-                              (ply - 4) & (NUM_SAVED_POSITIONS - 1)) &&
+                               (NumSavedPositions - 1)),
+                              (ply - 4) & (NumSavedPositions - 1)) &&
                 priv->positionHit(myElem->zobrist))
             {
                 repeatPly = ply;
@@ -901,13 +901,13 @@ bool Board::IsDrawThreefoldRepetitionFast() const
         repeats = 0;
         // Limit the counter to something useful.  This cripples the normal
         // case to prevent the pathological worst case (huge ncpPlies).
-        myNcpPlies = MIN(ncpPlies, NUM_SAVED_POSITIONS) - 4;
+        myNcpPlies = MIN(ncpPlies, NumSavedPositions) - 4;
         for (myPly = ply - 4;
              myNcpPlies >= 4 || (repeats == 1 && myNcpPlies >= 0);
              myNcpPlies -= 2, myPly -= 2)
         {
             if (priv->positionHit
-                (positions[myPly & (NUM_SAVED_POSITIONS - 1)].zobrist) &&
+                (positions[myPly & (NumSavedPositions - 1)].zobrist) &&
                 // At this point we have a full match.
                 ++repeats == 2)
             {
