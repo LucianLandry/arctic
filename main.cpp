@@ -106,23 +106,11 @@ static int64 IECStringToInt64(char *str)
     return val;
 }
 
-static bool isPow2(int c)
-{
-    return c > 0 && (c & (c - 1)) == 0;
-}
-
 static bool isValidUI(char *str)
 {
     return
         !strcmp(str, "console") || !strcmp(str, "juce") ||
         !strcmp(str, "uci") || !strcmp(str, "xboard");
-}
-
-// Do some init-time sanity checking to confirm various assumptions.
-static void startupSanityCheck(void)
-{
-    // Some structure sanity checks we probably should not rely on.
-    assert(NUM_SAVED_POSITIONS >= 128 && isPow2(NUM_SAVED_POSITIONS));
 }
 
 int main(int argc, char *argv[])
@@ -134,8 +122,6 @@ int main(int argc, char *argv[])
     char uiString[80] = "";
     bool userSpecifiedHashSize = false;
     
-    startupSanityCheck();
-
     LogInit();
     SystemEnableCoreFile(); // for debugging.
 

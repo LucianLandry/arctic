@@ -31,6 +31,14 @@ using arctic::Rank;
 
 // #define DEBUG_CONSISTENCY_CHECK
 
+static constexpr bool isPow2(int c)
+{
+    return c > 0 && (c & (c - 1)) == 0;
+}
+// Sanity check.
+static_assert(NUM_SAVED_POSITIONS >= 128 && isPow2(NUM_SAVED_POSITIONS),
+              "NUM_SAVED_POSITIONS must be >= 128 and a power of 2");
+
 namespace // start unnamed namespace
 {
 
