@@ -103,6 +103,8 @@ Thinker::SharedContextT::SharedContextT() :
 
 static void onMaxDepthChanged(const Config::SpinItem &item, Thinker &th)
 {
+    if (!th.IsRootThinker())
+        return;
     volatile int &maxLevel = th.SharedContext().maxLevel; // shorthand
     maxLevel = item.Value() - 1;
     if (maxLevel != Thinker::DepthNoLimit && th.Context().maxDepth > maxLevel)
@@ -110,21 +112,52 @@ static void onMaxDepthChanged(const Config::SpinItem &item, Thinker &th)
 }
 static void onMaxNodesChanged(const Config::SpinItem &item, Thinker &th)
 {
+    if (!th.IsRootThinker())
+        return;
     th.SharedContext().maxNodes = item.Value();
     // The engine itself should shortly notice that it has exceeded
     //  maxNodes (if applicable), and return.
 }
 static void onRandomMovesChanged(const Config::CheckboxItem &item, Thinker &th)
 {
+    if (!th.IsRootThinker())
+        return;
     th.SharedContext().randomMoves = item.Value();
 }
 static void onCanResignChanged(const Config::CheckboxItem &item, Thinker &th)
 {
+    if (!th.IsRootThinker())
+        return;
     th.SharedContext().canResign = item.Value();
 }
 static void onHistoryWindowChanged(const Config::SpinItem &item, Thinker &th)
 {
+    if (!th.IsRootThinker())
+        return;
     gHistoryWindow.SetWindow(item.Value());
+}
+void Thinker::onMaxMemoryChanged(const Config::SpinItem &item)
+{
+    if (!IsRootThinker())
+        return;
+    State origState = state;
+    if (CompIsBusy())
+        CmdBail();
+    gTransTable.Reset(uint64(item.Value()) * 1024 * 1024);
+    switch (origState) // continue where we were interrupted, if applicable.
+    {
+        case State::Pondering:
+            CmdPonder(context.mvlist);
+            break;
+        case State::Thinking:
+            CmdThink(context.clock, context.mvlist);
+            break;
+        case State::Searching:
+            CmdSearch(searchArgs.alpha, searchArgs.beta, searchArgs.move);
+            break;
+        default:
+            break;
+    }
 }
 
 // ctor.
@@ -182,8 +215,14 @@ Thinker::Thinker()
         Config::SpinItem(Config::HistoryWindowSpin,
                          Config::HistoryWindowDescription,
                          0, gHistoryWindow.Window(), INT_MAX,
-                         std::bind(onHistoryWindowChanged, std::placeholders::_1,
-                                   std::ref(*this))));
+                         std::bind(onHistoryWindowChanged,
+                                   std::placeholders::_1, std::ref(*this))));
+    Config().Register(
+        Config::SpinItem(Config::MaxMemorySpin, Config::MaxMemoryDescription,
+                         0, gTransTable.DefaultSize() / (1024 * 1024),
+                         gTransTable.MaxSize() / (1024 * 1024),
+                         std::bind(&Thinker::onMaxMemoryChanged, this,
+                                   std::placeholders::_1)));
     
     goalTime = CLOCK_TIME_INFINITE;
 
@@ -483,12 +522,16 @@ void Thinker::calcGoalTime(const Clock &myClock)
 
 void Thinker::CmdThink(const Clock &myClock, const MoveList &mvlist)
 {
+    context.clock = myClock;
+    context.clock.Start();
     calcGoalTime(myClock);
     doThink(eCmdThink, &mvlist);
 }
 
 void Thinker::CmdThink(const Clock &myClock)
 {
+    context.clock = myClock;
+    context.clock.Start();
     calcGoalTime(myClock);
     doThink(eCmdThink, nullptr);
 }
@@ -626,7 +669,6 @@ void Thinker::RspSearchDone(MoveT move, Eval eval, const SearchPv &pv) const
     RspSearchDoneArgsT args = {move, eval, pv};
     compSendRsp(eRspSearchDone, &args, sizeof(args));
 }
-
 
 void Thinker::RspNotifyStats(const ThinkerStatsT &stats) const
 {

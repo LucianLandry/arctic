@@ -121,25 +121,27 @@ int64 TransTable::normalizeSize(int64 size)
 size_t TransTable::MaxSize()
 {
     // Refuse to go over (total detected system memory - 32M)
-    int64 result = SystemTotalMemory() - 32 * 1024 * 1024;
-    return normalizeSize(result);
+    int64 result = SystemTotalMemory() - (32 * 1024 * 1024);
+    // As a convenience, round down to the nearest MiB.
+    return result / (1024 * 1024) * (1024 * 1024);
 }
 
 // Returns the default size (in bytes) of the transposition table (ie, what
 //  size is used if you Reset(void) the table at startup).
-size_t TransTable::DefaultSize() const
+size_t TransTable::DefaultSize()
 {
     // As a convenience, pick MIN(1/3 total memory, 512M).
     int64 size = SystemTotalMemory() / 3;
     size = MIN(size, 512 * 1024 * 1024);
-    return normalizeSize(size);
+    // As another convenience, round down to the nearest MiB.
+    return size / (1024 * 1024) * (1024 * 1024);
 }
 
 size_t TransTable::sanitizeSize(int64 size)
 {
     return
         size < -1 ? 0 : // bad parameter
-        MIN((uint64) normalizeSize(size), MaxSize());
+        MIN((uint64) normalizeSize(size), normalizeSize(MaxSize()));
 }
 
 void TransTable::resetEntries()
@@ -169,7 +171,7 @@ TransTable::TransTable()
 {
     // 'locks' should already be initialized.
     size = 0;
-    nextSize = DefaultSize();
+    nextSize = normalizeSize(DefaultSize());
     prepCalcEntry();
 }
 

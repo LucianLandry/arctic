@@ -89,6 +89,7 @@ char *getStdinLine(int maxLen, Switcher *sw);
 // convenience.
 char *ChopBeforeNewLine(char *s);
 
+void uiPrepareEngines(Game *game); // Tell the engines we are about to start
 void uiThreadInit(Game *game, Switcher *sw,
                   arctic::Semaphore *readySem);
 

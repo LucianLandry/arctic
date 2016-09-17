@@ -109,12 +109,19 @@ static int endGameEval(const Board &board, int turn)
 //
 // 'lowBound' and 'highBound' are the possible limits of the best 'move' found
 // so far.
+static void calcHashFullPerMille(ThinkerStatsT &stats)
+{
+    stats.hashFullPerMille =
+        gTransTable.NumEntries() == 0 ? 0 :
+        (uint64) stats.hashWroteNew * 1000 / gTransTable.NumEntries();    
+}
 
 static void notifyNewPv(Thinker *th, const SearchPv &goodPv, Eval eval)
 {
     // Searching at root level, so let user know the updated line.
     DisplayPv pv;
     pv.Set(th->Context().maxDepth, eval, goodPv);
+    calcHashFullPerMille(th->SharedContext().stats);
     th->RspNotifyPv(th->SharedContext().stats, pv);
 
     // Update the tracked principal variation.
@@ -860,6 +867,7 @@ static void computermove(Thinker *th, bool bPonder)
         context.maxDepth = 0; // reset this
     }
 
+    calcHashFullPerMille(th->SharedContext().stats);
     th->RspNotifyStats(sharedContext.stats);
 
     if (resigned)

@@ -22,6 +22,10 @@ const char *const Config::MaxDepthSpin = "limits/maxDepth";
 const char *const Config::MaxDepthDescription =
     "Max depth engine may search.  0 implies 'no limit'.";
 
+const char *const Config::MaxMemorySpin = "limits/maxMemory";
+const char *const Config::MaxMemoryDescription =
+    "Max cumulative size of transposition table + other adjustable caches (in MiB).";
+
 const char *const Config::MaxNodesSpin = "limits/maxNodes";
 const char *const Config::MaxNodesDescription =
     "Max nodes engine may search.  0 implies 'no limit'.";

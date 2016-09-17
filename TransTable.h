@@ -45,13 +45,20 @@ public:
     //  transposition table.
     size_t NumEntries() const;
 
-    // Returns the default size (in bytes) of the transposition table (ie, what
-    //  size is used if you Reset(void) the table at startup).
-    size_t DefaultSize() const;
-
-    // Returns the current size (in bytes) of the transposition table.
+    // Returns the current size (in bytes) of the transposition table.  (This
+    //  size will likely be slightly smaller than that requested, due to our
+    //  hashing strategy).
     size_t Size() const;
 
+    // Returns the default size (in bytes) of the transposition table (ie, what
+    //  size is used if you Reset(void) the table at startup).
+    static size_t DefaultSize();
+    
+    // Returns the maximum *possible* size you could configure the transposition
+    //  table to (in bytes).  SetDesiredSize() and Reset() requests are capped
+    //  to this size.
+    static size_t MaxSize();
+    
     // Pre-cache a transtable entry for later use.
     void Prefetch(uint64 zobrist) const;
 
@@ -67,11 +74,6 @@ public:
     void ConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
                            int searchDepth, uint16 basePly,
                            ThinkerStatsT *stats);
-
-    // Returns the maximum *possible* size you could configure the transposition
-    //  table to (in bytes).  SetDesiredSize() and Reset() requests are capped
-    //  to this size.
-    static size_t MaxSize();
 
 private:
     struct HashPositionT

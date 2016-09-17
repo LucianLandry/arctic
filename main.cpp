@@ -30,7 +30,6 @@
 #include "playloop.h"
 #include "Switcher.h"
 #include "Thinker.h"
-#include "TransTable.h"
 #include "ui.h"
 #include "uiUtil.h"
 
@@ -115,12 +114,11 @@ static bool isValidUI(char *str)
 
 int main(int argc, char *argv[])
 {
-    int hashTableSize = gTransTable.DefaultSize();
+    int64 hashTableSize = -1;
     char hashTableSizeString[40];
     int numCpuThreads = -1;
     int i;
     char uiString[80] = "";
-    bool userSpecifiedHashSize = false;
     
     LogInit();
     SystemEnableCoreFile(); // for debugging.
@@ -136,7 +134,6 @@ int main(int argc, char *argv[])
             {
                 usage(argv[0]);
             }
-            userSpecifiedHashSize = true;
         }
         else if (!strncmp(argv[i], "-p=", 3))
         {
@@ -165,10 +162,7 @@ int main(int argc, char *argv[])
 
     // Must be done before seeding, if we want reproducable results.  Also must
     //  be done before any Boards (or anything that depends on it) are declared.
-    gPreCalcInit(userSpecifiedHashSize, numCpuThreads);
-
-    gTransTable.SetDesiredSize(hashTableSize);
-
+    gPreCalcInit(hashTableSize, numCpuThreads);
     srandom(CurrentTime() / 1000000);
 
     Thinker th; // This is the root thinker.

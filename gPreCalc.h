@@ -69,14 +69,14 @@ typedef struct {
     uint8 castleMask[NUM_SQUARES];
 
     int numProcs;
-    bool userSpecifiedHashSize;
+    int64 userSpecifiedHashSize;
 
     // For convenience.
     Piece *normalStartingPieces;
 } GPreCalcT;
 extern GPreCalcT gPreCalc;
 
-void gPreCalcInit(bool userSpecifiedHashSize, int numCpuThreads);
+void gPreCalcInit(int64 userSpecifiedHashSize, int numCpuThreads);
 uint64 random64(void); // generate a 64-bit random number.
 
 #ifdef __cplusplus

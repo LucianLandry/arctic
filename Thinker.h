@@ -145,6 +145,7 @@ public:
         ContextT();      // ctor
         Board board;     // Internal board, used (and clobbered) by
                          //  think/ponder/search.  Set by CmdSetBoard().
+        Clock clock;     // Time we started thinking.  Set by CmdThink().
         MoveList mvlist; // Limited list of moves we are allowed to think or
                          //  ponder on.  When empty (the usual state), we
                          //  think/ponder on all moves.  Set by CmdThink() and
@@ -236,7 +237,8 @@ private:
     eThinkMsgT recvCmd(void *buffer, int bufLen) const;
     eThinkMsgT recvRsp(void *buffer, int bufLen);
     void doThink(eThinkMsgT cmd, const MoveList *mvlist);
-
+    void onMaxMemoryChanged(const Config::SpinItem &item);
+    
     // There is (currently) one 'master' thinker that coordinates all of the
     //  other thinkers, which act as search threads.
     static Thinker *rootThinker;

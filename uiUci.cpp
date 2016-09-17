@@ -73,8 +73,6 @@
 #include "gPreCalc.h"
 #include "log.h"
 #include "MoveList.h"
-#include "playloop.h"
-#include "TransTable.h"
 #include "ui.h"
 #include "uiUtil.h"
 
@@ -246,7 +244,7 @@ static void uciInit(Game *game, Switcher *sw)
     game->SetAutoPlayEngineMoves(false);
     // FIXME we don't want to do this until later (because initializing the
     //  transposition table can take some time), but for now it's okay.
-    game->NewGame();
+    uiPrepareEngines(game);
     initialized = true;
 }
 
@@ -256,13 +254,22 @@ void processUciCommand(Game *game, Switcher *sw)
     int rv;
 
     uciInit(game, sw);
-    rv = snprintf(hashString, sizeof(hashString),
-                  "option name Hash type spin default %" PRId64
-                  " min 0 max %" PRId64 "\n",
-                  (int64) gTransTable.DefaultSize() / (1024 * 1024),
-                  (int64) gTransTable.MaxSize() / (1024 * 1024));
-    assert(rv >= 0 && (uint) rv < sizeof(hashString)); // bail on truncated string
-
+    const Config::SpinItem *sItem =
+        game->EngineConfig().SpinItemAt(Config::MaxMemorySpin);
+    if (gPreCalc.userSpecifiedHashSize != -1 && sItem != nullptr)
+    {
+        rv = snprintf(hashString, sizeof(hashString),
+                      "option name Hash type spin default %d min 0 max %d\n",
+                      sItem->Value(), sItem->Max());
+        // bail on truncated string.
+        assert(rv >= 0 && (uint) rv < sizeof(hashString));
+    }
+    else
+    {
+        // Do not advertise a hash option if user overrode it.
+        hashString[0] = '\0';
+    }
+    
     // Respond appropriately to the "uci" command.
     printf("id name arctic %s.%s-%s\n"
            "id author Lucian Landry\n"
@@ -276,8 +283,7 @@ void processUciCommand(Game *game, Switcher *sw)
            " Lucian Landry\n"
            "uciok\n",
            VERSION_STRING_MAJOR, VERSION_STRING_MINOR, VERSION_STRING_PHASE,
-           // Do not advertise a hash option if user overrode it.
-           gPreCalc.userSpecifiedHashSize ? "" : hashString,
+           hashString,
            VERSION_STRING_MAJOR, VERSION_STRING_MINOR, VERSION_STRING_PHASE);
 
     // switch to uiUci if we have not already.
@@ -407,7 +413,7 @@ static int convertNextInteger64(const char **pToken, int64 *result,
 
 static void processSetOptionCommand(Game *game, const char *inputStr)
 {
-    int64 hashSizeMB;
+    int64 hashSizeMiB;
     const char *pToken;
 
     if (isSearching())
@@ -430,14 +436,13 @@ static void processSetOptionCommand(Game *game, const char *inputStr)
         game->EngineConfig().SetCheckbox(Config::RandomMovesCheckbox,
                                          !strcasecmp(pToken, "true"));
     }
-    else if (!gPreCalc.userSpecifiedHashSize &&
+    else if (gPreCalc.userSpecifiedHashSize == -1 &&
              matches(inputStr, "name") &&
              matchesNoCase((pToken = findNextToken(inputStr)), "Hash") &&
              matches((pToken = findNextToken(pToken)), "value") &&
-             convertNextInteger64(&pToken, &hashSizeMB, 0, "Hash") == 0 &&
-             hashSizeMB <= (int64) gTransTable.MaxSize() / (1024 * 1024))
+             convertNextInteger64(&pToken, &hashSizeMiB, 0, "Hash") == 0)
     {
-        gTransTable.Reset((int64) hashSizeMB * 1024 * 1024);
+        game->EngineConfig().SetSpinClamped(Config::MaxMemorySpin, hashSizeMiB);
     }
     else if (matches(inputStr, "name") &&
              matchesNoCase((pToken = findNextToken(inputStr)), "Ponder") &&
@@ -868,11 +873,11 @@ static char *buildStatsString(char *result, Game *game,
 
     charsWritten = sprintf(result, "time %d nodes %d nps %d",
                            timeTaken, nodes, nps);
-    if (gTransTable.NumEntries())
+    const Config::SpinItem *sItem =
+        game->EngineConfig().SpinItemAt(Config::MaxMemorySpin);
+    if (sItem != nullptr && sItem->Value()) // non-empty hash?
     {
-        sprintf(&result[charsWritten], " hashfull %d",
-                (int) (((uint64) stats->hashWroteNew) * 1000 /
-                       gTransTable.NumEntries()));
+        sprintf(&result[charsWritten], " hashfull %d", stats->hashFullPerMille);
     }
     return result;
 }
@@ -885,13 +890,6 @@ static void uciNotifyPV(Game *game, const RspPvArgsT *pvArgs)
     
     if (gUciState.state == UciState::PonderAll)
     {
-#if 1
-        char lanString[kMaxPvStringLen];
-        int moveCount = pv.BuildMoveString(lanString, sizeof(lanString),
-                                           gMoveStyleUCI, board);
-        printf("info string uciNotifyPV: moveCount %d actual pv of %s\n",
-               moveCount, lanString);
-#endif
         // If we are not actually pondering on the suggested GUI move,
         // do not advertise the PV or eval (to avoid confusing the GUI).
         if (pv.Moves(0) != gUciState.ponderMove)

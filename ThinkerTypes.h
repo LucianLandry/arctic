@@ -32,6 +32,7 @@ struct ThinkerStatsT
     int hashHitGood;  // hashtable hits that returned immediately.
     int hashWroteNew; // how many times (in this ply) we wrote to a unique
                       //  hash entry.  Used for UCI hashfull stats.
+    int hashFullPerMille; // how "full" is the hash (in parts per thousand).
     ThinkerStatsT();  // This struct can initialize itself.
     void Clear();
 };

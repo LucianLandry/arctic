@@ -31,10 +31,6 @@
 // button (a simple trigger)
 // string (a free-form string)
 
-// FIXME: not used yet, but should be
-// #define kConfigHistoryWindowSpin "historyWindow"
-// #define kConfigTranpositionTableSizeSpin "limits/transpositionTableSize"
-
 class Config
 {
 public:
@@ -42,6 +38,7 @@ public:
     //  variables:)
     static const char
         *const MaxDepthSpin, *const MaxDepthDescription,
+        *const MaxMemorySpin, *const MaxMemoryDescription,
         *const MaxNodesSpin, *const MaxNodesDescription,
         *const RandomMovesCheckbox, *const RandomMovesDescription,
         *const CanResignCheckbox, *const CanResignDescription,

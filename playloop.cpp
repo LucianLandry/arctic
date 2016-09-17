@@ -76,8 +76,8 @@ void PlayloopRun(Game &game, Thinker &th, Switcher &sw)
         }
 
         bigtime_t goalTime = th.GoalTime();
-        // The computer cannot usually decide for itself when to move, so
-        // we decide for it.
+        // The engine cannot currently prompt itself to move (usually), so we
+        //  take care of that.
         if (goalTime != CLOCK_TIME_INFINITE)
         {
             moveNowTimeout = (myTime - goalTime) / 1000;

@@ -23,6 +23,7 @@
 #include <thread>
 
 #include "clockUtil.h"
+#include "gPreCalc.h"
 #include "log.h"
 #include "MoveList.h"
 #include "ui.h"
@@ -552,6 +553,22 @@ char *getStdinLine(int maxLen, Switcher *sw)
     }
 
     return buf;
+}
+
+// The point behind configuring limits/maxMemory before doing a newGame() is
+//  that most engines (hopefully) won't allocate memory until NewGame() is
+//  called on them; so we avoid a re-allocation or possibly an initial over-
+//  allocation.
+void uiPrepareEngines(Game *game)
+{
+    int64 requestedMem = gPreCalc.userSpecifiedHashSize;
+
+    if (requestedMem != -1)
+    {
+        game->EngineConfig().SetSpinClamped(Config::MaxMemorySpin,
+                                            requestedMem / (1024 * 1024));
+    }
+    game->NewGame();
 }
 
 static void uiThread(Game *game, Switcher *sw, Semaphore *readySem)

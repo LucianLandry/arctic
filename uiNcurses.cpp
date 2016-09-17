@@ -92,7 +92,6 @@ static void UIPrintPositionStatus(const Position &position)
         cprintf("%c%c ", AsciiFile(ncheck), AsciiRank(ncheck));
 }
 
-
 static void UINotifyTick(Game *game)
 {
     char timeStr[CLOCK_TIME_STR_LEN];
@@ -131,7 +130,6 @@ static void UINotifyTick(Game *game)
     }
 }
 
-
 static void UIStatusDraw(Game *game)
 {
     bigtime_t timeTaken;
@@ -152,7 +150,6 @@ static void UIStatusDraw(Game *game)
     gotoxy(OPTIONS_X, 22);
     cprintf(board.IsInCheck() ? "<check>" : "       ");
 }
-
 
 // prints out expected move sequence at the bottom of the screen.
 static void UINotifyPV(Game *game, const RspPvArgsT *pvArgs)
@@ -245,9 +242,8 @@ static void UICursorDraw(int coord, int mode)
     gotoxy(SQUARE_WIDTH * 8 + 7, 24);
 }
 
-
+// Spews user option to screen, highlighting the first char.
 static void prettyprint(int y, const char *option, const char *option2, ...)
-/* spews user option to screen, highlighting the first char. */
 {
     int i, j, didHighlight = 0;
     const char *myopt;
@@ -285,7 +281,6 @@ static void prettyprint(int y, const char *option, const char *option2, ...)
         }
     }
 }
-
 
 static void UIWindowClear(int startx, int starty, int width, int height)
 {
@@ -342,7 +337,6 @@ static void UIOptionsDraw(Game *game)
 #endif
 }
 
-
 static void UIEditOptionsDraw(void)
 {
     UIWindowClear(OPTIONS_X, 1, SCREEN_WIDTH - OPTIONS_X, 12);
@@ -355,7 +349,6 @@ static void UIEditOptionsDraw(void)
     prettyprint(5, "Switch turn",    NULL);
     prettyprint(6, "Done",           NULL);
 }
-
 
 static void UITimeOptionsDraw(Game *game, int applyToggle)
 {
@@ -391,7 +384,6 @@ static void UITimeOptionsDraw(Game *game, int applyToggle)
     prettyprint(10, "Done",           NULL);
 }
 
-
 static void UICursorMove(int key, int *coord)
 {
     if ((key == KEY_UP && !gBoardIf.flipped) ||
@@ -419,7 +411,6 @@ static void UICursorMove(int key, int *coord)
             *coord -= 8;
     }
 }
-
 
 static void UIPositionRefresh(const Position &position)
 {
@@ -452,7 +443,6 @@ static void UIPositionRefresh(const Position &position)
     }
     textbackground(BLACK);
 }
-
 
 static void UITicksDraw(void)
 {
@@ -523,7 +513,6 @@ static int modal(const char *format, ...)
     return chr;
 }
 
-
 // 'myStrLen' == sizeof(myStr) (including terminator) and must be at least 2
 // bytes long.
 // Returns 'myStr'.
@@ -588,12 +577,10 @@ static char *modalString(char *myStr, int myStrLen,
     return myStr;
 }
 
-
 static void UINotifyError(char *reason)
 {
     modal("Error: %s", reason);
 }
-
 
 // Edits a board.
 static void UIEditPosition(Position &position)
@@ -1018,7 +1005,7 @@ static void UIInit(Game *game, Switcher *sw)
     UIBoardDraw();
     UITicksDraw();
     UIOptionsDraw(game);    
-    game->NewGame();
+    uiPrepareEngines(game);
     game->Go(); // start white's clock
 }
 

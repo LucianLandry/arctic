@@ -36,10 +36,8 @@
 #include "gPreCalc.h"
 #include "log.h"
 #include "MoveList.h"
-#include "playloop.h"
 #include "ui.h"
 #include "uiUtil.h"
-#include "TransTable.h"
 
 #define MAXBUFLEN 160
 
@@ -150,7 +148,7 @@ static void xboardInit(Game *game, Switcher *sw)
     game->SetAutoPlayEngineMoves(true);
     // The spec does not mention that a "new" must come in before anything else,
     //  so playing it safe and doing some initialization here.
-    game->NewGame();
+    uiPrepareEngines(game);
     initialized = true;
 }
 
@@ -199,7 +197,7 @@ void processProtoverCommand(Game *game, const char *inputStr)
         printf("feature analyze=0 myname=arctic%s.%s-%s variants=normal "
                "colors=0 ping=1 setboard=1 memory=%d done=1 debug=1 ics=1\n",
                VERSION_STRING_MAJOR, VERSION_STRING_MINOR,
-               VERSION_STRING_PHASE, !gPreCalc.userSpecifiedHashSize);
+               VERSION_STRING_PHASE, gPreCalc.userSpecifiedHashSize == -1);
     }
 }
 
@@ -378,23 +376,20 @@ void processIcsCommand(Game *game, const char *inputStr)
 void processMemoryCommand(Game *game, const char *inputStr)
 {
     // If user overrode, it cannot be set here.
-    if (gPreCalc.userSpecifiedHashSize)
+    if (gPreCalc.userSpecifiedHashSize != -1)
     {
         printf("Error (unimplemented command): %s\n", inputStr);
         return;
     }
 
-    int64 memMB;
-    if (sscanf(inputStr, "memory %" PRId64, &memMB) < 1 || memMB < 0)
+    int64 memMiB;
+    if (sscanf(inputStr, "memory %" PRId64, &memMiB) < 1 || memMiB < 0)
     {
         printf("Error (bad args): %s\n", inputStr);
         return;
     }
 
-    bool wasRunning = game->Stop();
-    gTransTable.Reset(memMB * 1024 * 1024); // MB -> bytes        
-    if (wasRunning)
-        game->Go();
+    game->EngineConfig().SetSpinClamped(Config::MaxMemorySpin, memMiB);
 }
 
 
