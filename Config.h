@@ -40,6 +40,7 @@ public:
         *const MaxDepthSpin, *const MaxDepthDescription,
         *const MaxMemorySpin, *const MaxMemoryDescription,
         *const MaxNodesSpin, *const MaxNodesDescription,
+        *const MaxThreadsSpin, *const MaxThreadsDescription,
         *const RandomMovesCheckbox, *const RandomMovesDescription,
         *const CanResignCheckbox, *const CanResignDescription,
         *const HistoryWindowSpin, *const HistoryWindowDescription;

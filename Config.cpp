@@ -30,6 +30,10 @@ const char *const Config::MaxNodesSpin = "limits/maxNodes";
 const char *const Config::MaxNodesDescription =
     "Max nodes engine may search.  0 implies 'no limit'.";
 
+const char *const Config::MaxThreadsSpin = "limits/maxThreads";
+const char *const Config::MaxThreadsDescription =
+    "Max threads engine may use to search.";
+
 const char *const Config::RandomMovesCheckbox = "randomMoves";
 const char *const Config::RandomMovesDescription =
     "True iff engine should randomize moves.";

@@ -308,7 +308,6 @@ inline class Config &Thinker::Config()
 bool ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT move);
 Eval ThinkerSearchersWaitOne(MoveT &move, SearchPv &pv, Thinker &parent);
 void ThinkerSearchersBail();
-
 void ThinkerSearchersMakeMove(MoveT move);
 void ThinkerSearchersUnmakeMove();
 int ThinkerSearchersAreSearching();

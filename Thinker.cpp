@@ -78,10 +78,13 @@ Thinker *Thinker::rootThinker = nullptr;
 // An internal global resource.  Might be split later if we need sub-searchers.
 struct SearcherGroupT
 {
-    Thinker *th;
-    struct pollfd *pfds;
-    int count;        // number of valid searchers in the struct
+    std::vector<Thinker *> searchers;
+    std::vector<struct pollfd> pfds;
     int numSearching; // number of currently searching searchers
+
+    // Normally this vector is empty, but if we lower the core count, the extra
+    //  searchers are kept in a thread pool here.
+    std::vector<Thinker *> freePool;
 };
 
 static SearcherGroupT gSG;
@@ -719,13 +722,13 @@ void Thinker::CompWaitSearch() const
 }
 
 // Get an available searcher.
-static Thinker *searcherGet(void)
+static Thinker *searcherGet()
 {
     int i;
-    for (i = 0; i < gSG.count; i++)
+    for (i = 0; i < gSG.searchers.size(); i++)
     {
-        if (!gSG.th[i].CompIsBusy())
-            return &gSG.th[i];
+        if (!gSG.searchers[i]->CompIsBusy())
+            return gSG.searchers[i];
     }
     assert(0);
     return nullptr;
@@ -734,11 +737,11 @@ static Thinker *searcherGet(void)
 // Returns (bool) whether we successfully delegated a move.
 bool ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT move)
 {
-    if (gSG.numSearching < gSG.count)
+    if (gSG.numSearching < gSG.searchers.size())
     {
         // Delegate a move.
-        searcherGet()->CmdSearch(alpha, beta, move);
         gSG.numSearching++;
+        searcherGet()->CmdSearch(alpha, beta, move);
         return true;
     }
     return false;
@@ -749,20 +752,20 @@ bool ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT move)
 // but the PV are delegated to a searcher thread even on a uni-processor.
 void ThinkerSearchersMakeMove(MoveT move)
 {
-    for (int i = 0; i < gSG.count; i++)
+    for (int i = 0; i < gSG.searchers.size(); i++)
     {
-        gSG.th[i].CmdMakeMove(move);
-        gSG.th[i].Context().depth++;
+        gSG.searchers[i]->CmdMakeMove(move);
+        gSG.searchers[i]->Context().depth++;
     }
 }
 
 
 void ThinkerSearchersUnmakeMove()
 {
-    for (int i = 0; i < gSG.count; i++)
+    for (int i = 0; i < gSG.searchers.size(); i++)
     {
-        gSG.th[i].CmdUnmakeMove();
-        gSG.th[i].Context().depth--;
+        gSG.searchers[i]->CmdUnmakeMove();
+        gSG.searchers[i]->Context().depth--;
     }
 }
 
@@ -772,19 +775,19 @@ static void searcherWaitOne()
     int res;
     int i;
     
-    while ((res = poll(gSG.pfds, gSG.count, -1)) == -1 &&
+    while ((res = poll(gSG.pfds.data(), gSG.pfds.size(), -1)) == -1 &&
            errno == EINTR)
     {
         continue;
     }
     assert(res > 0); // other errors should not happen
-    for (i = 0; i < gSG.count; i++)
+    for (i = 0; i < gSG.pfds.size(); i++)
     {
         assert(!(gSG.pfds[i].revents & (POLLERR | POLLHUP | POLLNVAL)));
         if (gSG.pfds[i].revents & POLLIN)
         {
             // Received response from slave.
-            gSG.th[i].ProcessOneRsp();
+            gSG.searchers[i]->ProcessOneRsp();
             gSG.numSearching--;
             return;
         }
@@ -802,38 +805,39 @@ Eval ThinkerSearchersWaitOne(MoveT &move, SearchPv &pv, Thinker &parent)
     return args.eval;
 }
 
-void ThinkerSearchersBail(void)
+void ThinkerSearchersBail()
 {
     int i;
-    for (i = 0; i < gSG.count && gSG.numSearching > 0; i++)
+    for (i = 0; i < gSG.searchers.size() && gSG.numSearching > 0; i++)
     {
-        if (gSG.th[i].CompIsSearching())
+        if (gSG.searchers[i]->CompIsSearching())
         {
-            gSG.th[i].CmdBail();
+            gSG.searchers[i]->CmdBail();
             gSG.numSearching--;
         }
     }
+    assert(i < gSG.searchers.size());
 }
 
-// Returns (bool) if any searchers are searching.
-int ThinkerSearchersAreSearching(void)
+// Returns (bool) whether any searchers are searching.
+int ThinkerSearchersAreSearching()
 {
     return gSG.numSearching > 0;
 }
 
 void ThinkerSearchersSetBoard(const Board &board)
 {
-    for (int i = 0; i < gSG.count; i++)
-        gSG.th[i].CmdSetBoard(board);
+    for (int i = 0; i < gSG.searchers.size(); i++)
+        gSG.searchers[i]->CmdSetBoard(board);
 }
 
 void ThinkerSearchersSetDepthAndLevel(int depth, int level)
 {
     int i;
-    for (i = 0; i < gSG.count; i++)
+    for (i = 0; i < gSG.searchers.size(); i++)
     {
-        gSG.th[i].Context().depth = depth;
-        gSG.th[i].Context().maxDepth = level;
+        gSG.searchers[i]->Context().depth = depth;
+        gSG.searchers[i]->Context().maxDepth = level;
     }
 }
 
@@ -846,8 +850,6 @@ static void onThinkerRspSearchDone(Thinker &searcher,
 
 void ThinkerSearchersCreate(int numThreads, Thinker &rootThinker)
 {
-    int i;
-
     // Currently, we only support one 'master' thinker.
     assert(rootThinker.IsRootThinker());
 
@@ -857,17 +859,15 @@ void ThinkerSearchersCreate(int numThreads, Thinker &rootThinker)
                   std::placeholders::_1, std::placeholders::_2,
                   std::ref(rootThinker));
     
-    gSG.count = numThreads;
-
-    gSG.pfds = new struct pollfd[numThreads];
-    gSG.th = new Thinker[numThreads];
-
-    for (i = 0; i < gSG.count; i++)
+    for (int i = 0; i < numThreads; i++)
     {
-        gSG.th[i].SetRspHandler(rspHandler);
-        // (initialize the associated poll structures --
-        //  it is global so is already zero.)
-        gSG.pfds[i].fd = gSG.th[i].MasterSock();
-        gSG.pfds[i].events = POLLIN;
+        Thinker *th = new Thinker;
+        th->SetRspHandler(rspHandler);
+        gSG.searchers.push_back(th);
+
+        struct pollfd pfd;
+        pfd.fd = th->MasterSock();
+        pfd.events = POLLIN;
+        gSG.pfds.push_back(pfd);
     }
 }

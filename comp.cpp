@@ -551,8 +551,8 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
             if (cookie == -1) /* no move found? */
                 continue;
             move = hashMove;
-            /* Otherwise, use this myEval/move combination to adjust our
-               variables. */
+            // Otherwise, use this myEval/move combination to adjust our
+            //  variables.
         }
 
         // We ran out of hashed moves (or trying them first is disabled).
