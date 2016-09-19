@@ -250,13 +250,14 @@ static void uciInit(Game *game, Switcher *sw)
 
 void processUciCommand(Game *game, Switcher *sw)
 {
-    char hashString[160];
+    char hashString[100] = "";
+    char threadsString[100] = "";
     int rv;
 
     uciInit(game, sw);
     const Config::SpinItem *sItem =
         game->EngineConfig().SpinItemAt(Config::MaxMemorySpin);
-    if (gPreCalc.userSpecifiedHashSize != -1 && sItem != nullptr)
+    if (gPreCalc.userSpecifiedHashSize == -1 && sItem != nullptr)
     {
         rv = snprintf(hashString, sizeof(hashString),
                       "option name Hash type spin default %d min 0 max %d\n",
@@ -264,16 +265,20 @@ void processUciCommand(Game *game, Switcher *sw)
         // bail on truncated string.
         assert(rv >= 0 && (uint) rv < sizeof(hashString));
     }
-    else
+    sItem = game->EngineConfig().SpinItemAt(Config::MaxThreadsSpin);
+    if (gPreCalc.userSpecifiedNumThreads == -1 && sItem != nullptr)
     {
-        // Do not advertise a hash option if user overrode it.
-        hashString[0] = '\0';
+        rv = snprintf(threadsString, sizeof(threadsString),
+                      "option name Threads type spin default %d min 1 max %d\n",
+                      sItem->Value(), sItem->Max());
+        // bail on truncated string.
+        assert(rv >= 0 && (uint) rv < sizeof(threadsString));
     }
     
     // Respond appropriately to the "uci" command.
     printf("id name arctic %s.%s-%s\n"
            "id author Lucian Landry\n"
-           "%s"
+           "%s%s"
            // Though we do not care what "Ponder" is set to, we must
            // provide it as an option to signal (according to UCI) that the
            // engine can ponder at all.
@@ -283,7 +288,7 @@ void processUciCommand(Game *game, Switcher *sw)
            " Lucian Landry\n"
            "uciok\n",
            VERSION_STRING_MAJOR, VERSION_STRING_MINOR, VERSION_STRING_PHASE,
-           hashString,
+           hashString, threadsString,
            VERSION_STRING_MAJOR, VERSION_STRING_MINOR, VERSION_STRING_PHASE);
 
     // switch to uiUci if we have not already.
@@ -414,6 +419,7 @@ static int convertNextInteger64(const char **pToken, int64 *result,
 static void processSetOptionCommand(Game *game, const char *inputStr)
 {
     int64 hashSizeMiB;
+    int numThreads;
     const char *pToken;
 
     if (isSearching())
@@ -424,11 +430,17 @@ static void processSetOptionCommand(Game *game, const char *inputStr)
                     __func__, uciStateString());
         return;
     }
+    if (!matches(inputStr, "name"))
+    {
+        reportError(false, "%s: expected 'name' token is missing, ignoring",
+                    __func__);
+        return;
+    }
+    pToken = findNextToken(inputStr);
 
     // Process RandomMoves option if applicable.
     // (UCI spec says option names and values "should not be case sensitive".)
-    if (matches(inputStr, "name") &&
-        matchesNoCase((pToken = findNextToken(inputStr)), "RandomMoves") &&
+    if (matchesNoCase(pToken, "RandomMoves") &&
         matches((pToken = findNextToken(pToken)), "value") &&
         (matchesNoCase((pToken = findNextToken(pToken)), "true") ||
          matchesNoCase(pToken, "false")))
@@ -437,15 +449,20 @@ static void processSetOptionCommand(Game *game, const char *inputStr)
                                          !strcasecmp(pToken, "true"));
     }
     else if (gPreCalc.userSpecifiedHashSize == -1 &&
-             matches(inputStr, "name") &&
-             matchesNoCase((pToken = findNextToken(inputStr)), "Hash") &&
+             matchesNoCase(pToken, "Hash") &&
              matches((pToken = findNextToken(pToken)), "value") &&
              convertNextInteger64(&pToken, &hashSizeMiB, 0, "Hash") == 0)
     {
         game->EngineConfig().SetSpinClamped(Config::MaxMemorySpin, hashSizeMiB);
     }
-    else if (matches(inputStr, "name") &&
-             matchesNoCase((pToken = findNextToken(inputStr)), "Ponder") &&
+    else if (gPreCalc.userSpecifiedNumThreads == -1 &&
+             matchesNoCase(pToken, "Threads") &&
+             matches((pToken = findNextToken(pToken)), "value") &&
+             convertNextInteger(&pToken, &numThreads, 1, "Threads") == 0)
+    {
+        game->EngineConfig().SetSpinClamped(Config::MaxThreadsSpin, numThreads);
+    }
+    else if (matchesNoCase(pToken, "Ponder") &&
              matches((pToken = findNextToken(pToken)), "value") &&
              (matchesNoCase((pToken = findNextToken(pToken)), "true") ||
               matchesNoCase(pToken, "false")))

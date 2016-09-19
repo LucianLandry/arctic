@@ -138,7 +138,7 @@ public:
     eThinkMsgT CompWaitThinkOrPonder() const;
     void CompWaitSearch() const;
     inline bool IsRootThinker() const;
-    inline Thinker &RootThinker() const;
+    static inline Thinker &RootThinker();
 
     struct ContextT
     {
@@ -177,6 +177,7 @@ public:
         volatile int maxNodes;
         volatile bool randomMoves;
         volatile bool canResign;
+        int maxThreads; // max searcher threads.
         HintPv pv; // Attempts to track the principal variation.
         ThinkerStatsT stats;
         int gameCount; // for debugging.
@@ -237,7 +238,9 @@ private:
     eThinkMsgT recvCmd(void *buffer, int bufLen) const;
     eThinkMsgT recvRsp(void *buffer, int bufLen);
     void doThink(eThinkMsgT cmd, const MoveList *mvlist);
+    void restoreState(State state);
     void onMaxMemoryChanged(const Config::SpinItem &item);
+    void onMaxThreadsChanged(const Config::SpinItem &item);
     
     // There is (currently) one 'master' thinker that coordinates all of the
     //  other thinkers, which act as search threads.
@@ -279,7 +282,7 @@ inline bool Thinker::IsRootThinker() const
     return this == rootThinker;
 }
 
-inline Thinker &Thinker::RootThinker() const
+inline Thinker &Thinker::RootThinker()
 {
     return *rootThinker;
 }
@@ -313,7 +316,8 @@ void ThinkerSearchersUnmakeMove();
 int ThinkerSearchersAreSearching();
 void ThinkerSearchersSetBoard(const Board &board);
 void ThinkerSearchersSetDepthAndLevel(int depth, int level);
-// Initialize searcher threads.
-void ThinkerSearchersCreate(int numThreads, Thinker &rootThinker);
+// Initialize searcher threads on the fly.  Should be called only when the
+//  engine is idle.
+void ThinkerSearchersSetNumThreads(int numThreads);
 
 #endif // THINKER_H

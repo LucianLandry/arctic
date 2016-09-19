@@ -385,7 +385,7 @@ uint64 random64(void)
 
 
 // initialize gPreCalc.
-void gPreCalcInit(int64 userSpecifiedHashSize, int numCpuThreads)
+void gPreCalcInit(int64 userSpecifiedHashSize, int userSpecifiedNumThreads)
 {
     int i, d, j;
     cell_t *ptr = gAllNormalMoves;
@@ -475,14 +475,11 @@ void gPreCalcInit(int64 userSpecifiedHashSize, int numCpuThreads)
     }
     gPreCalc.zobrist.turn = random64();
 
-    // We could clamp max memory size to that of the local machine here; but
-    //  eventually we might support interfacing to remote engines, and then
-    //  that would be the wrong thing to do.
+    // We could clamp these to the limits of the local engine; but eventually
+    //  we might support interfacing to remote engines, and then that would be
+    //  the wrong thing to do.
     gPreCalc.userSpecifiedHashSize = userSpecifiedHashSize;
-    // initialize number of (known) processors.
-    gPreCalc.numProcs =
-        numCpuThreads != -1 ? numCpuThreads : // User override
-        SystemTotalProcessors();
+    gPreCalc.userSpecifiedNumThreads = userSpecifiedNumThreads;
 
     gPreCalc.normalStartingPieces = gNormalStartingPieces;
 

@@ -36,8 +36,8 @@
 using arctic::Semaphore;
 
 #define MAX_NUM_PROCS 1024 // Just use something 'reasonable'.  This is only
-                           //  for user input validation now, not static
-                           //  allocation of arrays.
+                           //  for user input validation, not static allocation
+                           //  of arrays.
 
 static void usage(char *programName)
 {
@@ -48,7 +48,8 @@ static void usage(char *programName)
            "\t'hashtablesize' default == MIN(1/3 total memory, 512M)\n"
            "\t(specifying 'hashtablesize' overrides any xboard/uci option)\n\n"
            "\t'numcputhreads' in range 1-%d\n"
-           "\t'numcputhreads' default == number of online processors\n\n"
+           "\t'numcputhreads' default == number of online processors\n"
+           "\t(specifying 'numcputhreads' overrides any xboard/uci option)\n\n"
            "\t'ui' default == console (if stdin is terminal), or xboard (otherwise)\n",
            VERSION_STRING_MAJOR, VERSION_STRING_MINOR, VERSION_STRING_PHASE,
            programName, MAX_NUM_PROCS);
@@ -165,12 +166,10 @@ int main(int argc, char *argv[])
     gPreCalcInit(hashTableSize, numCpuThreads);
     srandom(CurrentTime() / 1000000);
 
-    Thinker th; // This is the root thinker.
-    ThinkerSearchersCreate(gPreCalc.numProcs, th);
-
     Switcher sw;
     sw.Register();
 
+    Thinker th; // This is the root thinker.
     Game game(&th);
 
     gUI =

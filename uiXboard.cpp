@@ -195,9 +195,11 @@ void processProtoverCommand(Game *game, const char *inputStr)
         // We currently do not care if these features are accepted or
         //  rejected.  We try to handle all input as well as possible.
         printf("feature analyze=0 myname=arctic%s.%s-%s variants=normal "
-               "colors=0 ping=1 setboard=1 memory=%d done=1 debug=1 ics=1\n",
+               "colors=0 ping=1 setboard=1 memory=%d smp=%d done=1 debug=1 "
+               "ics=1\n",
                VERSION_STRING_MAJOR, VERSION_STRING_MINOR,
-               VERSION_STRING_PHASE, gPreCalc.userSpecifiedHashSize == -1);
+               VERSION_STRING_PHASE, gPreCalc.userSpecifiedHashSize == -1,
+               gPreCalc.userSpecifiedNumThreads == -1);
     }
 }
 
@@ -392,6 +394,24 @@ void processMemoryCommand(Game *game, const char *inputStr)
     game->EngineConfig().SetSpinClamped(Config::MaxMemorySpin, memMiB);
 }
 
+void processCoresCommand(Game *game, const char *inputStr)
+{
+    // If user overrode, it cannot be set here.
+    if (gPreCalc.userSpecifiedNumThreads != -1)
+    {
+        printf("Error (unimplemented command): %s\n", inputStr);
+        return;
+    }
+
+    int numCores;
+    if (sscanf(inputStr, "cores %d", &numCores) < 1 || numCores < 0)
+    {
+        printf("Error (bad args): %s\n", inputStr);
+        return;
+    }
+
+    game->EngineConfig().SetSpinClamped(Config::MaxThreadsSpin, numCores);
+}
 
 // This runs as a coroutine with the main thread, and can switch off to it
 // at any time.  If it simply exits, it will immediately be called again.
@@ -603,6 +623,10 @@ static void xboardPlayerMove(Game *game)
     else if (matches(inputStr, "memory"))
     {
         processMemoryCommand(game, inputStr);
+    }
+    else if (matches(inputStr, "cores"))
+    {
+        processCoresCommand(game, inputStr);
     }
     // (Anything below this case needs a decent position.)
     else if (gXboardState.badPosition)

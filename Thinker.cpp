@@ -25,10 +25,11 @@
 #include <type_traits>  // std::is_trivially_copyable<>
 #include <unistd.h>     // close(2)
 
+#include "aSystem.h"       // SystemTotalProcessors()
 #include "HistoryWindow.h" // gHistoryWindow
 #include "log.h"
 #include "Thinker.h"
-#include "TransTable.h" // gTransTable
+#include "TransTable.h"    // gTransTable
 #include "Variant.h"
 
 // HACK workaround for std::is_trivially_copyable not being provided prior to
@@ -102,7 +103,7 @@ Thinker::ContextT::ContextT() : maxDepth(0), depth(0) {}
 
 Thinker::SharedContextT::SharedContextT() :
     maxLevel(DepthNoLimit), maxNodes(0), randomMoves(false), canResign(true),
-    gameCount(0) {}
+    maxThreads(SystemTotalProcessors()), gameCount(0) {}
 
 static void onMaxDepthChanged(const Config::SpinItem &item, Thinker &th)
 {
@@ -139,15 +140,10 @@ static void onHistoryWindowChanged(const Config::SpinItem &item, Thinker &th)
         return;
     gHistoryWindow.SetWindow(item.Value());
 }
-void Thinker::onMaxMemoryChanged(const Config::SpinItem &item)
+
+void Thinker::restoreState(Thinker::State state)
 {
-    if (!IsRootThinker())
-        return;
-    State origState = state;
-    if (CompIsBusy())
-        CmdBail();
-    gTransTable.Reset(uint64(item.Value()) * 1024 * 1024);
-    switch (origState) // continue where we were interrupted, if applicable.
+    switch (state) // continue where we were interrupted, if applicable.
     {
         case State::Pondering:
             CmdPonder(context.mvlist);
@@ -161,6 +157,29 @@ void Thinker::onMaxMemoryChanged(const Config::SpinItem &item)
         default:
             break;
     }
+}
+
+void Thinker::onMaxMemoryChanged(const Config::SpinItem &item)
+{
+    if (!IsRootThinker())
+        return;
+    State origState = state;
+    if (CompIsBusy())
+        CmdBail();
+    gTransTable.Reset(uint64(item.Value()) * 1024 * 1024);
+    restoreState(origState);
+}
+
+void Thinker::onMaxThreadsChanged(const Config::SpinItem &item)
+{
+    if (!IsRootThinker())
+        return;
+    State origState = state;
+    if (CompIsBusy())
+        CmdBail();
+    sharedContext->maxThreads = item.Value();
+    ThinkerSearchersSetNumThreads(item.Value());
+    restoreState(origState);
 }
 
 // ctor.
@@ -226,11 +245,22 @@ Thinker::Thinker()
                          gTransTable.MaxSize() / (1024 * 1024),
                          std::bind(&Thinker::onMaxMemoryChanged, this,
                                    std::placeholders::_1)));
+    Config().Register(
+        Config::SpinItem(Config::MaxThreadsSpin, Config::MaxThreadsDescription,
+                         1, sharedContext->maxThreads,
+                         sharedContext->maxThreads,
+                         std::bind(&Thinker::onMaxThreadsChanged, this,
+                                   std::placeholders::_1)));
     
     goalTime = CLOCK_TIME_INFINITE;
 
     thread = new std::thread(&Thinker::threadFunc, this);
     thread->detach();
+    if (IsRootThinker())
+    {
+        // We need at least one searcher thread.
+        ThinkerSearchersSetNumThreads(1);
+    }
 }
 
 // dtor
@@ -365,10 +395,17 @@ eThinkMsgT Thinker::recvCmd(void *buffer, int bufLen) const
 void Thinker::CmdNewGame()
 {
     CmdBail();
-    gTransTable.Reset();
-    gHistoryWindow.Clear();
-    sharedContext->pv.Clear();
-    sharedContext->gameCount++;
+    if (IsRootThinker())
+    {
+        gTransTable.Reset();
+        gHistoryWindow.Clear();
+        sharedContext->pv.Clear();
+        sharedContext->gameCount++;
+        // This enables a bit of lazy initialization.  If maxThreads is
+        //  configured down before we NewGame(), we won't need to create the
+        //  extra threads.
+        ThinkerSearchersSetNumThreads(sharedContext->maxThreads);
+    }
     if (!context.board.SetPosition(Variant::Current()->StartingPosition()))
         assert(0);
 }
@@ -848,26 +885,55 @@ static void onThinkerRspSearchDone(Thinker &searcher,
     rootThinker.Context().searchResult = args;
 }
 
-void ThinkerSearchersCreate(int numThreads, Thinker &rootThinker)
+// Should only be called when the engine is idle.
+void ThinkerSearchersSetNumThreads(int numThreads)
 {
-    // Currently, we only support one 'master' thinker.
-    assert(rootThinker.IsRootThinker());
+    assert(numThreads > 0);
 
-    Thinker::RspHandlerT rspHandler;
-    rspHandler.SearchDone =
-        std::bind(onThinkerRspSearchDone,
-                  std::placeholders::_1, std::placeholders::_2,
-                  std::ref(rootThinker));
+    if (numThreads == gSG.searchers.size())
+        return; // no adjustment necessary
     
-    for (int i = 0; i < numThreads; i++)
+    if (numThreads < gSG.searchers.size())
     {
-        Thinker *th = new Thinker;
-        th->SetRspHandler(rspHandler);
+        while (gSG.searchers.size() > numThreads)
+        {
+            gSG.freePool.push_back(gSG.searchers.back());
+            gSG.searchers.pop_back();
+        }
+        return;
+    }
+
+    // At this point, we know we need more threads.
+    while (gSG.searchers.size() < numThreads)
+    {
+        Thinker *th;
+        if (!gSG.freePool.empty())
+        {
+            th = gSG.freePool.back();
+            gSG.freePool.pop_back();
+        }
+        else
+        {
+            th = new Thinker;
+            Thinker::RspHandlerT rspHandler;
+            rspHandler.SearchDone =
+                std::bind(onThinkerRspSearchDone,
+                          std::placeholders::_1, std::placeholders::_2,
+                          std::ref(Thinker::RootThinker()));
+            th->SetRspHandler(rspHandler);
+        }
         gSG.searchers.push_back(th);
 
         struct pollfd pfd;
         pfd.fd = th->MasterSock();
         pfd.events = POLLIN;
         gSG.pfds.push_back(pfd);
+
+        th->CmdNewGame();
+        // We rely on the caller to set the board properly afterwards.  This
+        //  happens to be done for every searcher thread every time we start
+        //  a search (although that's a bit hacky).
+        // We also rely on the caller to Config()ure the new searchers properly,
+        //  although currently it is not necessary.
     }
 }

@@ -562,11 +562,17 @@ char *getStdinLine(int maxLen, Switcher *sw)
 void uiPrepareEngines(Game *game)
 {
     int64 requestedMem = gPreCalc.userSpecifiedHashSize;
-
+    int requestedNumThreads = gPreCalc.userSpecifiedNumThreads;
+    
     if (requestedMem != -1)
     {
         game->EngineConfig().SetSpinClamped(Config::MaxMemorySpin,
                                             requestedMem / (1024 * 1024));
+    }
+    if (requestedNumThreads != -1)
+    {
+        game->EngineConfig().SetSpinClamped(Config::MaxThreadsSpin,
+                                            requestedNumThreads);
     }
     game->NewGame();
 }

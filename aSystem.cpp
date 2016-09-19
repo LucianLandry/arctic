@@ -66,8 +66,6 @@ int64 SystemTotalMemory(void)
 
 int SystemTotalProcessors(void)
 {
-    return
-        // sysconf(_SC_NPROCESSORS_ONLN);
-        // slightly more portable:
-        std::thread::hardware_concurrency();
+    // sysconf(_SC_NPROCESSORS_ONLN) works; but this is more portable:
+    return std::thread::hardware_concurrency();
 }
