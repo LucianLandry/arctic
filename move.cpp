@@ -213,8 +213,8 @@ static void moveMangleCsKxR(MoveT &move)
 //  any other move even though it will not be technically legal.
 static int moveToStringMnSAN(char *result, MoveT move, const Board &board)
 {
-    // See the 'algebraic notation (chess)' article on Wikipedia for details
-    //  about SAN.
+    // See "https://en.wikipedia.org/wiki/Algebraic_notation_(chess)"
+    //  for details about SAN, including move disambiguation.
     uint8 src = move.src;
     uint8 dst = move.dst;
     Piece myPiece = board.PieceAt(src);
@@ -224,7 +224,8 @@ static int moveToStringMnSAN(char *result, MoveT move, const Board &board)
     bool isCapture = !isCastle &&
         (!board.PieceAt(dst).IsEmpty() || move.IsEnPassant());
     bool isPromote = move.IsPromote();
-    bool sameFile = true, sameRank = true;
+    bool isAmbiguous = false;
+    bool ambiguousFile = false, ambiguousRank = false;
     MoveList mvlist;
 
     if (!myPiece.IsPawn())
@@ -244,20 +245,25 @@ static int moveToStringMnSAN(char *result, MoveT move, const Board &board)
             mvlist.Moves(i).dst == dst &&
             board.PieceAt(mvlist.Moves(i).src) == myPiece)
         {
-            // Yes.  Note: both conditions could easily be true.
-            if (sameFile)
-                sameFile = File(mvlist.Moves(i).src) == File(src);
-            if (sameRank)
-                sameRank = Rank(mvlist.Moves(i).src) == Rank(src);
+            isAmbiguous = true;
+            if (!ambiguousFile)
+                ambiguousFile = File(mvlist.Moves(i).src) == File(src);
+            if (!ambiguousRank)
+                ambiguousRank = Rank(mvlist.Moves(i).src) == Rank(src);
         }
     }
 
     // ... disambiguate the src piece, if necessary.
-    if (!sameFile)
-        sanStr += sprintf(sanStr, "%c", AsciiFile(src));
-    if (!sameRank)
-        sanStr += sprintf(sanStr, "%c", AsciiRank(src));
-
+    if (isAmbiguous)
+    {
+        if (ambiguousFile && ambiguousRank)
+            sanStr += sprintf(sanStr, "%c%c", AsciiFile(src), AsciiRank(src));
+        else if (ambiguousFile)
+            sanStr += sprintf(sanStr, "%c", AsciiRank(src));            
+        else
+            sanStr += sprintf(sanStr, "%c", AsciiFile(src));
+    }
+        
     if (isCapture)
         sanStr += sprintf(sanStr, "x");
 

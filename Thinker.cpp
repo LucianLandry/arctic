@@ -845,7 +845,7 @@ Eval ThinkerSearchersWaitOne(MoveT &move, SearchPv &pv, Thinker &parent)
 void ThinkerSearchersBail()
 {
     int i;
-    for (i = 0; i < gSG.searchers.size() && gSG.numSearching > 0; i++)
+    for (i = 0; gSG.numSearching > 0 && i < gSG.searchers.size(); i++)
     {
         if (gSG.searchers[i]->CompIsSearching())
         {
@@ -853,7 +853,7 @@ void ThinkerSearchersBail()
             gSG.numSearching--;
         }
     }
-    assert(i < gSG.searchers.size());
+    assert(gSG.numSearching == 0);
 }
 
 // Returns (bool) whether any searchers are searching.

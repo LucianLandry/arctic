@@ -51,6 +51,7 @@ Refactored into C++ classes: SpinlockT -> arctic::Spinlock (1.6% speedup +
     HistoryWindow, GameT -> Game, SaveGameT -> SaveGame.
 Bugfix: fix bad parsing of user-specified transposition table size > 4 GiB.
 Made number of search threads configurable from uiUci and uiXboard.
+Bugfix: moveToStringMnSAN(): fix overly zealous move disambiguation.
 
 Version 1.1:
 Build improvements: use Git for version control, cmake for building

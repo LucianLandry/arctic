@@ -82,17 +82,13 @@ static void xboardEditPosition(Position &position)
         {
             // Wipe board.
             for (i = 0; i < NUM_SQUARES; i++)
-            {
                 position.SetPiece(i, Piece());
-            }
         }
-
         else if (matches(inputStr, "c"))
         {
             // Change current color.
             turn ^= 1;
         }
-
         else if (matches(inputStr, "."))
         {
             // Leave edit mode.
@@ -101,34 +97,31 @@ static void xboardEditPosition(Position &position)
             position.Sanitize();
             return;
         }
-
         else switch(inputStr[0])
         {
-        case 'x': // delete the piece @ inputStr[1].
-        case 'P': // Add one of these pieces @ inputStr[1].
-        case 'R':
-        case 'N':
-        case 'B':
-        case 'Q':
-        case 'K':
-            if ((coord = asciiToCoord(&inputStr[1])) == FLAG)
-            {
-                printf("Error (edit: %c: bad coord): %s\n",
-                       inputStr[0], &inputStr[1]);
-                break;
-            }
+            case 'x': // delete the piece @ inputStr[1].
+            case 'P': // Add one of these pieces @ inputStr[1].
+            case 'R':
+            case 'N':
+            case 'B':
+            case 'Q':
+            case 'K':
+                if ((coord = asciiToCoord(&inputStr[1])) == FLAG)
+                {
+                    printf("Error (edit: %c: bad coord): %s\n",
+                           inputStr[0], &inputStr[1]);
+                    break;
+                }
 
-            // Set the new piece.
-            piece = asciiToNative(inputStr[0]);
-            if (!piece.IsEmpty())
-            {
-                piece = Piece(turn, piece.Type());
-            }
-            position.SetPiece(coord, piece);
-            break;
-        default:
-            printf("Error (edit: unknown command): %s\n", inputStr);
-            break;
+                // Set the new piece.
+                piece = asciiToNative(inputStr[0]);
+                if (!piece.IsEmpty())
+                    piece = Piece(turn, piece.Type());
+                position.SetPiece(coord, piece);
+                break;
+            default:
+                printf("Error (edit: unknown command): %s\n", inputStr);
+                break;
         }
     }
 }

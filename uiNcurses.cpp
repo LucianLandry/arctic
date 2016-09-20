@@ -1109,7 +1109,7 @@ static void UIPlayerMove(Game *game)
             {
                 UIEditPosition(position);
                 if (!position.IsLegal(errString))
-                    reportError(false, "Error: %s", errString.c_str());
+                    reportError(false, "%s", errString.c_str());
             } while (!tmpBoard.SetPosition(position));
 
             UIOptionsDraw(game);
