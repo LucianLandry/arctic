@@ -540,7 +540,7 @@ static void processGoCommand(Game *game, const char *pToken)
                  isMove(findNextToken(pToken), &myMove, &board);
                  pToken = findNextToken(pToken))
             {
-                if (!board.IsLegalMove(myMove))
+                if (!isLegalMove(findNextToken(pToken), &myMove, &board))
                 {
                     char moveStr[MOVE_STRING_MAX];
                     reportError(false, "%s: illegal move '%s', ignoring "
