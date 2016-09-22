@@ -73,6 +73,7 @@
 #include "gPreCalc.h"
 #include "log.h"
 #include "MoveList.h"
+#include "stringUtil.h"
 #include "ui.h"
 #include "uiUtil.h"
 
@@ -175,16 +176,6 @@ static void moveToIdleState(Game *game)
 static void uciNotifyError(char *reason)
 {
     printf("info string error: %s\n", reason);
-}
-
-// Given that we are pointing at a token 'pStr',
-//  return a pointer to the token after it (or NULL, if none).
-static const char *findNextToken(const char *pStr)
-{
-    return
-        pStr == NULL ? NULL :
-        findNextNonWhiteSpace(isspace(*pStr) ? pStr :
-                              findNextWhiteSpace(pStr));
 }
 
 static const char *findRecognizedToken(const char *pStr)

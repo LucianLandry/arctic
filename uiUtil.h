@@ -60,11 +60,6 @@ int fenToBoard(const char *fenString, Board *result);
 int reportError(bool silent, const char *errorFormatStr, ...)
     __attribute__ ((format (printf, 2, 3)));
 
-// Token support routines.
-const char *findNextNonWhiteSpace(const char *pStr);
-const char *findNextWhiteSpace(const char *pStr);
-const char *findNextWhiteSpaceOrNull(const char *pStr);
-
 // Return whether or not 'inputStr' looks like a move.
 // NULL "inputStr"s are not moves.
 // Side effect: fills in 'resultMove'.
@@ -77,17 +72,9 @@ bool isMove(const char *inputStr, MoveT *resultMove, const Board *board);
 // Currently we can only handle algebraic notation.
 bool isLegalMove(const char *inputStr, MoveT *resultMove, const Board *board);
 
-// Pattern matchers for tokens embedded at the start of a larger string.
-bool matches(const char *str, const char *needle);
-bool matchesNoCase(const char *str, const char *needle);
-
 // Get a line of input from stdin, of max string length "maxLen"
 // (or unlimited if maxLen <= 0)
 char *getStdinLine(int maxLen, Switcher *sw);
-
-// Terminate a string 's' at the 1st occurence of newline.  Returns 's' as a
-// convenience.
-char *ChopBeforeNewLine(char *s);
 
 void uiPrepareEngines(Game *game); // Tell the engines we are about to start
 void uiThreadInit(Game *game, Switcher *sw,

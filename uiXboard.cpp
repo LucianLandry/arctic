@@ -36,6 +36,7 @@
 #include "gPreCalc.h"
 #include "log.h"
 #include "MoveList.h"
+#include "stringUtil.h"
 #include "ui.h"
 #include "uiUtil.h"
 

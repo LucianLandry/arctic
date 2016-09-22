@@ -26,6 +26,7 @@
 #include "gPreCalc.h"
 #include "log.h"
 #include "MoveList.h"
+#include "stringUtil.h"
 #include "ui.h"
 #include "uiUtil.h"
 
@@ -96,28 +97,6 @@ int asciiToCoord(char *inputStr)
             inputStr[1] >= '1' && inputStr[1] <= '8') ?
         inputStr[0] - 'a' + ((inputStr[1] - '1') * 8) :
         FLAG;
-}
-
-
-static bool matchHelper(const char *str, const char *needle, bool caseSensitive)
-{
-    int len = strlen(needle);
-    return
-        str == NULL ? 0 :
-        !(caseSensitive ? strncmp(str, needle, len) :
-          strncasecmp(str, needle, len)) &&
-        (isspace(str[len]) || str[len] == '\0');
-}
-
-// Pattern matchers for tokens embedded at the start of a larger string.
-bool matches(const char *str, const char *needle)
-{
-    return matchHelper(str, needle, true);
-}
-
-bool matchesNoCase(const char *str, const char *needle)
-{
-    return matchHelper(str, needle, false);
 }
 
 // Direct a report to the user or the error log, whichever is more
@@ -321,62 +300,6 @@ int fenToBoard(const char *fenString, Board *result)
     return 0;
 }
 
-const char *findNextNonWhiteSpace(const char *pStr)
-{
-    if (pStr == NULL)
-    {
-        return NULL;
-    }
-    while (isspace(*pStr) && *pStr != '\0')
-    {
-        pStr++;
-    }
-    return *pStr != '\0' ? pStr : NULL;
-}
-
-const char *findNextWhiteSpace(const char *pStr)
-{
-    if (pStr == NULL)
-    {
-        return NULL;
-    }
-    while (!isspace(*pStr) && *pStr != '\0')
-    {
-        pStr++;
-    }
-    return *pStr != '\0' ? pStr : NULL;
-}
-
-const char *findNextWhiteSpaceOrNull(const char *pStr)
-{
-    if (pStr == NULL)
-    {
-        return NULL;
-    }
-    while (!isspace(*pStr) && *pStr != '\0')
-    {
-        pStr++;
-    }
-    return pStr;
-}
-
-// Copies (possibly non-NULL-terminated) token 'src' to NULL-terminated 'dst'.
-// Returns 'dst' iff a full copy could be performed, otherwise NULL (and in that
-//  case, does not clobber 'dst', just to be nice)
-static char *copyToken(char *dst, int dstLen, const char *src)
-{
-    int srcLen;
-
-    if (src == NULL ||
-        (srcLen = (findNextWhiteSpaceOrNull(src) - src)) >= dstLen)
-    {
-        return NULL;
-    }
-    memcpy(dst, src, srcLen);
-    dst[srcLen] = '\0';
-    return dst;
-}
-
 // Return whether or not 'inputStr' looks like a move.
 // NULL "inputStr"s are not moves.
 // Side effect: fills in 'resultMove'.
@@ -455,28 +378,6 @@ bool isLegalMove(const char *inputStr, MoveT *resultMove, const Board *board)
     return true;
 }
 
-static bool isNewLineChar(char c)
-{
-    return c == '\n' || c == '\r';
-}
-
-
-char *ChopBeforeNewLine(char *s)
-{
-    char *origStr = s;
-
-    for (; *s != '\0'; s++)
-    {
-        if (isNewLineChar(*s))
-        {
-            *s = '\0';
-            return origStr;
-        }
-    }
-    return origStr;
-}
-
-
 // Like fgets(), but returns on any newline char, not just '\n'.
 // The semantics of what an error is ("size" too small) might be unique, though.
 static char *myFgets(char *s, int size, FILE *stream)
@@ -485,9 +386,7 @@ static char *myFgets(char *s, int size, FILE *stream)
     int chr = EOF; // cannot assign directly to s[i] since EOF may be -1 and
                    // "char" may be unsigned; 255 != -1
     if (size < 1)
-    {
         return NULL;
-    }
     while (i < size - 1)
     {
         if ((chr = fgetc(stream)) == EOF ||
@@ -555,8 +454,8 @@ char *getStdinLine(int maxLen, Switcher *sw)
     return buf;
 }
 
-// The point behind configuring limits/maxMemory before doing a newGame() is
-//  that most engines (hopefully) won't allocate memory until NewGame() is
+// The point behind configuring these items before doing a newGame() is that
+//  most engines (hopefully) won't allocate memory/threads until NewGame() is
 //  called on them; so we avoid a re-allocation or possibly an initial over-
 //  allocation.
 void uiPrepareEngines(Game *game)
