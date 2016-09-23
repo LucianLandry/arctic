@@ -60,16 +60,15 @@ int fenToBoard(const char *fenString, Board *result);
 int reportError(bool silent, const char *errorFormatStr, ...)
     __attribute__ ((format (printf, 2, 3)));
 
-// Return whether or not 'inputStr' looks like a move.
-// NULL "inputStr"s are not moves.
-// Side effect: fills in 'resultMove'.
-// Currently we can only handle algebraic notation.
-bool isMove(const char *inputStr, MoveT *resultMove, const Board *board);
+// Return whether or not the first token in 'inputStr' looks like a move.
+// Currently we can only handle NUL-terminated, mnCAN-style moves (but all
+//  castling styles).
+bool isMove(const char *inputStr);
 
-// Return whether or not 'inputStr' looks like a legal move.
-// NULL "inputStr"s are not legal moves.
-// Side effect: fills in 'resultMove'.
-// Currently we can only handle algebraic notation.
+// Return whether or not the first token in 'inputStr' looks like a legal move.
+// Currently we can only handle NUL-terminated, mnCAN-style moves (but all
+//  castling styles).
+// Side effect: fills in 'resultMove' (w/MoveNone if the move is illegal).
 bool isLegalMove(const char *inputStr, MoveT *resultMove, const Board *board);
 
 // Get a line of input from stdin, of max string length "maxLen"

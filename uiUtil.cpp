@@ -300,81 +300,75 @@ int fenToBoard(const char *fenString, Board *result)
     return 0;
 }
 
-// Return whether or not 'inputStr' looks like a move.
-// NULL "inputStr"s are not moves.
-// Side effect: fills in 'resultMove'.
-// Currently we can only handle algebraic notation (and also O-O-style
-//  castling).
-bool isMove(const char *inputStr, MoveT *resultMove, const Board *board)
+bool isMove(const char *inputStr)
 {
     char moveStr[MOVE_STRING_MAX];
-
-    *resultMove = MoveNone;
-
+    
     if (copyToken(moveStr, sizeof(moveStr), inputStr) == NULL)
         return false;
+    
+    if (!strcasecmp(moveStr, "O-O") || !strcmp(moveStr, "0-0") ||
+        !strcasecmp(moveStr, "O-O-O") || !strcmp(moveStr, "0-0-0"))
+    {
+        return true;
+    }
 
-    if (!strcasecmp(moveStr, "O-O") || !strcasecmp(moveStr, "0-0"))
-    {
-        resultMove->CreateFromCastle(true, board->Turn());
-        return true;
-    }
-    if (!strcasecmp(moveStr, "O-O-O") || !strcasecmp(moveStr, "0-0-0"))
-    {
-        resultMove->CreateFromCastle(false, board->Turn());
-        return true;
-    }
-    else if (asciiToCoord(moveStr) != FLAG && asciiToCoord(&moveStr[2]) != FLAG)
-    {
-        resultMove->src = asciiToCoord(moveStr);
-        resultMove->dst = asciiToCoord(&moveStr[2]);
-        resultMove->UnmangleCastle(*board);
-        return true;
-    }
-    return false;
+    int len = strlen(moveStr);
+    return
+        (len == 4 || len == 5) &&
+        asciiToCoord(moveStr) != FLAG && asciiToCoord(&moveStr[2]) != FLAG &&
+        (len == 4 || !asciiToNative(moveStr[4]).IsEmpty());
 }
 
-
-// Return whether or not 'inputStr' looks like a legal move.
-// NULL "inputStr"s are not legal moves.
-// Side effect: fills in 'resultMove'.
-// Currently we can only handle algebraic notation.
 bool isLegalMove(const char *inputStr, MoveT *resultMove, const Board *board)
 {
-    MoveList moveList;
-    const MoveT *foundMove;
-    uint8 chr;
-
-    if (!isMove(inputStr, resultMove, board))
-    {
+    if (resultMove != NULL)
+        *resultMove = MoveNone; // preset this in case of failure
+    if (board == NULL || !isMove(inputStr))
         return false;
+
+    char moveStr[MOVE_STRING_MAX];
+    copyToken(moveStr, sizeof(moveStr), inputStr);
+    MoveT myMove = MoveNone;
+    bool isNormalMove = false;
+    
+    if (!strcasecmp(moveStr, "O-O") || !strcmp(moveStr, "0-0"))
+    {
+        myMove.CreateFromCastle(true, board->Turn());
+    }
+    else if (!strcasecmp(moveStr, "O-O-O") || !strcmp(moveStr, "0-0-0"))
+    {
+        myMove.CreateFromCastle(false, board->Turn());
+    }
+    else
+    {
+        myMove.src = asciiToCoord(moveStr);
+        myMove.dst = asciiToCoord(&moveStr[2]);
+        myMove.UnmangleCastle(*board); // convert k2 or kxr moves
+        myMove.promote = asciiToNative(moveStr[4]).Type();
+        isNormalMove = true;
     }
 
+    // Things could be slightly simpler here, except that we must take our en
+    //  passant format into account; 'myMove' cannot get that correct.
+    MoveList moveList;
     board->GenerateLegalMoves(moveList, false);
 
-    // Search moveList for move.
-    if ((foundMove = moveList.SearchSrcDst(*resultMove)) == NULL)
-    {
+    const MoveT *foundMove = moveList.SearchSrcDst(myMove);
+    if (foundMove == NULL)
         return false;
-    }
 
-    // Do we need to promote?
     if (foundMove->IsPromote())
     {
-        chr = inputStr[4];
-        if (chr != 'q' && chr != 'r' && chr != 'n' && chr != 'b')
-        {
-            return false;
-        }
-
-        Piece piece = asciiToNative(chr);
-        resultMove->promote = piece.Type();
-            
-        foundMove = moveList.SearchSrcDstPromote(*resultMove);
-        assert(foundMove != NULL);
+        if ((foundMove = moveList.SearchSrcDstPromote(myMove)) == NULL)
+            return false;        
     }
-
-    *resultMove = *foundMove;
+    else if (isNormalMove && moveStr[4] != '\0')
+    {
+        return false; // do not allow trailing junk in the move
+    }
+    if (resultMove != NULL)
+        *resultMove = *foundMove;
     return true;
 }
 

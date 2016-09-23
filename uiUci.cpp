@@ -528,7 +528,7 @@ static void processGoCommand(Game *game, const char *pToken)
             for (;
                  // (we do this check-next-token-instead-of-current-one
                  //  goofiness just to make the outer loop work correctly.)
-                 isMove(findNextToken(pToken), &myMove, &board);
+                 isMove(findNextToken(pToken));
                  pToken = findNextToken(pToken))
             {
                 if (!isLegalMove(findNextToken(pToken), &myMove, &board))

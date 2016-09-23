@@ -135,6 +135,9 @@ xboard -size bulky -debug -nameOfDebugFile ~/xboard.debug -thinking -xponder -mo
 # look at a game.
 xboard -size bulky -ncp
 
+# arguments for a short game:
+-tc 1 -inc 1 # one minute starttime, 1 second increment
+
 # play arctic against older version
 xboard -size bulky -defaultHashSize 508 -debug -nameOfDebugFile ~/xboard.debug -thinking -xponder -mode TwoMachines -smpCores 8 -scp ./arctic -fcp ../../arcticExe/arctic10
 

@@ -639,7 +639,7 @@ static void xboardPlayerMove(Game *game)
         // game->LogClocks("go");
         game->Go();
     }
-    else if (isMove(inputStr, &myMove, &board))
+    else if (isMove(inputStr))
     {
         if (!isLegalMove(inputStr, &myMove, &board))
         {
