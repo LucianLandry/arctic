@@ -24,7 +24,6 @@
 #include "Piece.h"
 #include "ref.h"       // Rank(), File()
 #include "Switcher.h"
-#include "Thinker.h"
 
 // Piece conversion routines.
 Piece asciiToNative(char ascii);

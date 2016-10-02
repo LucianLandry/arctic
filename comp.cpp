@@ -109,7 +109,7 @@ static int endGameEval(const Board &board, int turn)
 //
 // 'lowBound' and 'highBound' are the possible limits of the best 'move' found
 // so far.
-static void calcHashFullPerMille(ThinkerStatsT &stats)
+static void calcHashFullPerMille(EngineStatsT &stats)
 {
     stats.hashFullPerMille =
         gTransTable.NumEntries() == 0 ? 0 :
@@ -334,7 +334,7 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
     int searchDepth = th->Context().maxDepth - curDepth;
     uint16 basePly = board.Ply() - curDepth;
     int strgh = board.RelativeMaterialStrength();
-    ThinkerStatsT &stats = th->SharedContext().stats; // shorthand
+    EngineStatsT &stats = th->SharedContext().stats; // shorthand
 #define QUIESCING (searchDepth < 0)
 
     // I'm trying to use lazy initialization for this function.
@@ -536,8 +536,7 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
     MoveT bestMove = MoveNone;
     
     for (i = 0, secondBestVal = alpha;
-         (i < mvlist.NumMoves() ||
-          (masterNode && ThinkerSearchersAreSearching()));
+         (i < mvlist.NumMoves() || (masterNode && SearchersAreSearching()));
          i++)
     {
         assert(i <= mvlist.NumMoves());
@@ -564,13 +563,14 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
                 // First move is special (for PV).  We process it (almost)
                 // normally.
                 move = mvlist.Moves(i);
-                ThinkerSearchersMakeMove(move);
+                SearchersMakeMove(move);
                 myEval = tryMove(th, move, alpha, beta, &childPv, nullptr);
-                ThinkerSearchersUnmakeMove();
+                SearchersUnmakeMove();
             }
             else if (i < mvlist.NumMoves() &&  // have a move to search?
                      // have someone to delegate it to?
-                     ThinkerSearcherGetAndSearch(alpha, beta, mvlist.Moves(i)))
+                     SearchersDelegateSearch(alpha, beta, mvlist.Moves(i),
+                                             curDepth, th->Context().maxDepth))
             {
                 // We delegated it successfully.
                 continue;
@@ -580,7 +580,7 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
                 // Either do not have a move to search, or
                 // nobody to search on it.  Wait for an eval to become
                 // available.
-                myEval = ThinkerSearchersWaitOne(move, childPv, *th);
+                myEval = SearchersWaitOne(move, childPv, *th);
                 i--; // this counters i++
             }
         }
@@ -626,12 +626,12 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
 
         // If we need to move, we cannot trust (and should not hash) 'myEval'.
         // We must go with the best value/move we already had ... if any.
-        if (th->CompNeedsToMove() ||
+        if (th->NeedsToMove() ||
             (th->SharedContext().maxNodes &&
              stats.nodes >= th->SharedContext().maxNodes))
         {
             if (masterNode)
-                ThinkerSearchersBail(); // Wait for any searchers to terminate.
+                SearchersBail(); // Wait for any searchers to terminate.
             return retVal.BumpHighBoundToWin();
         }
 
@@ -660,9 +660,9 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
             if (newLowBound >= beta) // ie, will leave other side just as bad
                                      // off (if not worse)
             {
-                if (masterNode && ThinkerSearchersAreSearching())
+                if (masterNode && SearchersAreSearching())
                 {
-                    ThinkerSearchersBail();
+                    SearchersBail();
                     retVal.BumpHighBoundToWin();
                 }
                 else if (cookie != -1 || i != mvlist.NumMoves() - 1)
@@ -800,7 +800,7 @@ static void computermove(Thinker *th, bool bPonder)
          !board.IsNormalStartingPosition()))
     {
         // setup known search parameters across the slaves.
-        ThinkerSearchersSetBoard(board);
+        SearchersSetBoard(board);
 
         int &maxDepth = context.maxDepth;
         
@@ -808,9 +808,6 @@ static void computermove(Thinker *th, bool bPonder)
              maxDepth <= maxSearchDepth;
              maxDepth++)
         {
-            // Setup known search parameters across the slaves.
-            ThinkerSearchersSetDepthAndLevel(context.depth, maxDepth);
-
             LOG_DEBUG("ply %d searching level %d\n", board.Ply(), maxDepth);
             myEval = minimax(th,
                              // Could use Eval::LossThreshold here w/a
@@ -824,11 +821,9 @@ static void computermove(Thinker *th, bool bPonder)
             // minimax() might find MoveNone if it has to bail before it can fully
             //  think about the first move.
             if (pv.Moves(0) != MoveNone)
-            {
                 move = pv.Moves(0);
-            }
 
-            if (th->CompNeedsToMove())
+            if (th->NeedsToMove())
                 break;
                 
 #ifdef ENABLE_DEBUG_LOGGING
@@ -891,12 +886,12 @@ void Thinker::threadFunc()
 {
     if (IsRootThinker())
     {
-        while (1)
+        while (true)
         {
             // wait for a think- or ponder-command to come in.
-            eThinkMsgT cmd = CompWaitThinkOrPonder();
+            Message cmd = WaitThinkOrPonder();
             // Think on it, and recommend either: a move, draw, or resign.
-            computermove(this, cmd == eCmdPonder);
+            computermove(this, cmd == Message::CmdPonder);
         }
     }
     else
@@ -904,27 +899,24 @@ void Thinker::threadFunc()
         // We cycle, basically:
         // -- waiting on a board position/move combo from the compThread
         // -- searching the move
-        // -- returning the return parameters (early, if NeedsToMove).
+        // -- returning the return parameters (early, if NeedsToMove()).
         //
         // We end up doing a lot of stuff in the searcherThread instead of
         // compThread since we want things to be as multi-threaded as possible.
-        while (1)
+        while (true)
         {
-            CompWaitSearch();
+            WaitSearch();
+
             // If we make the constructor use a memory pool, we should probably
             //  still micro-optimize this.
-            SearchPv pv(Context().depth + 1);
+            SearchPv pv(context.depth + 1);
         
             // Make the appropriate move, bump depth etc.
-            searchArgs.eval =
-                tryMove(this,
-                        searchArgs.move,
-                        searchArgs.alpha,
-                        searchArgs.beta,
-                        &pv,
-                        nullptr);
+            Eval eval = tryMove(this, context.searchArgs.move,
+                                context.searchArgs.alpha,
+                                context.searchArgs.beta, &pv, nullptr);
 
-            RspSearchDone(searchArgs.move, searchArgs.eval, pv);
+            RspSearchDone(context.searchArgs.move, eval, pv);
         }
     }
 }

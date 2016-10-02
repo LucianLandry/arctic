@@ -47,6 +47,8 @@ typedef uint8 cell_t;
 #define MAX3(a, b, c) (MAX((a), (MAX((b), (c)))))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MIN3(a, b, c) (MIN((a), (MIN((b), (c)))))
+#define MAX4(a, b, c, d) (MAX(MAX((a), (b)), MAX((c), (d))))
+#define MIN4(a, b, c, d) (MIN(MIN((a), (b)), MIN((c), (d))))
 
 // bits which define ability to castle.  There is one set of these per-player
 // in 'cbyte'.

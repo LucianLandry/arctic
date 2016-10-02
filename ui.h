@@ -19,9 +19,9 @@
 
 #include "aTypes.h"
 #include "Board.h"
+#include "EngineTypes.h"
 #include "Game.h"
 #include "Switcher.h"
-#include "Thinker.h"
 
 typedef struct {
     void (*init)(Game *game, Switcher *sw);
@@ -32,29 +32,29 @@ typedef struct {
     void (*notifyTick)(Game *game);
     void (*notifyMove)(Game *game, MoveT move);
     void (*notifyError)(char *reason);
-    void (*notifyPV)(Game *game, const RspPvArgsT *pvArgs);
+    void (*notifyPV)(Game *game, const EnginePvArgsT *pvArgs);
     void (*notifyThinking)(void);
     void (*notifyPonder)(void);
     void (*notifyReady)(void);
-    void (*notifyComputerStats)(Game *game, const ThinkerStatsT *stats);
+    void (*notifyComputerStats)(Game *game, const EngineStatsT *stats);
     void (*notifyDraw)(Game *game, const char *reason, MoveT *move);
     void (*notifyCheckmated)(int turn);
     void (*notifyResign)(Game *game, int turn);
 } UIFuncTableT;
 extern UIFuncTableT *gUI;
 
-// uiNcurses.c
+// uiNcurses.cpp
 UIFuncTableT *uiNcursesOps(void);
 
-// uiXboard.c
+// uiXboard.cpp
 UIFuncTableT *uiXboardOps(void);
 void processXboardCommand(Game *game, Switcher *sw);
 
-// uiUci.c
+// uiUci.cpp
 UIFuncTableT *uiUciOps(void);
 void processUciCommand(Game *game, Switcher *sw);
 
-// uiJuce.c
+// uiJuce.cpp
 UIFuncTableT *uiJuceOps(void);
 
 #endif // UI_H

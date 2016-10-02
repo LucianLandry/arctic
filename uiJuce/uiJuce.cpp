@@ -67,7 +67,7 @@ static void juceNotifyError(char *reason)
 {
 }
 
-static void juceNotifyPV(Game *game, const RspPvArgsT *pvArgs)
+static void juceNotifyPV(Game *game, const EnginePvArgsT *pvArgs)
 {
 }
 
@@ -83,7 +83,7 @@ static void juceNotifyReady(void)
 {
 }
 
-static void juceNotifyComputerStats(Game *game, const ThinkerStatsT *stats)
+static void juceNotifyComputerStats(Game *game, const EngineStatsT *stats)
 {
 }
 

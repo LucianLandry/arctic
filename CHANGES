@@ -45,10 +45,10 @@ Bugfix: crash when switching on the fly from xboard to uci interface
 uiUci: attempt to report a bestmove when we stop pondering; handle
     'ponder + searchmoves' sanely; more correct ponder info and score
 Refactored into C++ classes: SpinlockT -> arctic::Spinlock (1.6% speedup +
-    platform-agnostic), PvT -> (SearchPv, DisplayPv, HintPv),
-    TransTable* functionality -> Trans(Position)Table, ThinkContextT -> Thinker,
+    platform-agnostic), PvT -> (SearchPv, DisplayPv, HintPv), GameT -> Game,
+    TransTable* functionality -> Trans(Position)Table, SaveGameT -> SaveGame,
     SwitcherContextT -> Switcher, history heuristic functionality ->
-    HistoryWindow, GameT -> Game, SaveGameT -> SaveGame.
+    HistoryWindow, ThinkContextT -> (Engine, Thinker).
 Bugfix: fix bad parsing of user-specified transposition table size > 4 GiB.
 Made number of search threads configurable from uiUci and uiXboard.
 Bugfix: moveToStringMnSAN(): fix overly zealous move disambiguation.

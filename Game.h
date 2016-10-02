@@ -20,13 +20,13 @@
 #include "aTypes.h"
 #include "Board.h"
 #include "Clock.h"
+#include "Engine.h"
 #include "SaveGame.h"
-#include "Thinker.h"
 
 class Game
 {
 public:
-    explicit Game(Thinker *th); // ctor
+    explicit Game(Engine *eng); // ctor
 
     void MakeMove(MoveT move);
     void NewGame(const Board &board, bool resetClocks);
@@ -67,7 +67,7 @@ public:
 
     // Force any engine playing the current side to move.  Synchronous.
     void MoveNow();
-    // A synchronous way to wait for the active thinker to stop thinking.
+    // A synchronous way to wait for the active engine to stop thinking.
     void WaitForEngineIdle();
 
     // Save/restore functionality.
@@ -108,26 +108,25 @@ private:
 
     class Board savedBoard;
 
-    // Associated thinker.  For now there is only one (the root thinker), but
-    //  we will probably want to expand this if we start supporting multiple
-    //  engines.
-    Thinker *th;
+    // Associated engine.  For now there is only one, but we will probably want
+    //  to expand this if we start supporting multiple engines.
+    Engine *eng;
     Position lastRefreshedPosition; // tracked for gUI->positionRefresh()
 
     MoveList searchList; // any particular moves we want to search on?
     
-    void makeMove(MoveT move, bool moveThinkers);
+    void makeMove(MoveT move, bool moveEngines);
     void refresh();
     void stopClocks();
 
-    // thinker-response-handler methods.
+    // engine-response-handler methods.
     void sanityCheckBadRsp(const char *context) const;
-    void onThinkerRspDraw(Thinker &th, MoveT move);
-    void onThinkerRspMove(Thinker &th, MoveT move);
-    void onThinkerRspResign(Thinker &th);
-    void onThinkerRspNotifyStats(Thinker &th, const ThinkerStatsT &stats);
-    void onThinkerRspNotifyPv(Thinker &th, const RspPvArgsT &pvArgs);
-    void setThinkerRspHandler(Thinker &th);
+    void onEngineRspDraw(Engine &eng, MoveT move);
+    void onEngineRspMove(Engine &eng, MoveT move);
+    void onEngineRspResign(Engine &eng);
+    void onEngineRspNotifyStats(Engine &eng, const EngineStatsT &stats);
+    void onEngineRspNotifyPv(Engine &eng, const EnginePvArgsT &pvArgs);
+    void setEngineRspHandler(Engine &eng);
 };
 
 // These are wrappers for SaveGame.

@@ -1,7 +1,7 @@
 //--------------------------------------------------------------------------
-//                playloop.h - main loop and support routines.
+//           Workarounds.h - workarounds for broken libraries, etc.
 //                           -------------------
-//  copyright            : (C) 2008 by Lucian Landry
+//  copyright            : (C) 2016 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
 //--------------------------------------------------------------------------
 
@@ -14,14 +14,22 @@
 //
 //--------------------------------------------------------------------------
 
-#ifndef PLAYLOOP_H
-#define PLAYLOOP_H
+#ifndef WORKAROUNDS_H
+#define WORKAROUNDS_H
 
-#include "Engine.h"
-#include "Game.h"
-#include "Switcher.h"
+// std::is_trivially_copyable was not provided prior to libstdc++5.0, so we
+//  provide it here if necessary.
+// Lifted from: https://github.com/mpark/variant/issues/8.
+#if defined(__GLIBCXX__) && __GLIBCXX__ < 20150801
 
-// Main play loop.
-void PlayloopRun(Game &game, Engine &eng, Switcher &sw);
+// We would #include <type_traits> here, but our source files should have done
+//  that already.
+namespace std
+{
+template <typename T>
+struct is_trivially_copyable : integral_constant<bool, __has_trivial_copy(T)> {
+};
+} // namespace std
+#endif
 
-#endif // PLAYLOOP_H
+#endif // WORKAROUNDS_H

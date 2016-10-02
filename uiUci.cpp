@@ -870,7 +870,7 @@ static void uciNotifyResign(Game *game, int turn)
 // Assumes "result" is long enough to hold the actual result (say 80 chars to
 // be safe).  Returns "result".
 static char *buildStatsString(char *result, Game *game,
-                              const ThinkerStatsT *stats)
+                              const EngineStatsT *stats)
 {
     int nodes = stats->nodes;
     // (Convert bigtime_t to milliseconds)
@@ -890,7 +890,7 @@ static char *buildStatsString(char *result, Game *game,
     return result;
 }
 
-static void uciNotifyPV(Game *game, const RspPvArgsT *pvArgs)
+static void uciNotifyPV(Game *game, const EnginePvArgsT *pvArgs)
 {
     bool bDisplayPv = true, bDisplayEval = true;
     DisplayPv pv = pvArgs->pv; // copy for modification
@@ -959,7 +959,7 @@ static void uciNotifyPV(Game *game, const RspPvArgsT *pvArgs)
 }
 
 
-static void uciNotifyComputerStats(Game *game, const ThinkerStatsT *stats)
+static void uciNotifyComputerStats(Game *game, const EngineStatsT *stats)
 {
     char statsString[80];
 

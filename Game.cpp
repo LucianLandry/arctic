@@ -21,7 +21,7 @@
 #include "MoveList.h"
 #include "ui.h"
 
-Game::Game(Thinker *th) : th(th)
+Game::Game(Engine *eng) : eng(eng)
 {
     // origClocks[], clocks[], sgame, and savedBoard are automatically
     //  constructed.
@@ -34,7 +34,7 @@ Game::Game(Thinker *th) : th(th)
         engineControl[i] = false;
     ResetClocks(); // necessary (to set initial clocks for savegame)
 
-    setThinkerRspHandler(*th);
+    setEngineRspHandler(*eng);
 }
 
 // Handle a change in computer control or pondering.
@@ -83,24 +83,24 @@ void Game::refresh()
     }
     
     if (state == State::Stopped ||
-        (!done && th->CompIsThinking() && engineControl[turn]) ||
-        (!done && th->CompIsPondering() && ponder &&
+        (!done && eng->IsThinking() && engineControl[turn]) ||
+        (!done && eng->IsPondering() && ponder &&
          !engineControl[turn] && engineControl[turn ^ 1]))
     {
         return; // No change in thinking necessary.  Do not restart think cycle.
     }
 
     // Stop anything going on.
-    th->CmdBail();
+    eng->CmdBail();
     
     if (!done && engineControl[turn])
     {
         // Computer needs to make next move; let it do so.
         gUI->notifyThinking();
         if (searchList.NumMoves())
-            th->CmdThink(clocks[turn], searchList);
+            eng->CmdThink(clocks[turn], searchList);
         else
-            th->CmdThink(clocks[turn]);            
+            eng->CmdThink(clocks[turn]);            
     }
     else if (!done && engineControl[turn ^ 1] && ponder)
     {
@@ -108,9 +108,9 @@ void Game::refresh()
         // Do so.
         gUI->notifyPonder();
         if (searchList.NumMoves())
-            th->CmdPonder(searchList);
+            eng->CmdPonder(searchList);
         else
-            th->CmdPonder();
+            eng->CmdPonder();
     }
     else
     {
@@ -119,7 +119,7 @@ void Game::refresh()
     }
 }
 
-void Game::makeMove(MoveT move, bool moveThinkers)
+void Game::makeMove(MoveT move, bool moveEngines)
 {
     if (move == MoveNone) // degenerate case
         return;
@@ -136,8 +136,8 @@ void Game::makeMove(MoveT move, bool moveThinkers)
     bool wasRunning = myClock.IsRunning();
     myClock.Stop();
 
-    if (moveThinkers)
-        th->CmdMakeMove(move);
+    if (moveEngines)
+        eng->CmdMakeMove(move);
     LOG_DEBUG("making move (%d %d): ",
               board.Ply() >> 1, turn);
     LogMove(eLogDebug, &board, move, 0);
@@ -168,8 +168,8 @@ void Game::NewGame(const class Board &board, bool resetClocks)
     sgame.SetStartPosition(savedBoard);
     if (resetClocks)
         ResetClocks();
-    th->CmdNewGame();
-    th->CmdSetBoard(savedBoard);
+    eng->CmdNewGame();
+    eng->CmdSetBoard(savedBoard);
     if (wasRunning)
         Go();
 }
@@ -199,14 +199,14 @@ int Game::GotoPly(int ply)
     if (plyDiff < 0)
     {
         for (int i = 0; i > plyDiff; i--)
-            th->CmdUnmakeMove();
+            eng->CmdUnmakeMove();
     }
     else
     {
         // Need to move forward.  I guess I prefer querying a Board over a
         //  SaveGame to get the proper move.
         for (int i = origPly; i < ply; i++)
-            th->CmdMakeMove(savedBoard.MoveAt(i));
+            eng->CmdMakeMove(savedBoard.MoveAt(i));
     }
     refresh();
     return 0;
@@ -239,16 +239,16 @@ void Game::SetBoard(const class Board &other)
         //  the clocks.
         sgame.GotoPly(lastCommonPly, &savedBoard, nullptr);
         for (int i = 0; i < myPlyDiff; i++)
-            th->CmdUnmakeMove();
+            eng->CmdUnmakeMove();
         for (int i = lastCommonPly; i < other.Ply(); i++)
             MakeMove(other.MoveAt(i));
     }
     else
     {
-        // Do it the 'hard' way.  We prefer to set the Thinker in one swoop
+        // Do it the 'hard' way.  We prefer to set the Engine in one swoop
         //  (as opposed to via SetBoard + MakeMove()) to (kindof) preserve the
         //  PV better and to minimize traffic.
-        th->CmdSetBoard(other);
+        eng->CmdSetBoard(other);
         class Board tmpBoard = other;
         while (tmpBoard.Ply() != tmpBoard.BasePly()) // goto the base position
             tmpBoard.UnmakeMove();
@@ -373,7 +373,7 @@ void Game::TogglePonder()
 
 Config &Game::EngineConfig()
 {
-    return th->Config();
+    return eng->Config();
 }
 
 bool Game::Stop()
@@ -381,7 +381,7 @@ bool Game::Stop()
     if (state == State::Stopped)
         return false;
     state = State::Stopped;
-    th->CmdBail();
+    eng->CmdBail();
     stopClocks();
     return true;
 }
@@ -419,17 +419,17 @@ void Game::SetAutoPlayEngineMoves(bool value)
 
 void Game::WaitForEngineIdle()
 {
-    while (th->CompIsBusy())
-        th->ProcessOneRsp();
+    while (eng->IsBusy())
+        eng->ProcessOneRsp();
 }
 
 void Game::MoveNow()
 {
-    th->CmdMoveNow();
+    eng->CmdMoveNow();
     WaitForEngineIdle();
 }
 
-// Handlers for Thinker responses.
+// Handlers for Engine responses.
 void Game::sanityCheckBadRsp(const char *context) const
 {
     // The engine should not emit anything when it isn't pondering *and*
@@ -441,7 +441,7 @@ void Game::sanityCheckBadRsp(const char *context) const
     }
 }
 
-void Game::onThinkerRspDraw(Thinker &th, MoveT move)
+void Game::onEngineRspDraw(Engine &eng, MoveT move)
 {
     class Board &board = savedBoard; // shorthand
     
@@ -481,7 +481,7 @@ void Game::onThinkerRspDraw(Thinker &th, MoveT move)
         Go(); // resets the state, but should not get far since done == true
 }
 
-void Game::onThinkerRspMove(Thinker &th, MoveT move)
+void Game::onEngineRspMove(Engine &eng, MoveT move)
 {
     sanityCheckBadRsp(__func__);
     if (!engineControl[savedBoard.Turn()])
@@ -500,7 +500,7 @@ void Game::onThinkerRspMove(Thinker &th, MoveT move)
     LogFlush();
 }
 
-void Game::onThinkerRspResign(Thinker &th)
+void Game::onEngineRspResign(Engine &eng)
 {
     sanityCheckBadRsp(__func__);
     int turn =
@@ -517,36 +517,36 @@ void Game::onThinkerRspResign(Thinker &th)
     gUI->notifyResign(this, turn);
 }
 
-void Game::onThinkerRspNotifyStats(Thinker &th, const ThinkerStatsT &stats)
+void Game::onEngineRspNotifyStats(Engine &eng, const EngineStatsT &stats)
 {
     sanityCheckBadRsp(__func__);
     gUI->notifyComputerStats(this, &stats);
 }
 
-void Game::onThinkerRspNotifyPv(Thinker &th, const RspPvArgsT &pvArgs)
+void Game::onEngineRspNotifyPv(Engine &eng, const EnginePvArgsT &pvArgs)
 {
     sanityCheckBadRsp(__func__);
     gUI->notifyPV(this, &pvArgs);
 }
 
-void Game::setThinkerRspHandler(Thinker &th)
+void Game::setEngineRspHandler(Engine &eng)
 {
-    Thinker::RspHandlerT rspHandler;
-    rspHandler.Draw = std::bind(&Game::onThinkerRspDraw, this,
+    Engine::RspHandlerT rspHandler;
+    rspHandler.Draw = std::bind(&Game::onEngineRspDraw, this,
                                 std::placeholders::_1, std::placeholders::_2);
-    rspHandler.Move = std::bind(&Game::onThinkerRspMove, this,
+    rspHandler.Move = std::bind(&Game::onEngineRspMove, this,
                                 std::placeholders::_1, std::placeholders::_2);
-    rspHandler.Resign = std::bind(&Game::onThinkerRspResign, this,
+    rspHandler.Resign = std::bind(&Game::onEngineRspResign, this,
                                   std::placeholders::_1);
     rspHandler.NotifyStats =
-        std::bind(&Game::onThinkerRspNotifyStats, this,
+        std::bind(&Game::onEngineRspNotifyStats, this,
                   std::placeholders::_1, std::placeholders::_2);
     rspHandler.NotifyPv =
-        std::bind(&Game::onThinkerRspNotifyPv, this,
+        std::bind(&Game::onEngineRspNotifyPv, this,
                   std::placeholders::_1, std::placeholders::_2);
     // .SearchDone is left unset for now; if it is actually called we should
     // terminate with a badfunc exception.
-    th.SetRspHandler(rspHandler);
+    eng.SetRspHandler(rspHandler);
 }
 
 int Game::Save()
@@ -569,8 +569,8 @@ int Game::Restore()
     // here that the user is absent-minded and might forget (or might not
     // know) the current ply is persistent.
     sgame.GotoPly(LastPly(), &savedBoard, clocks);
-    th->CmdNewGame(); // Reset thinkers, etc.
-    th->CmdSetBoard(savedBoard);
+    eng->CmdNewGame(); // Reset engines
+    eng->CmdSetBoard(savedBoard);
     if (wasRunning)
         Go();
     return 0;

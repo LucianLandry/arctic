@@ -152,7 +152,7 @@ static void UIStatusDraw(Game *game)
 }
 
 // prints out expected move sequence at the bottom of the screen.
-static void UINotifyPV(Game *game, const RspPvArgsT *pvArgs)
+static void UINotifyPV(Game *game, const EnginePvArgsT *pvArgs)
 {
     char spaces[80];
     char mySanString[79 - 18];
@@ -595,7 +595,7 @@ static void UIEditPosition(Position &position)
     position.SetPly(0);
     position.SetNcpPlies(0);
 
-    while (1)
+    while (true)
     {
         UIPrintPositionStatus(position);
         gotoxy(OPTIONS_X, 21);
@@ -676,7 +676,7 @@ static void UIEditPosition(Position &position)
         UICursorDraw(*coord, CURSOR_HIDE);  /* Unmark current loc */
         UICursorMove(c, coord);
         UICursorDraw(*coord, CURSOR_BLINK); /* Blink new loc */
-    } // end while (1)
+    } // end while (true)
 }
 
 #define APPLY_BOTH (NUM_PLAYERS)
@@ -698,7 +698,7 @@ static void UITimeMenu(Game *game)
 
     UICursorDraw(*coord, CURSOR_BLINK);
 
-    while (1)
+    while (true)
     {
         UITimeOptionsDraw(game, applyToggle);
         // I do this here just so the cursor ends up in an aesthetically
@@ -815,7 +815,7 @@ static void UIGetCommand(uint8 command[], Game *game)
 #endif
         ; // terminates 'validChars[]'
 
-    while (1)
+    while (true)
     {
         // Wait for actual input.
         while (!kbhit())
@@ -950,7 +950,7 @@ static void UINotifyReady(void)
     UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
 }
 
-static void UINotifyComputerStats(Game *game, const ThinkerStatsT *stats)
+static void UINotifyComputerStats(Game *game, const EngineStatsT *stats)
 {
     gotoxy(1, 1);
     textcolor(SYSTEMCOL);

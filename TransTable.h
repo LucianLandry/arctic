@@ -21,8 +21,8 @@
 
 #include "aSpinlock.h"
 #include "aTypes.h"
+#include "EngineTypes.h"
 #include "Eval.h"
-#include "ThinkerTypes.h"
 
 // This class does lazy initialization, and must be Reset() before it can
 //  actually be used (otherwise its effective size will be 0).
@@ -66,14 +66,14 @@ public:
     // (Does alter the hash table as a side effect, so cannot be const)
     bool IsHit(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
                int searchDepth, uint16 basePly, int alpha, int beta,
-               ThinkerStatsT *stats);
+               EngineStatsT *stats);
 
     // (Maybe) update the transposition table with the new position.  The
     //  table code itself decides whether it is optimal to actually do the
     //  update.
     void ConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
                            int searchDepth, uint16 basePly,
-                           ThinkerStatsT *stats);
+                           EngineStatsT *stats);
 
 private:
     struct HashPositionT
@@ -114,7 +114,7 @@ private:
 
     bool hitTest(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
                  int searchDepth, uint16 basePly, int alpha, int beta,
-                 ThinkerStatsT *stats, size_t entry);
+                 EngineStatsT *stats, size_t entry);
 
     static size_t normalizeNumEntries(size_t numEntries);
     static int64 normalizeSize(int64 size);
@@ -140,7 +140,7 @@ inline size_t TransTable::NumEntries() const
 inline bool TransTable::IsHit(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
                               int searchDepth, uint16 basePly,
                               int alpha, int beta,
-                              ThinkerStatsT *stats)
+                              EngineStatsT *stats)
 {
     if (!Size())
         return false;

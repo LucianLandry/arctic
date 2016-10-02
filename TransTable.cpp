@@ -272,7 +272,7 @@ size_t TransTable::calcEntry(uint64 zobrist) const
 // Should only be called by IsHit(), which does some pre-checks.
 bool TransTable::hitTest(Eval *hashEval, MoveT *hashMove, uint64 zobrist,
                          int searchDepth, uint16 basePly, int alpha, int beta,
-                         ThinkerStatsT *stats, size_t entry)
+                         EngineStatsT *stats, size_t entry)
 {
     HashPositionT &vHp = hash[entry];
     int8 hashDepth;
@@ -328,7 +328,7 @@ void TransTable::Prefetch(uint64 zobrist) const
 
 void TransTable::ConditionalUpdate(Eval eval, MoveT move, uint64 zobrist,
                                    int searchDepth, uint16 basePly,
-                                   ThinkerStatsT *stats)
+                                   EngineStatsT *stats)
 {
     if (!Size())
         return;

@@ -476,7 +476,7 @@ static void uiThread(Game *game, Switcher *sw, Semaphore *readySem)
     // Let the main thread know it is safe to continue.
     readySem->post();
     sw->Register();
-    while (1)
+    while (true)
         gUI->playerMove(game);
 }
 

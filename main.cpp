@@ -24,12 +24,12 @@
 #include "aSystem.h"
 #include "Board.h"
 #include "clockUtil.h"
+#include "Engine.h"
 #include "Game.h"
 #include "gPreCalc.h"
 #include "log.h"
 #include "playloop.h"
 #include "Switcher.h"
-#include "Thinker.h"
 #include "ui.h"
 #include "uiUtil.h"
 
@@ -169,8 +169,8 @@ int main(int argc, char *argv[])
     Switcher sw;
     sw.Register();
 
-    Thinker th; // This is the root thinker.
-    Game game(&th);
+    Engine eng; // This is the root engine.
+    Game game(&eng);
 
     gUI =
         !strcmp(uiString, "juce") ? uiJuceOps() :
@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
     readySem.wait();
 
     gUI->notifyReady();
-    PlayloopRun(game, th, sw); // Enter main play loop.
+    PlayloopRun(game, eng, sw); // Enter main play loop.
     gUI->exit();
 
     return 0;

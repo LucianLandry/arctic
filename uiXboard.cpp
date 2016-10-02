@@ -75,7 +75,7 @@ static void xboardEditPosition(Position &position)
     position.SetPly(0);
     position.SetNcpPlies(0);
 
-    while (1)
+    while (true)
     {
         inputStr = getStdinLine(MAXBUFLEN, gXboardState.sw);
 
@@ -701,7 +701,7 @@ static void xboardNotifyCheckmated(int turn)
            turn, turn ^ 1, turn ? "White" : "Black");
 }
 
-static void xboardNotifyPV(Game *game, const RspPvArgsT *pvArgs)
+static void xboardNotifyPV(Game *game, const EnginePvArgsT *pvArgs)
 {
     char mySanString[kMaxPvStringLen];
     const DisplayPv &pv = pvArgs->pv; // shorthand
@@ -723,7 +723,7 @@ static void xboardNotifyPV(Game *game, const RspPvArgsT *pvArgs)
 }
 
 static void xboardNotifyComputerStats(Game *game,
-                                      const ThinkerStatsT *stats) { }
+                                      const EngineStatsT *stats) { }
 static void xboardPositionRefresh(const Position &position) { }
 static void xboardNoop(void) { }
 static void xboardStatusDraw(Game *game) { }

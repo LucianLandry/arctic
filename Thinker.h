@@ -17,126 +17,47 @@
 #ifndef THINKER_H
 #define THINKER_H
 
-#include <thread>
+#include <thread>     // std::thread
 
-#include "aTypes.h"
 #include "Board.h"
 #include "Clock.h"
-#include "Config.h"
-#include "Eval.h"
+#include "EngineTypes.h"
 #include "MoveList.h"
-#include "Pv.h"
-#include "ref.h"
-#include "ThinkerTypes.h"
-
-// FIXME, external code should not need to be aware of this.
-enum eThinkMsgT
-{
-    eCmdThink,   // full iterative-depth search
-    eCmdPonder,  // ponder
-    eCmdSearch,  // simple search on a sub-tree
-    // eCmdMoveNow not needed until clustering
-
-    eRspDraw,      // takes MoveT
-    eRspMove,      // takes MoveT
-    eRspResign,    // takes (void)
-    eRspStats,     // takes ThinkerStatsT
-    eRspPv,        // takes RspPvArgsT
-
-    eRspSearchDone // takes RspSearchDoneArgsT
-};
-
-struct RspPvArgsT
-{
-    ThinkerStatsT stats;
-    DisplayPv pv;
-};
-
-struct RspSearchDoneArgsT
-{
-    RspSearchDoneArgsT() : pv(0) {}
-    RspSearchDoneArgsT(MoveT move, Eval eval, const SearchPv &pv) :
-        move(move), eval(eval), pv(pv) {}
-    MoveT move;
-    Eval eval;
-    SearchPv pv;
-};
 
 class Thinker
 {
 public:
-    Thinker(); // ctor
+    Thinker(int sock); // ctor
     ~Thinker(); // dtor
-
-    // ---------------------------------------------------------------------
-    // Client/proxy-side methods:
-
-    void CmdNewGame();
-    void CmdSetBoard(const Board &board);
-    void CmdMakeMove(MoveT move);
-    void CmdUnmakeMove();
-    
-    void CmdThink(const Clock &myClock, const MoveList &mvlist);
-    void CmdThink(const Clock &myClock);
-    void CmdPonder(const MoveList &mvlist);
-    void CmdPonder();
-    void CmdSearch(int alpha, int beta, MoveT move);
-    
-    void CmdMoveNow();
-    void CmdBail();
-
-    bool CompIsThinking() const;
-    bool CompIsPondering() const;
-    bool CompIsSearching() const;
-    bool CompIsBusy() const;
-
-    // Return *clock* time we want to move at.  For instance if == 30000000, we
-    //  want to move when there is 30 seconds left on our clock.  When
-    //  CLOCK_TIME_INFINITE, we should rely on the Thinker to move itself.
-    // This is a bit bizarre compared to just returning the absolute time we
-    //  want to move at, but it helps us with displaying ticks, and time
-    //  management should be internal in the future anyway.
-    inline bigtime_t GoalTime() const;
-    
-    // return a poll()able object that says 'you can call RecvRsp()'
-    int MasterSock() const;
-
-    using RspDrawFunc = std::function<void(Thinker &, MoveT)>;
-    using RspMoveFunc = std::function<void(Thinker &, MoveT)>;
-    using RspResignFunc = std::function<void(Thinker &)>;
-    using RspNotifyStatsFunc =
-        std::function<void(Thinker &, const ThinkerStatsT &)>;
-    using RspNotifyPvFunc =
-        std::function<void(Thinker &, const RspPvArgsT &)>;
-    using RspSearchDoneFunc =
-        std::function<void(Thinker &, const RspSearchDoneArgsT &)>;
-
-    struct RspHandlerT
-    {
-        RspDrawFunc Draw;
-        RspMoveFunc Move;
-        RspResignFunc Resign;
-        RspNotifyStatsFunc NotifyStats;
-        RspNotifyPvFunc NotifyPv;
-        RspSearchDoneFunc SearchDone;
-    };
-    void SetRspHandler(const RspHandlerT &rspHandler);
-    void ProcessOneRsp();
-    
-    // ---------------------------------------------------------------------
-    // Server/engine-side methods:
 
     // Currently, only claimed draws use RspDraw().  Automatic draws use
     // RspMove().
     void RspDraw(MoveT move) const;
     void RspMove(MoveT move) const;
     void RspResign() const;
-    void RspNotifyStats(const ThinkerStatsT &stats) const;
-    void RspNotifyPv(const ThinkerStatsT &stats, const DisplayPv &pv) const;
+    void RspNotifyStats(const EngineStatsT &stats) const;
+    void RspNotifyPv(const EngineStatsT &stats, const DisplayPv &pv) const;
     void RspSearchDone(MoveT move, Eval eval, const SearchPv &pv) const;
-    inline bool CompNeedsToMove() const;
-    eThinkMsgT CompWaitThinkOrPonder() const;
-    void CompWaitSearch() const;
+    inline bool NeedsToMove() const;
+
+    // Messages passed between Engine and Thinker threads.
+    enum class Message
+    {
+        CmdThink,   // full iterative-depth search
+        CmdPonder,  // ponder
+        CmdSearch,  // simple search on a sub-tree
+        // CmdMoveNow not needed until clustering
+        
+        RspDraw,      // takes MoveT
+        RspMove,      // takes MoveT
+        RspResign,    // takes (void)
+        RspStats,     // takes EngineStatsT
+        RspPv,        // takes EnginePvArgsT
+        RspSearchDone // takes EngineSearchDoneArgsT
+    };
+    
+    Message WaitThinkOrPonder() const;
+    void WaitSearch() const;
     inline bool IsRootThinker() const;
     static inline Thinker &RootThinker();
 
@@ -157,8 +78,18 @@ public:
         int depth;       // Depth we are currently searching at (searching from
                          //  root == 0).
 
-        // Searchers dump their results into here.
-        RspSearchDoneArgsT searchResult;
+        // Signals that we should move; set by CmdMoveNow().
+        volatile bool moveNow;
+
+        struct
+        {
+            int alpha, beta;
+            MoveT move;
+            int curDepth, maxDepth;
+        } searchArgs; // These args are set by CmdSearch().
+        
+        // Sub-searchers dump their results into here.
+        EngineSearchDoneArgsT searchResult;
     };
 
     // (used by engine to track/manipulate internal state)
@@ -168,6 +99,7 @@ public:
     struct SharedContextT
     {
         SharedContextT(); // ctor
+
         // The following are currently only meaningful for the root thinker:
         // Config variable.  DepthNoLimit == no limit.  Like 'maxDepth', except
         //  'maxDepth' is manipulated by the engine.
@@ -178,103 +110,42 @@ public:
         volatile bool randomMoves;
         volatile bool canResign;
         int maxThreads; // max searcher threads.
+
+        // State that is shared between local thinkers because it would be
+        //  a bad idea to not do so.
         HintPv pv; // Attempts to track the principal variation.
-        ThinkerStatsT stats;
+        EngineStatsT stats;
         int gameCount; // for debugging.
     };
     // (used by engine to track/manipulate internal state shared between
     //  threads)
     inline SharedContextT &SharedContext();
-    
-    // ---------------------------------------------------------------------
-    // methods common to both client and engine:
-    inline class Config &Config();
-    
+
+    static void sendMessage(int sock, Thinker::Message msg, const void *args,
+                            int argsLen);
+    static Message recvMessage(int sock, void *args, int argsLen);
+    // Returns 'true' iff the computer went idle after sending 'msg'.
+    static bool IsFinalResponse(Message msg);
 private:
-    // The masterSock sends commands and receives responses.
-    // The slaveSock receives commands and sends responses.
-    int masterSock, slaveSock;
-
-    enum class State : uint8
-    {
-        Idle,
-        Pondering,
-        Thinking,
-        Searching
-    };
-
-    State state;
-    bigtime_t goalTime;
-    volatile bool moveNow;
-
-    struct SearchArgsT
-    {
-        SearchArgsT(); // Need this since 'pv' has no default constructor
-
-        // passed-in args.
-        int alpha;          // (eCmdSearch)
-        int beta;           // (eCmdSearch)
-
-        // passed in and also out (but unaltered).
-        MoveT move;         // (eCmdSearch)
-
-        // passed-out args.
-        SearchPv pv;        // (eCmdSearch ... not used for eRspPv)
-        Eval eval;          // (eCmdSearch)
-    } searchArgs;
+    int slaveSock; // Receives commands and sends responses.
 
     ContextT context;
     std::shared_ptr<SharedContextT> sharedContext;
-    class Config config;
     
     void threadFunc();
     std::thread *thread;
 
-    RspHandlerT rspHandler;
-
-    void calcGoalTime(const Clock &myClock);
-    void compSendCmd(eThinkMsgT cmd) const;
-    void compSendRsp(eThinkMsgT rsp, const void *buffer, int bufLen) const;
-    eThinkMsgT recvCmd(void *buffer, int bufLen) const;
-    eThinkMsgT recvRsp(void *buffer, int bufLen);
-    void doThink(eThinkMsgT cmd, const MoveList *mvlist);
-    void restoreState(State state);
-    void onMaxMemoryChanged(const Config::SpinItem &item);
-    void onMaxThreadsChanged(const Config::SpinItem &item);
+    void sendRsp(Message rsp, const void *args, int argsLen) const;
+    Message recvCmd(void *args, int argsLen) const;
     
     // There is (currently) one 'master' thinker that coordinates all of the
     //  other thinkers, which act as search threads.
     static Thinker *rootThinker;
 };
 
-inline bool Thinker::CompNeedsToMove() const
+inline bool Thinker::NeedsToMove() const
 {
-    return rootThinker->moveNow;
-}
-
-inline bool Thinker::CompIsThinking() const
-{
-    return state == State::Thinking;
-}
-
-inline bool Thinker::CompIsPondering() const
-{
-    return state == State::Pondering;
-}
-
-inline bool Thinker::CompIsSearching() const
-{
-    return state == State::Searching;
-}
-
-inline bool Thinker::CompIsBusy() const
-{
-    return state != State::Idle;
-}
-
-inline int Thinker::MasterSock() const
-{
-    return masterSock;
+    return rootThinker->context.moveNow;
 }
 
 inline bool Thinker::IsRootThinker() const
@@ -297,27 +168,17 @@ inline Thinker::SharedContextT &Thinker::SharedContext()
     return *sharedContext;
 }
 
-inline bigtime_t Thinker::GoalTime() const
-{
-    return CompIsThinking() ? goalTime : CLOCK_TIME_INFINITE;
-}
-
-inline class Config &Thinker::Config()
-{
-    return config;
-}
-
-// Operations on slave threads.
-bool ThinkerSearcherGetAndSearch(int alpha, int beta, MoveT move);
-Eval ThinkerSearchersWaitOne(MoveT &move, SearchPv &pv, Thinker &parent);
-void ThinkerSearchersBail();
-void ThinkerSearchersMakeMove(MoveT move);
-void ThinkerSearchersUnmakeMove();
-int ThinkerSearchersAreSearching();
-void ThinkerSearchersSetBoard(const Board &board);
-void ThinkerSearchersSetDepthAndLevel(int depth, int level);
+// Operations on searcher threads:
+bool SearchersDelegateSearch(int alpha, int beta, MoveT move, int curDepth,
+                             int maxDepth);
+Eval SearchersWaitOne(MoveT &move, SearchPv &pv, Thinker &parent);
+void SearchersBail();
+void SearchersMakeMove(MoveT move);
+void SearchersUnmakeMove();
+bool SearchersAreSearching();
+void SearchersSetBoard(const Board &board);
 // Initialize searcher threads on the fly.  Should be called only when the
 //  engine is idle.
-void ThinkerSearchersSetNumThreads(int numThreads);
+void SearchersSetNumThreads(int numThreads);
 
 #endif // THINKER_H

@@ -26,7 +26,7 @@
 #include "ui.h"
 
 // Main play loop.
-void PlayloopRun(Game &game, Thinker &th, Switcher &sw)
+void PlayloopRun(Game &game, Engine &eng, Switcher &sw)
 {
     struct pollfd pfds[2];
     int res;
@@ -39,10 +39,10 @@ void PlayloopRun(Game &game, Thinker &th, Switcher &sw)
     // Setup the pollfd array.
     pfds[0].fd = fileno(stdin);
     pfds[0].events = POLLIN;
-    pfds[1].fd = th.MasterSock();
+    pfds[1].fd = eng.MasterSock();
     pfds[1].events = POLLIN;
 
-    while (1)
+    while (true)
     {
         tickTimeout = -1;
         moveNowTimeout = -1;
@@ -75,7 +75,7 @@ void PlayloopRun(Game &game, Thinker &th, Switcher &sw)
             tickTimeout += 1; // ... and adjusted for division truncation
         }
 
-        bigtime_t goalTime = th.GoalTime();
+        bigtime_t goalTime = eng.GoalTime();
         // The engine cannot currently prompt itself to move (usually), so we
         //  take care of that.
         if (goalTime != CLOCK_TIME_INFINITE)
@@ -99,7 +99,7 @@ void PlayloopRun(Game &game, Thinker &th, Switcher &sw)
         {
             // poll timed out.  Do appropriate action and re-poll.
             if (moveNowOnTimeout)
-                th.CmdMoveNow();
+                eng.CmdMoveNow();
             else
                 gUI->notifyTick(&game); // Tick, tock...
             continue;
@@ -124,7 +124,7 @@ void PlayloopRun(Game &game, Thinker &th, Switcher &sw)
         // so we need to re-poll...
         else if (pfds[1].revents & POLLIN)
         {
-            th.ProcessOneRsp();
+            eng.ProcessOneRsp();
         }
     }
 }
