@@ -52,6 +52,7 @@ static struct {
                           //  1 -> black).  The engine might not be currently
                           //  playing for either side, but that is irrelevant.
     bool icsClocks;
+    MoveT hintMove;
 } gXboardState;
 
 static void xboardNotifyError(char *reason)
@@ -138,6 +139,7 @@ static void xboardInit(Game *game, Switcher *sw)
     setbuf(stdout, NULL);
     setbuf(stdin, NULL);
     gXboardState.sw = sw;
+    gXboardState.hintMove = MoveNone;
     // UCI may have clobbered autoplay, so reset
     game->SetAutoPlayEngineMoves(true);
     // The spec does not mention that a "new" must come in before anything else,
@@ -333,6 +335,22 @@ void processPingCommand(Game *game, const char *inputStr)
     printf("pong %d\n", i);
 }
 
+void processHintCommand(Game *game, const char *inputStr)
+{
+    const Board &board = game->Board(); // shorthand
+
+    if (gXboardState.badPosition || gXboardState.hintMove == MoveNone ||
+        game->EngineControl(board.Turn()))
+    {
+        return;
+    }
+
+    MoveStyleT style = {mnSAN, csOO, true};
+    char tmpStr[MOVE_STRING_MAX];
+    printf("Hint: %s\n",
+           gXboardState.hintMove.ToString(tmpStr, &style, &board));
+}
+
 void processRatingCommand(Game *game, const char *inputStr)
 {
     int ourRating, oppRating;
@@ -434,7 +452,6 @@ static void xboardPlayerMove(Game *game)
              matches(inputStr, "rejected") ||
              // (We do not accept draw offers yet.)
              matches(inputStr, "draw") ||
-             matches(inputStr, "hint") ||
              matches(inputStr, "name") ||
              matches(inputStr, "computer"))
     {
@@ -474,6 +491,7 @@ static void xboardPlayerMove(Game *game)
         gXboardState.engineLastPlayed = 1;
         gXboardState.badPosition = false; // hope for the best.
         gXboardState.newgame = true;
+        gXboardState.hintMove = MoveNone;
     }
     else if (matches(inputStr, "quit"))
     {
@@ -502,6 +520,7 @@ static void xboardPlayerMove(Game *game)
         turn = matches(inputStr, "white");
         game->SetEngineControl(turn ^ 1, true);
         gXboardState.engineLastPlayed = turn ^ 1;
+        gXboardState.hintMove = MoveNone;
     }
     else if (matches(inputStr, "level"))
     {
@@ -535,11 +554,13 @@ static void xboardPlayerMove(Game *game)
     {
         // We don't care if we won, lost, or drew.  Just stop thinking.
         game->StopAndForce();
+        gXboardState.hintMove = MoveNone;
     }
     else if (matches(inputStr, "setboard"))
     {
         bool wasRunning = game->Stop();
         gXboardState.badPosition = false; // hope for the best.
+        gXboardState.hintMove = MoveNone;
         if (fenToBoard(inputStr + strlen("setboard "), &tmpBoard) < 0)
         {
             gXboardState.badPosition = true;
@@ -559,6 +580,7 @@ static void xboardPlayerMove(Game *game)
     {
         bool wasRunning = game->Stop();
         gXboardState.badPosition = false; // hope for the best.
+        gXboardState.hintMove = MoveNone;
         Position tmpPosition = board.Position();
         std::string errString;
         xboardEditPosition(tmpPosition);
@@ -576,10 +598,16 @@ static void xboardPlayerMove(Game *game)
             gXboardState.badPosition = true;
         }
     }
+    else if (matches(inputStr, "hint"))
+    {
+        processHintCommand(game, inputStr);
+    }
     else if (matches(inputStr, "undo"))
     {
         if (game->Rewind(1) < 0)
             printf("Error (start of game): %s\n", inputStr);
+        else
+            gXboardState.hintMove = MoveNone;
     }
     else if (matches(inputStr, "remove"))
     {
@@ -587,6 +615,8 @@ static void xboardPlayerMove(Game *game)
         //  that is only fair).  However, xboard mentions nothing about that :|
         if (game->Rewind(2) < 0)
             printf("Error (ply %d): %s\n", game->CurrentPly(), inputStr);
+        else
+            gXboardState.hintMove = MoveNone;            
     }
     else if (matches(inputStr, "hard"))
     {
@@ -632,6 +662,7 @@ static void xboardPlayerMove(Game *game)
     {
         // Play the color on move, and start thinking.
         gXboardState.newgame = false;
+        gXboardState.hintMove = MoveNone;
         game->StopAndForce(); // Just in case.
         turn = board.Turn();
         game->SetEngineControl(turn, true);
@@ -650,6 +681,7 @@ static void xboardPlayerMove(Game *game)
         // At this point, we must have a valid move.
         game->MakeMove(myMove);
         gXboardState.newgame = false;
+        gXboardState.hintMove = MoveNone;
         // We may already be Go()ing, but this is necessary for newgame and
         //  other situations where we are Stop()ped.
         if (game->EngineControl(0) || game->EngineControl(1))
@@ -664,7 +696,6 @@ static void xboardPlayerMove(Game *game)
     gXboardState.sw->Switch(); // Wait for more input.
 }
 
-
 static void xboardNotifyMove(Game *game, MoveT move)
 {
     char tmpStr[MOVE_STRING_MAX];
@@ -674,8 +705,7 @@ static void xboardNotifyMove(Game *game, MoveT move)
     printf("move %s\n", move.ToString(tmpStr, &ms, NULL));
 }
 
-
-void xboardNotifyDraw(Game *game, const char *reason, MoveT *move)
+static void xboardNotifyDraw(Game *game, const char *reason, MoveT *move)
 {
     // I do not know of a way to claim a draw w/move atomically with Xboard
     //  (for instance, we know this next move will get us draw by repetition
@@ -683,22 +713,23 @@ void xboardNotifyDraw(Game *game, const char *reason, MoveT *move)
     //  can make a move before we can claim the draw.  This only matters
     //  when playing on a chess server.  FIXME.
     if (move != NULL && *move != MoveNone)
-    {
         xboardNotifyMove(game, *move);
-    }
     printf("1/2-1/2 {%s}\n", reason);
+    gXboardState.hintMove = MoveNone;
 }
 
 static void xboardNotifyResign(Game *game, int turn)
 {
     printf("%d-%d {%s resigns}\n",
            turn, turn ^ 1, turn ? "Black" : "White");
+    gXboardState.hintMove = MoveNone;
 }
 
 static void xboardNotifyCheckmated(int turn)
 {
     printf("%d-%d {%s mates}\n",
            turn, turn ^ 1, turn ? "White" : "Black");
+    gXboardState.hintMove = MoveNone;
 }
 
 static void xboardNotifyPV(Game *game, const EnginePvArgsT *pvArgs)
@@ -708,6 +739,7 @@ static void xboardNotifyPV(Game *game, const EnginePvArgsT *pvArgs)
     const Board &board = game->Board(); // shorthand
     MoveStyleT pvStyle = {mnSAN, csOO, true};
 
+    gXboardState.hintMove = pv.Moves(game->EngineControl(board.Turn()));
     if (!gXboardState.post ||
         pv.BuildMoveString(mySanString, sizeof(mySanString), pvStyle,
                            board) < 1)

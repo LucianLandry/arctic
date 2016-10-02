@@ -22,7 +22,7 @@ Support multiple kings on the board.  Also consider not hard-coding which
 	pieces are 'royal' (ie killing them wins the game)
 Support for chess variants.  fischer-random, crazyhouse and Die come to mind.
 	Also consider the FICS wild variants + Xboard variants.
-uiXboard: implement 'hint', analyze mode.
+uiXboard: implement analyze mode.
 Fractional ply extension. (+ 1/numMoves)
 Shrink search window (not null necessarily, but do shrink it)
 Better thread utilization: keep all threads busy through end of minimax compute
@@ -38,12 +38,13 @@ Converted code to use platform-agnostic std::thread.
 Implemented platform-agnostic Semaphore class and converted everyone to use it.
 Updated license from LGPL 2 to LGPL 2.1 (except conio.[ch])
 uiXboard: fix bad "ping" command handling in extremely rare cases; fix poorly
-    formatted error strings (no newline!); slightly better error handling.
+    formatted error strings (no newline!); slightly better error handling;
+    implemented "hint" command.
 Displayed search depth now consistently starts at 1, not 0.
 Bugfix: fix think time w/infinite clock but per-move limit.
 Bugfix: crash when switching on the fly from xboard to uci interface
-uiUci: attempt to report a bestmove when we stop pondering; handle
-    'ponder + searchmoves' sanely; more correct ponder info and score
+uiUci: handle 'ponder + searchmoves' sanely; attempt to report a bestmove when
+    we stop pondering; more correct ponder info and score.
 Refactored into C++ classes: SpinlockT -> arctic::Spinlock (1.6% speedup +
     platform-agnostic), PvT -> (SearchPv, DisplayPv, HintPv), GameT -> Game,
     TransTable* functionality -> Trans(Position)Table, SaveGameT -> SaveGame,
