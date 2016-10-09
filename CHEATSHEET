@@ -40,8 +40,6 @@ git checkout HEAD (file)
 USING CMAKE:
 
 cd <builddir>
-# generates Makefiles.
-cmake -D JUCE_PATH=/home/blandry/juce -D JUCE_DEBUG=1 ../src
 
 # Under Debian Jessie, 'arctic' currently runs faster when built by clang.
 # Note that the `which ...` below seems to be required for cmake 3.0.2;
@@ -50,8 +48,10 @@ cmake -D JUCE_PATH=/home/blandry/juce -D JUCE_DEBUG=1 ../src
 # Also note that gcc 4.9.2 is subtly broken in the warnings department; we run
 #  into https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61971 (or similar).  The
 #  issue is fixed in gcc 4.9.3.
-cmake -D JUCE_PATH=/home/blandry/juce -D JUCE_DEBUG=1 -D CMAKE_C_COMPILER=`which gcc` -D CMAKE_CXX_COMPILER=`which g++` ../src
-cmake -D JUCE_PATH=/home/blandry/juce -D JUCE_DEBUG=1 -D CMAKE_C_COMPILER=`which clang` -D CMAKE_CXX_COMPILER=`which clang++` ../src
+cmake -DCMAKE_C_COMPILER=`which gcc` -DCMAKE_CXX_COMPILER=`which g++` ../src
+cmake -DCMAKE_C_COMPILER=`which clang` -DCMAKE_CXX_COMPILER=`which clang++` ../src
+cmake -DENABLE_UI_JUCE="ON" -DJUCE_PATH=~/juce -DCMAKE_C_COMPILER=`which clang` -DCMAKE_CXX_COMPILER=`which clang++` ../src
+
 make
 
 No true build log is normally generated, but if you need one, you can do:
@@ -156,10 +156,10 @@ set autoflag 1
 
 # Play a UCI engine - vs UCI engine match (pondering enabled to understand
 # UCI innards better)
-xboard -size bulky -debug -nameOfDebugFile ~/xboard.debug -thinking -ponder -mode TwoMachines -smpCores 8 -fcp "polyglot -noini -log true -lf /home/blandry/polyglot.log -ec fruit" -scp "polyglot -noini -log true -lf /home/blandry/polyglot.log2 -ec stockfish"
+xboard -size bulky -debug -nameOfDebugFile ~/xboard.debug -thinking -ponder -mode TwoMachines -smpCores 8 -fcp "polyglot -noini -log true -lf ~/polyglot.log -ec fruit" -scp "polyglot -noini -log true -lf ~/polyglot.log2 -ec stockfish"
 
 # Play arctic (UCI) against older version
-xboard -size bulky -defaultHashSize 508 -debug -nameOfDebugFile ~/xboard.debug -thinking -xponder -mode TwoMachines -smpCores 8 -fcp ../../arcticExe/arctic10 -scp "polyglot -noini -log true -lf /home/blandry/polyglot.log3 -ec ./arctic"
+xboard -size bulky -defaultHashSize 508 -debug -nameOfDebugFile ~/xboard.debug -thinking -xponder -mode TwoMachines -smpCores 8 -fcp ../../arcticExe/arctic10 -scp "polyglot -noini -log true -lf ~/polyglot.log3 -ec ./arctic"
 
 # uci: figure out whether pondering returns a pondermove when stopped
 uci

@@ -2,11 +2,11 @@
 # size and/or layout when they are built with debugging, so if the application
 # is not built with the same flags as the "library", it will get very weird
 # runtime errors.
-if (JUCE_DEBUG)
+if(ENABLE_UI_JUCE_DEBUG STREQUAL "ON")
     set(JUCE_DEBUG_FLAGS "-DDEBUG=1 -D_DEBUG=1") 
-else (JUCE_DEBUG)
+else(ENABLE_UI_JUCE_DEBUG STREQUAL "ON")
     set(JUCE_DEBUG_FLAGS "-DNDEBUG=1") 
-endif (JUCE_DEBUG)
+endif(ENABLE_UI_JUCE_DEBUG STREQUAL "ON")
 
 # This is the stuff that would normally go into a Projucer-generated
 # AppConfig.h.  Since we now build Juce's source directly, it is easier to just

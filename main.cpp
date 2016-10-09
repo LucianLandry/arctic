@@ -42,7 +42,11 @@ using arctic::Semaphore;
 static void usage(char *programName)
 {
     printf("arctic %s.%s-%s\n"
-           "usage: %s [-h=<hashtablesize>] [-p=<numcputhreads>] [--ui=<console,juce,uci,xboard>]\n"
+           "usage: %s [-h=<hashtablesize>] [-p=<numcputhreads>] [--ui=<console,"
+#ifdef ENABLE_UI_JUCE
+           "juce,"
+#endif
+           "uci,xboard>]\n"
            "\t'hashtablesize' examples: 200000, 100k, 0M, 1G\n"
            // as picked by TransTable::DefaultSize()
            "\t'hashtablesize' default == MIN(1/3 total memory, 512M)\n"
@@ -109,8 +113,11 @@ static int64 IECStringToInt64(char *str)
 static bool isValidUI(char *str)
 {
     return
-        !strcmp(str, "console") || !strcmp(str, "juce") ||
-        !strcmp(str, "uci") || !strcmp(str, "xboard");
+#ifdef ENABLE_UI_JUCE
+        !strcmp(str, "juce") ||
+#endif
+        !strcmp(str, "console") || !strcmp(str, "uci") ||
+        !strcmp(str, "xboard");
 }
 
 int main(int argc, char *argv[])
@@ -173,7 +180,9 @@ int main(int argc, char *argv[])
     Game game(&eng);
 
     gUI =
+#ifdef ENABLE_UI_JUCE
         !strcmp(uiString, "juce") ? uiJuceOps() :
+#endif
         !strcmp(uiString, "console") ? uiNcursesOps() :
         !strcmp(uiString, "xboard") ? uiXboardOps() :
         !strcmp(uiString, "uci") ? uiUciOps() :

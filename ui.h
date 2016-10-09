@@ -54,7 +54,9 @@ void processXboardCommand(Game *game, Switcher *sw);
 UIFuncTableT *uiUciOps(void);
 void processUciCommand(Game *game, Switcher *sw);
 
+#ifdef ENABLE_UI_JUCE
 // uiJuce.cpp
 UIFuncTableT *uiJuceOps(void);
+#endif
 
 #endif // UI_H

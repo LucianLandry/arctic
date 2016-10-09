@@ -21,10 +21,11 @@ using namespace juce;
 
 PieceCache *gPieceCache; // global
 
-typedef struct {
+struct PieceMapT
+{
     Piece piece;
     const char *path;
-} PieceMapT;
+};
 
 static Drawable *loadSVGFromPath(String path)
 {
@@ -35,7 +36,8 @@ static Drawable *loadSVGFromPath(String path)
 
 PieceCache::PieceCache()
 {
-    PieceMapT pieceMap[] = {
+    PieceMapT pieceMap[] =
+    {
         {Piece(0, PieceType::Pawn),   "Chess_plt45.svg"},
         {Piece(1, PieceType::Pawn),   "Chess_pdt45.svg"},
         {Piece(0, PieceType::Knight), "Chess_nlt45.svg"},
@@ -50,18 +52,18 @@ PieceCache::PieceCache()
         {Piece(1, PieceType::King),   "Chess_kdt45.svg"}
     };
 
-    // FIXME this obviously needs to not be hardcoded
-    String basePath = "/home/blandry/svg/";
-
+    char *homePath = getenv("HOME");
+    String basePath = homePath != nullptr ? homePath : "";
+    basePath += "/svg";
+    
     loaded = true; // assume the best
 
     for (uint i = 0; i < sizeof(pieceMap) / sizeof(PieceMapT); i++)
     {
-        Drawable *img = loadSVGFromPath(basePath + String(pieceMap[i].path));
+        Drawable *img = loadSVGFromPath(basePath + "/" +
+                                        String(pieceMap[i].path));
         if (img == nullptr)
-        {
             loaded = false;
-        }
         cache[pieceMap[i].piece.ToIndex()] = img;
     }
 }

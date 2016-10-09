@@ -1,12 +1,6 @@
 # Older versions might work, but I have not tested them.
-cmake_minimum_required(VERSION 2.8.2)
-
+cmake_minimum_required(VERSION 3.0.2)
 project (arctic)
-
-# Juce dependencies.
-set (JUCE_DEP_LIBS rt dl GL X11 Xext freetype)
-
-set (EXTRA_LIBS ${JUCE_DEP_LIBS})
 
 # Variables like 'CMAKE_C_FLAGS' should be set before adding subdirectories
 # (unless you do not want them to be passed down).
@@ -29,12 +23,25 @@ set(CMAKE_C_FLAGS "-Wall -Werror -g -O2 -fomit-frame-pointer")
 # Propagate anything we need (like -pg) to the c++ linker.
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++11")
 
-add_subdirectory(uiJuce)
+# Juce dependencies.
+option(ENABLE_UI_JUCE "Enable a Juce-based GUI (experimental)" OFF)
+if(ENABLE_UI_JUCE STREQUAL "ON")
+    # If you choose to build with Juce, you must also define JUCE_PATH to the
+    #  root of the Git snapshot you downloaded.  Minimal example:
+    # mkdir ~/juce; cd ~/juce;
+    # git clone --depth 1 git://github.com/julianstorer/JUCE.git
+    # cd -; cmake -DENABLE_UI_JUCE="ON" -DJUCE_PATH=~/juce/JUCE (...)
+    option(ENABLE_UI_JUCE_DEBUG "Build juce+uiJuce with debugging enabled" ON)
+    add_subdirectory(uiJuce)
+    set(JUCE_DEP_LIBS rt dl GL X11 Xext freetype)
+    set(EXTRA_LIBS uiJuce juce ${JUCE_DEP_LIBS})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_UI_JUCE=1")
+endif(ENABLE_UI_JUCE STREQUAL "ON")
 
 add_executable(arctic aSemaphore.cpp aSystem.cpp Board.cpp BoardMoveGen.cpp Clock.cpp clockUtil.cpp comp.cpp Config.cpp conio.c Engine.cpp Eval.cpp Game.cpp gPreCalc.cpp HistoryWindow.cpp list.cpp log.cpp main.cpp move.cpp MoveList.cpp Piece.cpp playloop.cpp Position.cpp Pv.cpp SaveGame.cpp stringUtil.cpp Switcher.cpp Thinker.cpp TransTable.cpp uiNcurses.cpp uiUci.cpp uiUtil.cpp uiXboard.cpp Variant.cpp)
 
 # ncursesw is necessary for a UTF-8 console cursor.
-target_link_libraries(arctic ncursesw pthread uiJuce juce ${EXTRA_LIBS})
+target_link_libraries(arctic ncursesw pthread ${EXTRA_LIBS})
 
 # Drop -rdynamic since I am pretty sure we do not need it and it bloats the
 # executable.
