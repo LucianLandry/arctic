@@ -1,12 +1,7 @@
-sort moves based on last eval? (not even worth trying, probably too compute-intensize ... well, maybe at higher levels of search.)
-
-try any hashed move first... maybe even before normal movgen.  ... discarded,
-	slightly slower. (version 9)
-
-movgen coroutine discarded, slightly slower (version 7).
+movgen coroutine discarded, slightly slower (version 0.7).
 
 try lva quiescent move ordering. (seemed not a win or lose; code slightly
-	more complex) (version 9)
+	more complex) (version 0.9)
 
 partial hashhit, slowed code down by 2% and -- with our coarse evaluations
 	only came into play about .0002% (extreme max) of the time.  Could

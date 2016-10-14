@@ -16,6 +16,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <sys/stat.h>     // mkdir(2)
 #include <sys/time.h>     // get+setrlimit(2)
 #include <sys/resource.h>
 #include <thread>         // hardware_concurrency()
@@ -25,7 +26,7 @@
 #include "log.h"
 #include "ref.h"
 
-void SystemEnableCoreFile(void)
+void SystemEnableCoreFile()
 {
     struct rlimit rlimit;
     int rv;
@@ -44,7 +45,7 @@ void SystemEnableCoreFile(void)
 
 // Caps total memory at INT64_MAX.
 // Use GlobalMemoryStatusEx() on Windows?
-int64 SystemTotalMemory(void)
+int64 SystemTotalMemory()
 {
     int64 result;
     long physPages = sysconf(_SC_PHYS_PAGES);
@@ -58,14 +59,29 @@ int64 SystemTotalMemory(void)
     }
     result = (int64) physPages * (int64) pageSize;
     if (result < physPages || result < pageSize)
-    {
         result = INT64_MAX; // assume we overflowed.
-    }
     return result;
 }
 
-int SystemTotalProcessors(void)
+int SystemTotalProcessors()
 {
     // sysconf(_SC_NPROCESSORS_ONLN) works; but this is more portable:
     return std::thread::hardware_concurrency();
+}
+
+std::string SystemAppDirectory()
+{
+    char *homePath = getenv("HOME");
+    if (homePath == nullptr)
+        return "";
+    std::string result = homePath;
+    result += "/.arctic";
+
+    // As a convenience, create this directory if it does not already exist.
+    return !mkdir(result.c_str(), 0700) || errno == EEXIST ? result : "";
+}
+
+std::string SystemNullFile()
+{
+    return "/dev/null"; // or "NUL", if we implement for Windows
 }

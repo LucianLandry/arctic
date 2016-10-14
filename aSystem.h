@@ -19,18 +19,16 @@
 #ifndef ASYSTEM_H
 #define ASYSTEM_H
 
+#include <string>
 #include "aTypes.h" // int64 etc.
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+void SystemEnableCoreFile();
+int64 SystemTotalMemory();
+int SystemTotalProcessors();
 
-void SystemEnableCoreFile(void);
-int64 SystemTotalMemory(void);
-int SystemTotalProcessors(void);
-
-#ifdef __cplusplus
-}
-#endif
+// Return directory we should use to write logs and (in future?) other config.
+std::string SystemAppDirectory();
+// Return this system's equivalent of /dev/null.
+std::string SystemNullFile();
 
 #endif // ASYSTEM_H

@@ -1,3 +1,5 @@
+-------------------------------------------------------------------------------
+
 NCURSES UI WASHED-OUT COLORS
 (especially, dark gray background instead of black)
 You are likely using gnome-terminal.  This terminal supports a configurable
@@ -13,7 +15,16 @@ console" or (slightly brighter, but reduces contrast) "Rxvt".  Alternative: just
 change the first color in the "Color pallete" to the darkest color you can
 find.  To avoid clobbering the original custom profile, you might want to
 create a new one.
-Or, of course, you could use a terminal with sane color defaults.
+Or, of course, you could use a terminal program with sane color defaults.
+
+-------------------------------------------------------------------------------
+
+USING ARCTIC FROM CONSOLE:
+
+gnome-terminal has funky color handling and the background shows up as dark
+    gray instead of black (as described above, the pallete needs to be
+    changed).  Also, flashing is disabled.  The linux console has a dark
+    background, but the flashing is messed up.  konsole and xterm work, though.
 
 -------------------------------------------------------------------------------
 
@@ -50,7 +61,7 @@ cd <builddir>
 #  issue is fixed in gcc 4.9.3.
 cmake -DCMAKE_C_COMPILER=`which gcc` -DCMAKE_CXX_COMPILER=`which g++` ../src
 cmake -DCMAKE_C_COMPILER=`which clang` -DCMAKE_CXX_COMPILER=`which clang++` ../src
-cmake -DENABLE_UI_JUCE="ON" -DJUCE_PATH=~/juce -DCMAKE_C_COMPILER=`which clang` -DCMAKE_CXX_COMPILER=`which clang++` ../src
+cmake -DENABLE_STRICT_COMPILE="ON" -DENABLE_UI_JUCE="ON" -DJUCE_PATH=~/juce -DCMAKE_C_COMPILER=`which clang` -DCMAKE_CXX_COMPILER=`which clang++` ../src
 
 make
 
@@ -108,15 +119,6 @@ JUCE GOTCHAS:
    does not work on any thread except the main one.  To be fair I don't think
    there's a good way to do it, or I would have submitted a patch.
    In the meantime, we should avoid sloppy code that hits these failures.
-
--------------------------------------------------------------------------------
-
-USING ARCTIC FROM CONSOLE:
-
-gnome-terminal has funky color handling and the background shows up as dark
-    gray instead of black (as described above, the pallete needs to be
-    changed).  Also, flashing is disabled.  The linux console has a dark
-    background, but the flashing is messed up.  konsole and xterm work, though.
 
 -------------------------------------------------------------------------------
 

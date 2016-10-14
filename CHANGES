@@ -1,38 +1,5 @@
-Out-there (maybe, maybe not)
-Neural net evaluation.  Examples: neurochess, SAL, morph.
-Still more efficient smp search (propagate alpha-beta up the pv?)
-Go directly from pondering to thinking on a ponderhit, just like any good UCI
-	engine would do.
-Razoring variation?  Something like doing a depth-2 search to see which moves
-	to only do a depth-1 search on.  If the search is good enough I could
-	also use it for move ordering.
-Adaptive back-propagating opening book?
-Figure out some way to spot "obvious" (no decent alternative) moves and make
-	them quickly.  Perhaps a full alpha-beta search to (lastSearchDepth -
-	2) or something.  Might also want it to be in the PV.
-pgn-format save/restore.
-multiple-computer/clustering search.
-    We will probably need to use a custom protocol for this.  The closest
-    "standard" way to do what I want would be UCI, + alpha/beta constraint
-    option to "go", plus a way to easily unmake/make moves on an internal board.
-Find a way to advance the pawn in the endgame w/out it getting crowded out by
-	other moves (this is less bad after I implemented PV)?  Do I give pawn
-	rank a bonus?  Or make it a preferred move?
-Support multiple kings on the board.  Also consider not hard-coding which
-	pieces are 'royal' (ie killing them wins the game)
-Support for chess variants.  fischer-random, crazyhouse and Die come to mind.
-	Also consider the FICS wild variants + Xboard variants.
-uiXboard: implement analyze mode.
-Fractional ply extension. (+ 1/numMoves)
-Shrink search window (not null necessarily, but do shrink it)
-Better thread utilization: keep all threads busy through end of minimax compute
-	(including last move).
-More search time if first move's eval goes down.  Finish the level. ... at
-     least try to find a move that doesn't go down.  Especially if first move
-     evals to -checkmate.
-
-Version 1.2:
-Refactored MoveT struct (added methods)
+# Version 1.2:
+Refactored MoveT struct (added methods, removed unaligned load/store assumption)
 Bugfix: fixed csOO + csFIDE-style strings never showing check(mate).
 Converted code to use platform-agnostic std::thread.
 Implemented platform-agnostic Semaphore class and converted everyone to use it.
@@ -53,8 +20,10 @@ Refactored into C++ classes: SpinlockT -> arctic::Spinlock (1.6% speedup +
 Bugfix: fix bad parsing of user-specified transposition table size > 4 GiB.
 Made number of search threads configurable from uiUci and uiXboard.
 Bugfix: moveToStringMnSAN(): fix overly zealous move disambiguation.
+Work for github upload: better documentation; dump errlog in a better place;
+    introduce options for cmake for friendlier build
 
-Version 1.1:
+# Version 1.1:
 Build improvements: use Git for version control, cmake for building
 Bugfix: uiXboard: handle 0 increment and 0 moves per timecontrol properly
 Bugfix: uiUci: fix 'searchMoves' parameter handling (untested)
@@ -79,7 +48,7 @@ Bugfix: we were jumping between 2 mating positions (because nothing better was
         in the transposition table) until the opponent could draw.
 Refactored Eval(uations) into their own class, and made PV contain a true eval.
 
-Version 1.0:
+# Version 1.0:
 Implemented depth-1 futility pruning.
 Fix capture-king bug (enpassant codepath could reset dc to FLAG)
 Made pawn moves symmetrical (prefer kingside capture).
@@ -114,7 +83,7 @@ Compute optimization: brmove(), minimax(), addmove(), attacked(), hashlock ->
 	aSpinlockT, logging disabled by default, use global stats (~9.4%)
 Implement UCI interface.
 
-Version 0.9:
+# Version 0.9:
 alpha-search -> alpha-beta search (oops)
 hashing: -- Use highbound/lowbound instead of eval+alpha.
 	 -- Always update entire entry (could change out from under us due to
@@ -141,7 +110,7 @@ Fix capture-king bug (en-passant capture: was not accounting for double-
 	discovered check)
 Bugfix: several "< 63" off-by-one errors in init.c (history table, zobrist)
 
-Version 0.8:
+# Version 0.8:
 Rudimentary Makefile support.
 Implement asciiToNative() and friends.
 Implement edit-position functionality.
@@ -162,7 +131,7 @@ Separate UI thread (so I can move now/quit immediately etc)
 Implemented move-now functionality.
 Chess UI interface (xboard).
 
-Version 0.7:
+# Version 0.7:
 Implement autopass.
 optimization via gprof (->CHECK(), TOLOWER(), optimize kingmove(),
 	addmove() split up)
@@ -186,7 +155,7 @@ Fixed probable bug on playermove promote (indexing into wrong move).
 Fix castling bug (newcbyte() before coord update in makemove())
 Detect draw due to threefold repetition.
 
-Version 0.6:
+# Version 0.6:
 Port to linux (get conio running, 40-chr screen to 80-chr, fix warnings
 	(char -> uint8), etc)
 Tons of general cleanup -- reformatting, style, documentation,
@@ -203,5 +172,5 @@ Try pawn e2e4 moves before e2e3 moves.
 Try king moves last instead of first.
 hiswin went to short, so it will not rollover.
 
-Version 0.5:
+# Version 0.5:
 Last version recovered from DOS environment.

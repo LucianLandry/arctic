@@ -77,7 +77,7 @@ class Board; // forward declaration
 //  and the notation is portable across chess variants.  We mask in 'turn'
 //  because it becomes easier to convert back to other notations.
 
-struct /* alignas(uint32) makes things slower */ MoveT
+struct alignas(uint32) MoveT
 {
     MoveT() = default; // allow uninitialized MoveTs.
     inline MoveT(cell_t from, cell_t to, PieceType promote, cell_t chk);
@@ -147,8 +147,8 @@ inline MoveT::MoveT(cell_t from, cell_t to, PieceType promote, cell_t chk) :
 inline bool MoveT::operator==(const MoveT &other) const
 {
     return
-    *reinterpret_cast<const uint32 *>(this) ==
-    *reinterpret_cast<const uint32 *>(&other);
+        *reinterpret_cast<const uint32 *>(this) ==
+        *reinterpret_cast<const uint32 *>(&other);
 }
 
 inline bool MoveT::operator!=(const MoveT &other) const

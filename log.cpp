@@ -18,6 +18,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+#include "aSystem.h"
 #include "log.h"
 #include "uiUtil.h"
 
@@ -29,8 +30,21 @@ const MoveStyleT gMoveStyleLog = {mnCAN, csK2, true};
 
 void LogInit(void)
 {
-    gLogFile = fopen("errlog", "w");
-    assert(gLogFile != NULL);
+    std::string logName = SystemAppDirectory();
+    assert(logName != "");
+    logName += "/errlog";
+    gLogFile = fopen(logName.c_str(), "w");
+    if (gLogFile == NULL)
+    {
+        fprintf(stderr, "cannot open %s for writing (logging disabled)\n",
+                logName.c_str());
+        gLogFile = fopen(SystemNullFile().c_str(), "w");
+        if (gLogFile == NULL)
+        {
+            fprintf(stderr, "cannot open null file for writing\n");
+            assert(0);
+        }
+    }
     // turn off buffering -- useful when we're crashing, but slow.
     setbuf(gLogFile, NULL);
     // LogSetLevel(eLogDebug);
