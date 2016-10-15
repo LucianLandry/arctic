@@ -2,11 +2,11 @@
 
 # Prerequisites
 
--- Linux (Debian Jessie x86-64 tested).  Other CPU architectures and other
+-- Linux (tested w/Debian Jessie x86-64).  Other CPU architectures and other
    Unices have not been tested but should work, provided that they also have:
 -- A C++11-capable compiler (clang++ >= 3.3 or g++ >= 4.8.1)
 -- Needed libraries: ncurses (for the ncurses-based UI), pthread
--- cmake >= 3.0.2 (for configuration)
+-- cmake >= 2.8.11 (for configuration)
 
 # Building
 
