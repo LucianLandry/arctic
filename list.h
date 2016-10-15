@@ -1,19 +1,16 @@
-/***************************************************************************
-                     list.h - (Yet Another) list definition
-                             -------------------
-    begin                : Sun Sep 10 2006
-    copyright            : (C) 2006 by Lucian Landry
-    email                : lucian_b_landry@yahoo.com
- ***************************************************************************/
+//--------------------------------------------------------------------------
+//            list.h - (Yet Another) intrusive list implementation
+//                           -------------------
+//  begin                : Sun Sep 10 2006
+//  copyright            : (C) 2006 by Lucian Landry
+//  email                : lucian_b_landry@yahoo.com
+//--------------------------------------------------------------------------
 
-/***************************************************************************
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU Lesser General Public License as       *
- *   published by the Free Software Foundation; either version 2.1 of the    *
- *   License, or (at your option) any later version.                       *
- *                                                                         *
- ***************************************************************************/
+//--------------------------------------------------------------------------
+// This Source Code Form is subject to the terms of the Mozilla Public License,
+// v. 2.0. If a copy of the MPL was not distributed with this file, You can
+// obtain one at https://mozilla.org/MPL/2.0/.
+//--------------------------------------------------------------------------
 
 #ifndef LIST_H
 #define LIST_H

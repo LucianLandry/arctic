@@ -1,3 +1,9 @@
+#-----------------------------------------------------------------------------
+# This Source Code Form is subject to the terms of the Mozilla Public License,
+# v. 2.0. If a copy of the MPL was not distributed with this file, You can
+# obtain one at https://mozilla.org/MPL/2.0/.
+#-----------------------------------------------------------------------------
+
 # It is critical to get this correct.  Juce classes can change in allocated
 # size and/or layout when they are built with debugging, so if the application
 # is not built with the same flags as the "library", it will get very weird

@@ -151,7 +151,7 @@ xboard -size bulky -ics -icshost freechess.org # no timeseal
 xboard -size bulky -ics -icshost 167.114.65.195 -icshelper timeseal.Linux
 
 # play computer on FICS
-xboard -size bulky -defaultHashSize 508 -debug -nameOfDebugFile ~/xboard.debug -ponder -thinking -zp -ics -icshost 167.114.65.195 -icshelper timeseal.Linux -smpCores 8 -fcp ./arctic -zippyGameStart 'say Hi, I am a homebrew computer program.  My author is mandolin.  Please have fun!'
+xboard -size bulky -defaultHashSize 508 -debug -nameOfDebugFile ~/xboard.debug -ponder -thinking -zp -ics -icshost 167.114.65.195 -icshelper timeseal.Linux -smpCores 8 -fcp ./arctic -zippyGameStart 'say Hello from arctic.  Good luck and please have fun!'
 set highlight 0
 set examine 0
 set autoflag 1
