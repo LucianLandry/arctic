@@ -85,7 +85,7 @@ public:
                         const MoveStyleT &moveStyle, const Board &board) const;
     bool Sanitize(const Board &board);
     int Level() const; // Getters.
-    Eval Eval() const;
+    class Eval Eval() const;
     MoveT Moves(int idx) const;
     
     // Setter.  Would do this in the constructor but with our current C code
