@@ -138,7 +138,7 @@ size_t TransTable::sanitizeSize(int64 size)
 {
     return
         size < -1 ? 0 : // bad parameter
-        MIN((uint64) normalizeSize(size), normalizeSize(MaxSize()));
+        MIN(normalizeSize(size), normalizeSize(MaxSize()));
 }
 
 void TransTable::resetEntries()

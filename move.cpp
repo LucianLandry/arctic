@@ -401,7 +401,7 @@ int MovesToString(char *dstStr, int dstStrSize,
 
         if (dstStrLen + strlen(sanStr) +
             (i == 0 ? 0 : 1) // account for leading space before move
-            >= dstStrSize)
+            >= (size_t)dstStrSize)
         {
             // Not enough space in the result to write the next move.
             break;
@@ -413,7 +413,7 @@ int MovesToString(char *dstStr, int dstStrSize,
                              i == 0 ? "" : " ",
                              sanStr);
         
-        assert(dstStrLen < (int) dstStrSize);
+        assert(dstStrLen < dstStrSize);
         movesWritten++;
     }
 

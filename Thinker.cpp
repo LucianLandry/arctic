@@ -242,8 +242,7 @@ bool Thinker::IsFinalResponse(Message msg)
 // Get an available searcher.
 static Engine *searcherGet()
 {
-    int i;
-    for (i = 0; i < gSG.searchers.size(); i++)
+    for (int i = 0; i < int(gSG.searchers.size()); i++)
     {
         if (!gSG.searchers[i]->IsBusy())
             return gSG.searchers[i];
@@ -256,7 +255,7 @@ static Engine *searcherGet()
 bool SearchersDelegateSearch(int alpha, int beta, MoveT move, int curDepth,
                              int maxDepth)
 {
-    if (gSG.numSearching < gSG.searchers.size())
+    if (gSG.numSearching < int(gSG.searchers.size()))
     {
         // Delegate a move.
         gSG.numSearching++;
@@ -271,13 +270,13 @@ bool SearchersDelegateSearch(int alpha, int beta, MoveT move, int curDepth,
 //  delegated even on a uni-processor.
 void SearchersMakeMove(MoveT move)
 {
-    for (int i = 0; i < gSG.searchers.size(); i++)
+    for (int i = 0; i < int(gSG.searchers.size()); i++)
         gSG.searchers[i]->CmdMakeMove(move);
 }
 
 void SearchersUnmakeMove()
 {
-    for (int i = 0; i < gSG.searchers.size(); i++)
+    for (int i = 0; i < int(gSG.searchers.size()); i++)
         gSG.searchers[i]->CmdUnmakeMove();
 }
 
@@ -293,7 +292,7 @@ static void searcherWaitOne()
         continue;
     }
     assert(res > 0); // other errors should not happen
-    for (i = 0; i < gSG.pfds.size(); i++)
+    for (i = 0; i < int(gSG.pfds.size()); i++)
     {
         assert(!(gSG.pfds[i].revents & (POLLERR | POLLHUP | POLLNVAL)));
         if (gSG.pfds[i].revents & POLLIN)
@@ -320,7 +319,7 @@ Eval SearchersWaitOne(MoveT &move, SearchPv &pv, Thinker &parent)
 void SearchersBail()
 {
     int i;
-    for (i = 0; gSG.numSearching > 0 && i < gSG.searchers.size(); i++)
+    for (i = 0; gSG.numSearching > 0 && i < int(gSG.searchers.size()); i++)
     {
         if (gSG.searchers[i]->IsSearching())
         {
@@ -339,7 +338,7 @@ bool SearchersAreSearching()
 
 void SearchersSetBoard(const Board &board)
 {
-    for (int i = 0; i < gSG.searchers.size(); i++)
+    for (int i = 0; i < int(gSG.searchers.size()); i++)
         gSG.searchers[i]->CmdSetBoard(board);
 }
 
@@ -354,13 +353,13 @@ static void onEngineRspSearchDone(Engine &searcher,
 void SearchersSetNumThreads(int numThreads)
 {
     assert(numThreads > 0);
-
-    if (numThreads == gSG.searchers.size())
+    
+    if (numThreads == int(gSG.searchers.size()))
         return; // no adjustment necessary
     
-    if (numThreads < gSG.searchers.size())
+    if (numThreads < int(gSG.searchers.size()))
     {
-        while (gSG.searchers.size() > numThreads)
+        while (int(gSG.searchers.size()) > numThreads)
         {
             gSG.freePool.push_back(gSG.searchers.back());
             gSG.searchers.pop_back();
@@ -369,7 +368,7 @@ void SearchersSetNumThreads(int numThreads)
     }
 
     // At this point, we know we need more threads.
-    while (gSG.searchers.size() < numThreads)
+    while (int(gSG.searchers.size()) < numThreads)
     {
         Engine *eng;
         if (!gSG.freePool.empty())

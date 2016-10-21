@@ -488,16 +488,19 @@ void Engine::ProcessOneRsp()
     static_assert(std::is_trivially_copyable<EngineStatsT>::value,
                   "EngineStatsT must be trivially copyable to copy it "
                   "through a socket!");
-    static_assert(std::is_trivially_copyable<EnginePvArgsT>::value,
-                  "EnginePvStatsT must be trivially copyable to copy it "
-                  "through a socket!");
     static_assert(std::is_trivially_copyable<MoveT>::value,
                   "MoveT must be trivially copyable to copy it "
+                  "through a socket!");
+#if 0 // Cannot check these, since their member 'SearchPv' has an optimized
+      // (but non-trivial) copy constructor.
+    static_assert(std::is_trivially_copyable<EnginePvArgsT>::value,
+                  "EnginePvStatsT must be trivially copyable to copy it "
                   "through a socket!");
     static_assert(std::is_trivially_copyable<EngineSearchDoneArgsT>::value,
                   "EngineSearchDoneArgsT must be trivially copyable to copy it "
                   "through a socket!");
-    
+#endif
+
     Thinker::Message rsp = recvRsp(&rspBuf, sizeof(rspBuf));
 
     switch (rsp)
@@ -521,7 +524,7 @@ void Engine::ProcessOneRsp()
             rspHandler.SearchDone(*this, *searchDoneArgs);
             break;
         default:
-            LOG_EMERG("%s: unknown response type %d\n", __func__, rsp);
+            LOG_EMERG("%s: unknown response type %d\n", __func__, int(rsp));
             assert(0);
             break;
     }

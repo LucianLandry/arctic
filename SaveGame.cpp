@@ -121,7 +121,7 @@ int SaveGame::GotoPly(int ply, Board *board, Clock *clocks)
     if (ply < FirstPly() || ply > LastPly())
     {
         LOG_DEBUG("%s: ply %d out of range (%d, %d)\n", __func__,
-                  ply, SaveGameFirstPly(sgame), SaveGameLastPly(sgame));
+                  ply, FirstPly(), LastPly());
         return -1;
     }
 

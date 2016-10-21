@@ -21,7 +21,7 @@ Bugfix: fix bad parsing of user-specified transposition table size > 4 GiB.
 Made number of search threads configurable from uiUci and uiXboard.
 Bugfix: moveToStringMnSAN(): fix overly zealous move disambiguation.
 Work for github upload: better documentation; dump errlog in a better place;
-    introduce options for cmake for friendlier build
+    introduce cmake options for friendlier build; fix gcc-6.2 build issues
 
 # Version 1.1:
 Build improvements: use Git for version control, cmake for building

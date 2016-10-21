@@ -25,6 +25,11 @@ set(JUCE_PLATFORM_SPECIFIC_FLAGS "-DLINUX=1")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${JUCE_DEBUG_FLAGS} ${JUCE_FLAGS} ${JUCE_PLATFORM_SPECIFIC_FLAGS}")
 
+# Workaround Juce header file issues.
+# (earlier versions of clang/gcc do not support this specific warning)
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-misleading-indentation")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error")
+
 include_directories("${JUCE_PATH}/modules" "${PROJECT_SOURCE_DIR}/uiJuce/libJuce")
 
 add_subdirectory(libJuce)

@@ -483,7 +483,7 @@ static int modal(const char *format, ...)
     va_start(ap, format);
     len = vsnprintf(message, sizeof(message), format, ap);
     va_end(ap);
-    assert(len < sizeof(message));
+    assert(len < int(sizeof(message))); // check for truncation
 
     // Display the message.
     gotoxy((SCREEN_WIDTH / 2) - len / 2, 25);

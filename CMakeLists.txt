@@ -13,7 +13,7 @@ project (arctic)
 # (unless you do not want them to be passed down).
 
 # Standard compile flags.
-# set(CMAKE_C_FLAGS "-Wall -Werror -O2 -fomit-frame-pointer")
+# set(CMAKE_C_FLAGS "-Wall -O2 -fomit-frame-pointer")
 # Fast debug flags.  In practice, this seems to be basically as fast as the
 # "normal" flags, so we actually normally use this.
 set(CMAKE_C_FLAGS "-Wall -g -O2 -fomit-frame-pointer")
@@ -22,16 +22,14 @@ set(CMAKE_C_FLAGS "-Wall -g -O2 -fomit-frame-pointer")
 # Profiling flags.  NOTE: keep the program up (say) 4 seconds after the game
 # finishes, otherwise you may get inaccurate (too small) counts. (scratch that,
 # it happens anyway, usually...)
-# Also I would use -fno-inline-functions-called-once here (instead of
-# -fno-inline), but that option has apparently been removed in later versions
-# of GCC.
+# I would use -fno-inline-functions-called-once here (instead of -fno-inline),
+# but clang does not implement it.
 # set(CMAKE_C_FLAGS "-Wall -O2 -pg -fno-inline -fno-omit-frame-pointer")
 
-# Propagate anything we need (like -pg) to the c++ linker.
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c++11")
 
 # The ONLY reason this is off by default is to aid potential packagers and
-# end-users.  As a developer, I run with this enabled.
+# end-users.  As a developer, I prefer to run with this enabled.
 option(ENABLE_STRICT_COMPILE "Be strict about sloppy code" OFF)
 if(ENABLE_STRICT_COMPILE STREQUAL "ON")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
@@ -45,7 +43,7 @@ if(ENABLE_UI_JUCE STREQUAL "ON")
     #  root of the Git snapshot you downloaded.  Minimal example:
     # mkdir ~/juce; cd ~/juce;
     # git clone --depth 1 git://github.com/julianstorer/JUCE.git
-    # cd -; cmake -DENABLE_UI_JUCE="ON" -DJUCE_PATH=~/juce/JUCE (...)
+    # cd -; cmake -DENABLE_UI_JUCE="ON" -DJUCE_PATH=${HOME}/juce/JUCE (...)
     option(ENABLE_UI_JUCE_DEBUG "Build juce+uiJuce with debugging enabled" ON)
     add_subdirectory(uiJuce)
     set(JUCE_DEP_LIBS rt dl GL X11 Xext freetype)
