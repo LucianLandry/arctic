@@ -23,8 +23,6 @@
 
 using arctic::Spinlock;
 
-TransTable gTransTable; // Global transposition table instantiation.
-
 #ifdef ENABLE_DEBUG_LOGGING
 static const MoveStyleT gMoveStyleTT = { mnCAN, csOO, true };
 #endif

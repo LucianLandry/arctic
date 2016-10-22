@@ -23,6 +23,7 @@
 #include "Piece.h"
 #include "Position.h"
 #include "ref.h"
+#include "TransTable.h"
 
 class MoveList; // forward declaration for GenerateLegalMoves()
 
@@ -121,6 +122,9 @@ public:
     //  been recorded.
     MoveT MoveAt(int ply) const;
 
+    // Link to transposition table (for engine speedup).  This is not preserved
+    //  (copied) by operator=().
+    void SetTransTable(const TransTable *transTable);
 protected:
     // Says if side to move is currently in check.
     // Follows FLAG:coord:DOUBLE_CHECK convention.
@@ -180,14 +184,13 @@ protected:
         int    ncpPlies;
         int    repeatPly;
         uint64 zobrist;
-
-        bool   mightDraw;
     };
     
     std::vector<UnMakeT> unmakes; 
 
 private:
     cell_t calcNCheck(const char *context) const;
+    const TransTable *transTable;
 };
 
 inline const Position &Board::Position() const

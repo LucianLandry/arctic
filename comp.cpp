@@ -23,7 +23,6 @@
 #include "log.h"
 #include "ref.h"
 #include "Thinker.h"
-#include "TransTable.h"
 #include "uiUtil.h"
 
 // Since I spent a lot of time trying to do it, here is a treatise on why
@@ -106,11 +105,11 @@ static int endGameEval(const Board &board, int turn)
 //
 // 'lowBound' and 'highBound' are the possible limits of the best 'move' found
 // so far.
-static void calcHashFullPerMille(EngineStatsT &stats)
+static void calcHashFullPerMille(Thinker::SharedContextT &sc)
 {
-    stats.hashFullPerMille =
-        gTransTable.NumEntries() == 0 ? 0 :
-        (uint64) stats.hashWroteNew * 1000 / gTransTable.NumEntries();    
+    sc.stats.hashFullPerMille =
+        sc.transTable.NumEntries() == 0 ? 0 :
+        (uint64) sc.stats.hashWroteNew * 1000 / sc.transTable.NumEntries();
 }
 
 static void notifyNewPv(Thinker *th, const SearchPv &goodPv, Eval eval)
@@ -118,7 +117,7 @@ static void notifyNewPv(Thinker *th, const SearchPv &goodPv, Eval eval)
     // Searching at root level, so let user know the updated line.
     DisplayPv pv;
     pv.Set(th->Context().maxDepth, eval, goodPv);
-    calcHashFullPerMille(th->SharedContext().stats);
+    calcHashFullPerMille(th->SharedContext());
     th->RspNotifyPv(th->SharedContext().stats, pv);
 
     // Update the tracked principal variation.
@@ -410,10 +409,12 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
         // (7 - ncpPlies below would work, but this should be better:)
         (searchDepth >= 3 - (board.Ply() - board.RepeatPly()));
 
+    TransTable &transTable = th->SharedContext().transTable; // shorthand
+    
     // Is there a suitable hit in the transposition table?
     if ((!mightDraw || board.NcpPlies() == 0) &&
-        gTransTable.IsHit(&hashEval, &hashMove, board.Zobrist(), searchDepth,
-                          basePly, alpha, beta, &stats))
+        transTable.IsHit(&hashEval, &hashMove, board.Zobrist(), searchDepth,
+                         basePly, alpha, beta, &stats))
     {
         // record the move (if there is one).
         if (goodPv->Update(hashMove))
@@ -465,8 +466,8 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
                    strgh);
 
         // Update the transposition table entry if needed.
-        gTransTable.ConditionalUpdate(retVal, MoveNone, board.Zobrist(),
-                                      searchDepth, basePly, &stats);
+        transTable.ConditionalUpdate(retVal, MoveNone, board.Zobrist(),
+                                     searchDepth, basePly, &stats);
         return retVal;
     }
 
@@ -477,8 +478,8 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
         {
             retVal.Set(strgh, Eval::Win);
             // Update the transposition table entry if needed.
-            gTransTable.ConditionalUpdate(retVal, MoveNone, board.Zobrist(),
-                                          searchDepth, basePly, &stats);
+            transTable.ConditionalUpdate(retVal, MoveNone, board.Zobrist(),
+                                         searchDepth, basePly, &stats);
             return retVal;
         }
 
@@ -704,8 +705,8 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
     }
 
     // Update the transposition table entry if needed.
-    gTransTable.ConditionalUpdate(retVal, bestMove, board.Zobrist(),
-                                  searchDepth, basePly, &stats);
+    transTable.ConditionalUpdate(retVal, bestMove, board.Zobrist(),
+                                 searchDepth, basePly, &stats);
 
     return retVal;
 }
@@ -859,7 +860,7 @@ static void computermove(Thinker *th, bool bPonder)
         context.maxDepth = 0; // reset this
     }
 
-    calcHashFullPerMille(th->SharedContext().stats);
+    calcHashFullPerMille(th->SharedContext());
     th->RspNotifyStats(sharedContext.stats);
 
     if (resigned)

@@ -121,9 +121,6 @@ private:
                              int alpha, int beta, int searchDepth);
 };
 
-// Our global transposition table.
-extern TransTable gTransTable;
-
 inline size_t TransTable::Size() const
 {
     return size;

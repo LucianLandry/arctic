@@ -113,6 +113,7 @@ public:
         HintPv pv; // Attempts to track the principal variation.
         EngineStatsT stats;
         int gameCount; // for debugging.
+        TransTable transTable; // transposition table.
     };
     // (used by engine to track/manipulate internal state shared between
     //  threads)

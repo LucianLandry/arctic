@@ -64,6 +64,7 @@ Thinker::Thinker(int sock)
         sharedContext = rootThinker->sharedContext;
     }
     
+    context.board.SetTransTable(&sharedContext->transTable);
     thread = new std::thread(&Thinker::threadFunc, this);
     thread->detach();
     if (IsRootThinker())

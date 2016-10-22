@@ -20,7 +20,6 @@
 #include "ref.h"
 #include "ui.h"
 #include "uiUtil.h"
-#include "TransTable.h"
 #include "Variant.h"
 
 using arctic::File;
@@ -409,6 +408,7 @@ Board::Board()
     // Sanity check.
     static_assert(kNumSavedPositions >= 128 && isPow2(kNumSavedPositions),
                   "kNumSavedPositions must be >= 128 and a power of 2");
+    SetTransTable(nullptr);
     if (!SetPosition(Variant::Current()->StartingPosition()))
         assert(0);
 }
@@ -417,6 +417,7 @@ Board::Board(const Board &other)
 {
     if (!other.ConsistencyCheck("Board::Board(const Board &)"))
         assert(0);
+    SetTransTable(nullptr);
     *this = other;
 }
 
@@ -450,7 +451,6 @@ Board &Board::operator=(const Board &other)
     }
     
     unmakes = other.unmakes;
-
     return *this;
 }
 
@@ -458,13 +458,13 @@ Board &Board::operator=(const Board &other)
 // a new zobrist.
 uint64 PrivBoard::calcZobristFromMove(MoveT move) const
 {
+    uint64 result = zobrist;
     bool enpass = move.IsEnPassant(); // en passant capture?
     bool promote = move.IsPromote();
     cell_t src = move.src;
     cell_t dst = move.dst;
     Piece myPiece(PieceAt(src));
     Piece capPiece(PieceAt(dst));
-    uint64 result = zobrist;
     uint8 newcbyte;
     
     result ^= gPreCalc.zobrist.turn;
@@ -556,6 +556,15 @@ void PrivBoard::doCastleMove(uint8 kSrc, uint8 kDst,
 
 void Board::MakeMove(MoveT move)
 {
+    PrivBoard *priv = static_cast<PrivBoard *>(this);
+    assert(move != MoveNone); // This seems to happen too often.
+
+    // It is in fact faster to do this calculation out-of-line just so we can
+    //  prefetch it sooner.
+    uint64 nextZobrist = priv->calcZobristFromMove(move);
+    if (transTable != nullptr)
+        transTable->Prefetch(nextZobrist);
+
     bool enpass = move.IsEnPassant();
     bool promote = move.IsPromote();
     uint8 src = move.src;
@@ -563,9 +572,7 @@ void Board::MakeMove(MoveT move)
     bool isCastle = move.IsCastle();
     Piece capPiece;
     uint8 newebyte, newcbyte;
-    uint64 origZobrist = zobrist;
     bool repeatableMove = true;
-    PrivBoard *priv = static_cast<PrivBoard *>(this);
     
     if (!isCastle)
         capPiece = PieceAt(dst);
@@ -580,14 +587,6 @@ void Board::MakeMove(MoveT move)
     //  affect the move we select.  To be revisited.
     priv->positionSave();
     
-    // It is in fact faster (*barely*, 33.01 sec vs 33.05 sec for a
-    // depth-10 search) to do this calculation ahead of time just so we can
-    // prefetch it sooner, even when BoardZobristCalcFromMove() is not static.
-    zobrist = priv->calcZobristFromMove(move);
-    gTransTable.Prefetch(zobrist);
-
-    assert(move != MoveNone); // This seems to happen too often.
-
     unmakes.resize(unmakes.size() + 1);
     UnMakeT &unmake = unmakes.back();
     
@@ -598,8 +597,10 @@ void Board::MakeMove(MoveT move)
     unmake.ebyte = ebyte;
     unmake.ncheck = ncheck;
     unmake.ncpPlies = ncpPlies;
-    unmake.zobrist = origZobrist;
+    unmake.zobrist = zobrist;
     unmake.repeatPly = repeatPly;
+
+    zobrist = nextZobrist;
 
     // King castling move?
     if (isCastle)
@@ -1052,4 +1053,9 @@ int Board::LastCommonPly(const Board &other) const
             break;
     }
     return i;
+}
+
+void Board::SetTransTable(const TransTable *transTable)
+{
+    this->transTable = transTable;
 }

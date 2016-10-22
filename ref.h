@@ -17,8 +17,8 @@
 #include "aTypes.h"
 
 #define VERSION_STRING_MAJOR "1"
-#define VERSION_STRING_MINOR "2"
-#define VERSION_STRING_PHASE "release" // devel, beta, or release
+#define VERSION_STRING_MINOR "3"
+#define VERSION_STRING_PHASE "devel" // devel, beta, or release
 
 // The identifier for a 'cell' (basically, a board square, but in the future
 // perhaps not every type of board will have to use square-shaped cells).

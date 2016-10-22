@@ -18,7 +18,6 @@
 
 #include "Engine.h"
 #include "HistoryWindow.h"
-#include "TransTable.h"
 #include "Variant.h"
 #include "Workarounds.h"
 
@@ -108,7 +107,7 @@ void Engine::onMaxMemoryChanged(const Config::SpinItem &item)
     State origState = state;
     if (IsBusy())
         CmdBail();
-    gTransTable.Reset(uint64(item.Value()) * 1024 * 1024);
+    th->SharedContext().transTable.Reset(uint64(item.Value()) * 1024 * 1024);
     restoreState(origState);
 }
 
@@ -169,8 +168,10 @@ Engine::Engine()
                                    std::placeholders::_1)));
     Config().Register(
         Config::SpinItem(Config::MaxMemorySpin, Config::MaxMemoryDescription,
-                         0, gTransTable.DefaultSize() / (1024 * 1024),
-                         gTransTable.MaxSize() / (1024 * 1024),
+                         0, (th->SharedContext().transTable.DefaultSize() /
+                             (1024 * 1024)),
+                         (th->SharedContext().transTable.MaxSize() /
+                          (1024 * 1024)),
                          std::bind(&Engine::onMaxMemoryChanged, this,
                                    std::placeholders::_1)));
     Config().Register(
@@ -219,7 +220,7 @@ void Engine::CmdNewGame()
     CmdBail();
     if (th->IsRootThinker())
     {
-        gTransTable.Reset();
+        sharedContext.transTable.Reset();
         gHistoryWindow.Clear();
         sharedContext.pv.Clear();
         sharedContext.gameCount++;
