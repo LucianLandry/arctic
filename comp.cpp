@@ -127,7 +127,6 @@ static void notifyNewPv(Thinker *th, const SearchPv &goodPv, Eval eval)
 static Eval tryMove(Thinker *th, MoveT move, int alpha, int beta,
                     SearchPv *newPv, int *hashHitOnly)
 {
-    Eval myEval;
     int &curDepth = th->Context().depth;
     Board &board = th->Context().board;
     
@@ -138,7 +137,7 @@ static Eval tryMove(Thinker *th, MoveT move, int alpha, int beta,
 
     // massage alpha/beta for mate detection so that we can "un-massage" the
     // returned bounds later w/out violating our alpha/beta.
-    // Okay, example: let's think about the case where we try to find a mate in one.
+    // Example: let's think about the case where we try to find a mate in one.
     // alpha = Eval::Win - 1, beta = Eval::Win. maxLevel = 0.
     // minimax called, a=Eval::Loss, b = Eval::Loss.  quiescing and ncheck.  {Eval::Loss, Eval::Loss}
     // We get {Eval::Win, Eval::Win}, which we return as {Eval::Win - 1, Eval::Win - 1}.
@@ -146,23 +145,16 @@ static Eval tryMove(Thinker *th, MoveT move, int alpha, int beta,
     // worst case a fail high of {Eval::Loss, Eval::Win}.  We return
     // {Eval::Loss - 1, Eval::Win - 1} which works.
     if (alpha >= Eval::WinThreshold && alpha < Eval::Win)
-    {
         alpha++;
-    }
     else if (alpha <= Eval::LossThreshold && alpha > Eval::Loss)
-    {
         alpha--;
-    }
-    if (beta >= Eval::WinThreshold && beta < Eval::Win)
-    {
-        beta++;
-    }
-    else if (beta <= Eval::LossThreshold && beta > Eval::Loss)
-    {
-        beta--;
-    }
 
-    myEval = minimax(th, -beta, -alpha, newPv, hashHitOnly).Invert();
+    if (beta >= Eval::WinThreshold && beta < Eval::Win)
+        beta++;
+    else if (beta <= Eval::LossThreshold && beta > Eval::Loss)
+        beta--;
+
+    Eval myEval = minimax(th, -beta, -alpha, newPv, hashHitOnly).Invert();
 
     curDepth--;
 
