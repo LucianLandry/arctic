@@ -55,7 +55,7 @@ static inline bool isPreferredMoveFast(MoveT move, const Board &board)
 
 static inline bool isPreferredMove(MoveT move, const Board &board)
 {
-    return (move.src != move.dst && !board.PieceAt(move.dst).IsEmpty()) ||
+    return (!move.IsCastle() && !board.PieceAt(move.dst).IsEmpty()) ||
         move.chk != FLAG || move.promote != PieceType::Empty ||
         gHistoryWindow.Hit(move, board.Turn(), board.Ply());
 }

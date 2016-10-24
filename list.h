@@ -26,7 +26,7 @@
 // in question.
 // 
 // A ListElementT can only be on one list at a time.
-// Its ownership field is used for idiot-checking.  It also enables us to
+// Its ownership field is used for sanity-checking.  It also enables us to
 // implicitly remove ourselves from one list before adding ourselves to
 // another.
 // For this reason, *any* list_element_t must be memset(0)d before use!

@@ -673,13 +673,13 @@ void Board::MakeMove(MoveT move)
         ListT *myList = &posList[zobrist & (kNumSavedPositions - 1)];
         LIST_DOFOREACH(myList, myElem) // Hopefully a short loop.
         {
-            // idx(myElem) must be between board->ply - board->ncpPlies and
-            // board->ply - 4 (inclusive) to be counted.
-            if (serialBetween(priv->positionInfoElementIndex(*myElem),
+            if (priv->positionHit(myElem->zobrist) &&
+                // idx(myElem) must be between board->ply - board->ncpPlies and
+                // board->ply - 4 (inclusive) to be counted.
+                serialBetween(priv->positionInfoElementIndex(*myElem),
                               ((ply - ncpPlies) &
                                (kNumSavedPositions - 1)),
-                              (ply - 4) & (kNumSavedPositions - 1)) &&
-                priv->positionHit(myElem->zobrist))
+                              (ply - 4) & (kNumSavedPositions - 1)))
             {
                 repeatPly = ply;
                 break;
