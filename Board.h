@@ -18,7 +18,6 @@
 #include <vector>
 
 #include "aTypes.h"
-#include "list.h"
 #include "move.h"
 #include "Piece.h"
 #include "Position.h"
@@ -170,7 +169,7 @@ protected:
     // each other.  There are only 128 elements ('positions', above) that are
     // spread among each entry, so hopefully each list here is about 1
     // element in length.
-    ListT posList[kNumSavedPositions];
+    arctic::List posList[kNumSavedPositions];
 
     // This is is filled in by MakeMove() and used by UnmakeMove().
     struct UnMakeT

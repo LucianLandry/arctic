@@ -152,7 +152,7 @@ inline void PrivBoard::positionSave()
 {
     PositionInfoElementT *myElem = &positions[ply & (kNumSavedPositions - 1)];
     myElem->zobrist = zobrist;
-    ListPush(&posList[zobrist & (kNumSavedPositions - 1)], myElem);
+    posList[zobrist & (kNumSavedPositions - 1)].Push(myElem);
 }
 
 inline void PrivBoard::positionRestore()
@@ -162,7 +162,7 @@ inline void PrivBoard::positionRestore()
 
     PositionInfoElementT *myElem = &positions[ply & (kNumSavedPositions - 1)];
     myElem->zobrist = unmakes[unmakes.size() - kNumSavedPositions].zobrist;
-    ListPush(&posList[zobrist & (kNumSavedPositions - 1)], myElem);
+    posList[zobrist & (kNumSavedPositions - 1)].Push(myElem);
 }
 
 // This is useful for generating a hash for the initial board position, or
@@ -366,8 +366,8 @@ void PrivBoard::setEmptyBoard()
 
     for (i = 0; i < kNumSavedPositions; i++)
     {
-        ListInit(&posList[i]);
-        ListElementInit(&positions[i].el);
+        posList[i].Clear();
+        positions[i].el.Clear();
         positions[i].zobrist = 0;
     }
 
@@ -444,10 +444,7 @@ Board &Board::operator=(const Board &other)
         // We try to avoid copying empty positions, just so we do not have to
         // check against them.
         if ((myElem->zobrist = other.positions[i].zobrist) != 0)
-        {
-            ListPush(&posList[myElem->zobrist & (kNumSavedPositions - 1)],
-                     myElem);
-        }
+            posList[myElem->zobrist & (kNumSavedPositions - 1)].Push(myElem);
     }
     
     unmakes = other.unmakes;
@@ -670,7 +667,7 @@ void Board::MakeMove(MoveT move)
         PositionInfoElementT *myElem;
         
         // We might need to set repeatPly.
-        ListT *myList = &posList[zobrist & (kNumSavedPositions - 1)];
+        arctic::List *myList = &posList[zobrist & (kNumSavedPositions - 1)];
         LIST_DOFOREACH(myList, myElem) // Hopefully a short loop.
         {
             if (priv->positionHit(myElem->zobrist) &&

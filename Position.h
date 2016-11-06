@@ -17,15 +17,15 @@
 #include <string>
 #include <string.h>
 
+#include "aList.h"
 #include "aTypes.h"
-#include "list.h"
 #include "log.h"
 #include "Piece.h"
 #include "ref.h"
 
 // Inherits from ListElementT.
 typedef struct {
-    ListElementT el;
+    arctic::ListElement el;
     uint64 zobrist;
 } PositionInfoElementT;
 
