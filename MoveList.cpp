@@ -14,34 +14,8 @@
 #include "Board.h"
 #include "HistoryWindow.h"
 #include "MoveList.h"
+#include "ObjectCache.h"
 
-//--------------------------------------------------------------------------
-//                       PRIVATE CLASS DECLARATIONS:
-//--------------------------------------------------------------------------
-
-namespace // start unnamed namespace
-{
-
-// According to http://en.cppreference.com/w/cpp/utility/program/exit,
-//  thread-local destructors will always run before any static destructors.
-// That means the main thread will crash if it tries to push to the free list
-//  in a static destructor.
-// Of course the question remains ... is the storage space still there?
-// According to:
-//  http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2008/n2659.htm
-// I am guessing it is, since "The address of a thread variable may be freely
-//  used during the variable's lifetime by any thread in the program".
-class FreeMoves
-{
-public:
-    bool exiting;
-    std::vector<std::vector<MoveT> *> freeMoves;
-    FreeMoves() : exiting(false) {}
-    ~FreeMoves() { exiting = true; }
-};
-
-} // end unnamed namespace
-    
 //--------------------------------------------------------------------------
 //                       PRIVATE FUNCTIONS AND METHODS:
 //--------------------------------------------------------------------------
@@ -60,33 +34,12 @@ static inline bool isPreferredMove(MoveT move, const Board &board)
         gHistoryWindow.Hit(move, board.Turn(), board.Ply());
 }
 
-static thread_local FreeMoves gFreeMoves;
-
-static inline std::vector<MoveT> *allocMoves()
-{
-    std::vector<MoveT> *result;
-
-    // It is not currently anticipated that the constructor will run
-    // after thread-local variables have been destroyed, so we skip that check.
-    if (!gFreeMoves.freeMoves.empty())
-    {
-        result = gFreeMoves.freeMoves.back();
-        gFreeMoves.freeMoves.pop_back();
-    }
-    else
-    {
-        result = new std::vector<MoveT>;
-        // let us assume we never have an empty(-capacity) vector.
-        result->reserve(1);
-    }
-
-    return result;
-}
+static thread_local ObjectCache<std::vector<MoveT>, 100> gFreeMoves;
 
 //--------------------------------------------------------------------------
 //                       PUBLIC FUNCTIONS AND METHODS:
 //--------------------------------------------------------------------------
-MoveList::MoveList() : moves(*allocMoves())
+MoveList::MoveList() : moves(*gFreeMoves.Alloc())
 {
     DeleteAllMoves();
 }
@@ -94,11 +47,7 @@ MoveList::MoveList() : moves(*allocMoves())
 MoveList::~MoveList()
 {
     // Recycle our 'moves' vectors for later use, to prevent excess allocations.
-    // We limit the pool size to prevent possible cross-thread memory leaks.
-    if (!gFreeMoves.exiting && gFreeMoves.freeMoves.size() <= 100)
-        gFreeMoves.freeMoves.push_back(&moves);
-    else
-        delete &moves;
+    gFreeMoves.Free(&moves);
 }
 
 const MoveList &MoveList::operator=(const MoveList &other)
@@ -271,13 +220,10 @@ void MoveList::AddMove(MoveT move, const Board &board)
     }
 }
 
-// Delete the move at index 'idx'.
 void MoveList::DeleteMove(int idx)
 {
     MoveT *move = &moves[idx];
 
-    // I used 'insrt - 1' here but really we should always decrement
-    // insrt for any preferred moves.
     if (IsPreferredMove(idx))
     {
         // Copy the last preferred move over this move (may be same move).
