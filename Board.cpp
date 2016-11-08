@@ -578,7 +578,7 @@ void Board::MakeMove(MoveT move)
     ConsistencyCheck("Board::MakeMove");
 #endif
 
-    // We do not really need to do this when quiescing (if it is a non-
+    // We do not really need to do this when quiescing (iff it is a non-
     //  repeatable move), but for normal moves, even 1 repeat (not a draw, yet)
     //  can effect the evaluation (via biasing against draw) and thus, can also
     //  affect the move we select.  To be revisited.
@@ -674,8 +674,7 @@ void Board::MakeMove(MoveT move)
                 // idx(myElem) must be between board->ply - board->ncpPlies and
                 // board->ply - 4 (inclusive) to be counted.
                 serialBetween(priv->positionInfoElementIndex(*myElem),
-                              ((ply - ncpPlies) &
-                               (kNumSavedPositions - 1)),
+                              ((ply - ncpPlies) & (kNumSavedPositions - 1)),
                               (ply - 4) & (kNumSavedPositions - 1)))
             {
                 repeatPly = ply;
