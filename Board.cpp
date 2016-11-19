@@ -367,7 +367,6 @@ void PrivBoard::setEmptyBoard()
     for (i = 0; i < kNumSavedPositions; i++)
     {
         posList[i].Clear();
-        positions[i].el.Clear();
         positions[i].zobrist = 0;
     }
 

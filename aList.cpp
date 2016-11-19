@@ -40,12 +40,18 @@ static inline void *toNativeElement(ListElement *elem, int offset)
 
 ListElement::ListElement()
 {
+    memset(this, 0, sizeof(ListElement));
+}
+
+ListElement::~ListElement()
+{
     Clear();
 }
 
 void ListElement::Clear()
 {
-    memset(this, 0, sizeof(ListElement));
+    if (pOwner != nullptr)
+        pOwner->Remove(toNativeElement(this, pOwner->ElemOffset()));
 }
 
 List::List()
@@ -60,11 +66,15 @@ List::List(int listElemOffset, LIST_DEBUGFUNC debugFunc)
     pDebugFunc = debugFunc;
 }
 
+List::~List()
+{
+    Clear();
+}
+
 void List::Clear()
 {
-    length = 0;
-    pHead = nullptr;
-    pTail = nullptr;
+    while (length > 0)
+        Pop();
 }
 
 void List::sanityCheck() const
@@ -283,8 +293,20 @@ void List::SortBy(LIST_COMPAREFUNC compareFunc)
     }
 }
 
-// Returns the first element from the list that matches
-// findFunc(elem, userDefined), or nullptr if no element found.  
+void List::InsertBy(LIST_COMPAREFUNC compareFunc, void *elem)
+{
+    void *otherElem;
+    LIST_DOFOREACH(this, otherElem)
+    {
+        if (compareFunc(elem, otherElem) <= 0)
+        {
+            InsertBefore(elem, otherElem);
+            return;
+        }
+    }    
+    InsertBefore(elem, nullptr);
+}
+
 void *List::FindBy(LIST_FINDFUNC findFunc, void *userDefined) const
 {
     void *el1;

@@ -38,7 +38,8 @@ class ListElement
     friend class List;
 public:
     ListElement();
-    void Clear(); // hard-resets (loses list information)
+    ~ListElement();
+    void Clear();
     void Print() const; // (debug) dump via printf()
 private:
     List *pOwner;
@@ -55,7 +56,8 @@ class List
 public:
     List();
     List(int listElemOffset, LIST_DEBUGFUNC debugFunc);
-    void Clear(); // hard-resets to empty list
+    ~List();
+    void Clear(); // Removes every element from the list.
 
     // Insert list element 'myElem' into list (after 'myPrevElem').
     // If 'myPrevElem' == nullptr, inserts into head of list.
@@ -78,15 +80,22 @@ public:
     void *Tail() const;
     void *Next(void *elem) const;
     void *Previous(void *elem) const;
-    int Length() const;
 
+    int Length() const;
+    int ElemOffset() const;
+    
     void SortBy(LIST_COMPAREFUNC compareFunc);
 
+    // Loops through each list element "listElem" until
+    //  compareFunc('elem', listElem) <= 0.  Inserts 'elem' before "listElem",
+    //  or at tail of list if no "listElem" was found.
+    void InsertBy(LIST_COMPAREFUNC compareFunc, void *elem);
+    
     // Returns the first element from the list that matches
     // findFunc(elem, userDefined), or nullptr if no element found.  
     void *FindBy(LIST_FINDFUNC findFunc, void *userDefined) const;
 
-    // Like ListFindBy(), but also removes the element from the list.
+    // Like FindBy(), but also removes the element from the list.
     void *RemoveBy(LIST_FINDFUNC findFunc, void *userDefined);
 
     void MoveTo(List *destList, int numElements);
@@ -112,6 +121,11 @@ private:
 inline int List::Length() const
 {
     return length;
+}
+
+inline int List::ElemOffset() const
+{
+    return elemOffset;
 }
 
 inline void List::Push(void *elem)
