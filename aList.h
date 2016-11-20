@@ -81,6 +81,7 @@ public:
     void *Next(void *elem) const;
     void *Previous(void *elem) const;
 
+    bool IsEmpty() const;
     int Length() const;
     int ElemOffset() const;
     
@@ -117,6 +118,11 @@ private:
     for ((element) = (decltype(element)) (list)->Head(); \
          (element) != nullptr; \
          (element) = (decltype(element)) (list)->Next((element)))
+
+inline bool List::IsEmpty() const
+{
+    return length == 0;
+}
 
 inline int List::Length() const
 {
