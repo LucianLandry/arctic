@@ -4,6 +4,7 @@
 - Linux (tested w/Debian Jessie x86-64).  Other CPU architectures and other
    Unices have not been tested but should work, provided that they also have:
 - A C++11-capable compiler (tested w/clang.  clang++ >= 3.3 or g++ >= 4.8.1 should work.)
+- C++ RTTI support.
 - Needed libraries: ncurses (for the ncurses-based UI), pthread
 - cmake >= 2.8.11 (for configuration)
 
