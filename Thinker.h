@@ -19,6 +19,7 @@
 #include "Board.h"
 #include "Clock.h"
 #include "EngineTypes.h"
+#include "EventQueue.h"
 #include "MoveList.h"
 
 class Thinker
@@ -26,6 +27,13 @@ class Thinker
 public:
     Thinker(int sock); // ctor
     ~Thinker(); // dtor
+
+    void PostCmd(const EventQueue::HandlerFunc &handler);
+    void PostCmd(EventQueue::HandlerFunc &&handler);
+    // These should only be called indirectly through PostCmd().
+    void OnCmdThink();
+    void OnCmdPonder();
+    void OnCmdSearch();
 
     // Currently, only claimed draws use RspDraw().  Automatic draws use
     // RspMove().
@@ -40,9 +48,6 @@ public:
     // Messages passed between Engine and Thinker threads.
     enum class Message
     {
-        CmdThink,   // full iterative-depth search
-        CmdPonder,  // ponder
-        CmdSearch,  // simple search on a sub-tree
         // CmdMoveNow not needed until clustering
         
         RspDraw,      // takes MoveT
@@ -52,9 +57,7 @@ public:
         RspPv,        // takes EnginePvArgsT
         RspSearchDone // takes EngineSearchDoneArgsT
     };
-    
-    Message WaitThinkOrPonder() const;
-    void WaitSearch() const;
+
     inline bool IsRootThinker() const;
     static inline Thinker &RootThinker();
 
@@ -126,7 +129,8 @@ public:
     static bool IsFinalResponse(Message msg);
 private:
     int slaveSock; // Receives commands and sends responses.
-
+    EventQueue cmdQueue; // Receives commands.
+    
     ContextT context;
     std::shared_ptr<SharedContextT> sharedContext;
     
@@ -134,7 +138,6 @@ private:
     std::thread *thread;
 
     void sendRsp(Message rsp, const void *args, int argsLen) const;
-    Message recvCmd(void *args, int argsLen) const;
     
     // There is (currently) one 'master' thinker that coordinates all of the
     //  other thinkers, which act as search threads.

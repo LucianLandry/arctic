@@ -109,7 +109,7 @@ private:
     void calcGoalTime(const Clock &myClock);
     void sendCmd(Thinker::Message cmd) const;
     Thinker::Message recvRsp(void *buffer, int bufLen);
-    void doThink(Thinker::Message cmd, const MoveList *mvlist);
+    void doThink(bool isPonder, const MoveList *mvlist);
     void restoreState(State state);
     void onMaxDepthChanged(const Config::SpinItem &item);
     void onMaxNodesChanged(const Config::SpinItem &item);

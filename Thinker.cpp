@@ -16,6 +16,7 @@
 #include <unistd.h>     // close(2)
 
 #include "aSystem.h"    // SystemTotalProcessors()
+#include "comp.h"
 #include "Engine.h"
 #include "Thinker.h"
 
@@ -161,15 +162,6 @@ void Thinker::sendRsp(Thinker::Message rsp, const void *args, int argsLen) const
     sendMessage(slaveSock, rsp, args, argsLen);
 }
 
-Thinker::Message Thinker::recvCmd(void *args, int argsLen) const
-{
-    Message msg = recvMessage(slaveSock, args, argsLen);
-
-    assert(msg == Message::CmdThink || msg == Message::CmdPonder ||
-           msg == Message::CmdSearch);
-    return msg;
-}
-
 void Thinker::RspDraw(MoveT move) const
 {
     sendRsp(Message::RspDraw, &move, sizeof(MoveT));
@@ -211,33 +203,52 @@ void Thinker::RspNotifyPv(const EngineStatsT &stats, const DisplayPv &pv) const
             sizeof(EnginePvArgsT));
 }
 
-Thinker::Message Thinker::WaitThinkOrPonder() const
-{
-    Message cmd;
-
-    do
-    {
-        cmd = recvCmd(nullptr, 0);
-    } while (cmd != Message::CmdThink && cmd != Message::CmdPonder);
-
-    return cmd;
-}
-
-void Thinker::WaitSearch() const
-{
-    Message cmd;
-
-    do
-    {
-        cmd = recvCmd(nullptr, 0);
-    } while (cmd != Message::CmdSearch);
-}
-
 bool Thinker::IsFinalResponse(Message msg)
 {
     return
         msg == Message::RspDraw || msg == Message::RspMove ||
         msg == Message::RspResign || msg == Message::RspSearchDone;
+}
+
+void Thinker::OnCmdThink()
+{
+    computermove(this, false);
+}
+
+void Thinker::OnCmdPonder()
+{
+    computermove(this, true);
+}
+
+void Thinker::OnCmdSearch()
+{
+    // If we make the constructor use a memory pool, we should probably
+    //  still micro-optimize this.
+    SearchPv pv(context.depth + 1);
+        
+    // Make the appropriate move, bump depth etc.
+    Eval eval = tryMove(this, context.searchArgs.move,
+                        context.searchArgs.alpha,
+                        context.searchArgs.beta, &pv, nullptr);
+
+    RspSearchDone(context.searchArgs.move, eval, pv);
+}
+
+void Thinker::threadFunc()
+{
+    // Run commands as they are issued.
+    while (true)
+        cmdQueue.RunOne();
+}
+
+void Thinker::PostCmd(const EventQueue::HandlerFunc &handler)
+{
+    cmdQueue.Post(handler);
+}
+
+void Thinker::PostCmd(EventQueue::HandlerFunc &&handler)
+{
+    cmdQueue.Post(handler);    
 }
 
 // Get an available searcher.

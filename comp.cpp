@@ -17,6 +17,7 @@
 #include <thread>
 
 #include "Board.h"
+#include "comp.h"
 #include "Eval.h"
 #include "gPreCalc.h"
 #include "HistoryWindow.h"
@@ -124,8 +125,8 @@ static void notifyNewPv(Thinker *th, const SearchPv &goodPv, Eval eval)
     th->SharedContext().pv.Update(pv);
 }
 
-static Eval tryMove(Thinker *th, MoveT move, int alpha, int beta,
-                    SearchPv *newPv, int *hashHitOnly)
+Eval tryMove(Thinker *th, MoveT move, int alpha, int beta,
+             SearchPv *newPv, int *hashHitOnly)
 {
     int &curDepth = th->Context().depth;
     Board &board = th->Context().board;
@@ -738,7 +739,7 @@ static bool shouldResign(const Board &board, Eval myEval, bool bPonder)
         !board.PieceExists(Piece(board.Turn(), PieceType::Queen));
 }
 
-static void computermove(Thinker *th, bool bPonder)
+void computermove(Thinker *th, bool bPonder)
 {
     Eval myEval;
     SearchPv pv(0);
@@ -870,43 +871,4 @@ static void computermove(Thinker *th, bool bPonder)
         th->RspDraw(move);
     else
         th->RspMove(move);
-}
-
-void Thinker::threadFunc()
-{
-    if (IsRootThinker())
-    {
-        while (true)
-        {
-            // wait for a think- or ponder-command to come in.
-            Message cmd = WaitThinkOrPonder();
-            // Think on it, and recommend either: a move, draw, or resign.
-            computermove(this, cmd == Message::CmdPonder);
-        }
-    }
-    else
-    {
-        // We cycle, basically:
-        // -- waiting on a board position/move combo from the compThread
-        // -- searching the move
-        // -- returning the return parameters (early, if NeedsToMove()).
-        //
-        // We end up doing a lot of stuff in the searcherThread instead of
-        // compThread since we want things to be as multi-threaded as possible.
-        while (true)
-        {
-            WaitSearch();
-
-            // If we make the constructor use a memory pool, we should probably
-            //  still micro-optimize this.
-            SearchPv pv(context.depth + 1);
-        
-            // Make the appropriate move, bump depth etc.
-            Eval eval = tryMove(this, context.searchArgs.move,
-                                context.searchArgs.alpha,
-                                context.searchArgs.beta, &pv, nullptr);
-
-            RspSearchDone(context.searchArgs.move, eval, pv);
-        }
-    }
 }

@@ -275,7 +275,7 @@ void Engine::CmdUnmakeMove()
         sharedContext.pv.Rewind(1);
 }
 
-void Engine::doThink(Thinker::Message cmd, const MoveList *mvlist)
+void Engine::doThink(bool isPonder, const MoveList *mvlist)
 {
     CmdBail(); // If we were previously thinking, just start over.
 
@@ -287,16 +287,16 @@ void Engine::doThink(Thinker::Message cmd, const MoveList *mvlist)
     else
         context.mvlist.DeleteAllMoves();
     
-    if (cmd == Thinker::Message::CmdThink)
+    if (!isPonder)
     {
         state = State::Thinking;
+        th->PostCmd(std::bind(&Thinker::OnCmdThink, th.get()));
     }
     else
     {
-        assert(cmd == Thinker::Message::CmdPonder);
         state = State::Pondering;
+        th->PostCmd(std::bind(&Thinker::OnCmdPonder, th.get()));
     }
-    sendCmd(cmd);
 }
 
 // Expected number of moves in a game.  Actually a little lower, as this is
@@ -401,7 +401,7 @@ void Engine::CmdThink(const Clock &myClock, const MoveList &mvlist)
     context.clock = myClock;
     context.clock.Start();
     calcGoalTime(myClock);
-    doThink(Thinker::Message::CmdThink, &mvlist);
+    doThink(false, &mvlist);
 }
 
 void Engine::CmdThink(const Clock &myClock)
@@ -411,17 +411,17 @@ void Engine::CmdThink(const Clock &myClock)
     context.clock = myClock;
     context.clock.Start();
     calcGoalTime(myClock);
-    doThink(Thinker::Message::CmdThink, nullptr);
+    doThink(false, nullptr);
 }
 
 void Engine::CmdPonder(const MoveList &mvlist)
 {
-    doThink(Thinker::Message::CmdPonder, &mvlist);
+    doThink(true, &mvlist);
 }
 
 void Engine::CmdPonder()
 {
-    doThink(Thinker::Message::CmdPonder, nullptr);
+    doThink(true, nullptr);
 }
 
 void Engine::CmdSearch(int alpha, int beta, MoveT move, int curDepth,
@@ -439,8 +439,7 @@ void Engine::CmdSearch(int alpha, int beta, MoveT move, int curDepth,
     context.depth = curDepth;
     context.maxDepth = maxDepth;
     state = State::Searching;
-
-    sendCmd(Thinker::Message::CmdSearch);
+    th->PostCmd(std::bind(&Thinker::OnCmdSearch, th.get()));
 }
 
 // Force the computer to move in the very near future.  This is asynchronous.

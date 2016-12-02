@@ -27,6 +27,7 @@
 #include "log.h"
 #include "playloop.h"
 #include "Switcher.h"
+#include "Timer.h"
 #include "ui.h"
 #include "uiUtil.h"
 
@@ -124,7 +125,8 @@ int main(int argc, char *argv[])
     int numCpuThreads = -1;
     int i;
     char uiString[80] = "";
-    
+
+    arctic::Timer::InitSubsystem();
     LogInit();
     SystemEnableCoreFile(); // for debugging.
 
