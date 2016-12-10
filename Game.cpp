@@ -34,7 +34,7 @@ Game::Game(Engine *eng) : eng(eng)
     setEngineRspHandler(*eng);
 }
 
-// Handle a change in computer control or pondering.
+// Some game state changed; handle it.
 void Game::refresh()
 {
     if (state == State::Stopped)

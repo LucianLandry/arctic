@@ -34,15 +34,16 @@ class Timer
     friend class ::TimerThread;
 public:
     using HandlerFunc = std::function<void()>;
-    Timer(const HandlerFunc &func);
+    Timer();
     ~Timer();
 
-    // Manipulators.
+    // Manipulators:
     Timer &SetAbsoluteTimeout(uint64 timeoutMs); // in UTC
     // Schedules an expiration 'timeoutMs' from "now" (the timeout only fires
     //  if the timer is running)
     Timer &SetRelativeTimeout(uint64 timeoutMs);
-
+    Timer &SetHandler(const HandlerFunc &func);
+    
     void Start(); // Starts the timer.  When the timer expires, the pollable
                   //  object (if any) will be Ready()d.  If the timer is
                   //  already started, does nothing.

@@ -21,6 +21,7 @@
 #include "EngineTypes.h"
 #include "EventQueue.h"
 #include "MoveList.h"
+#include "Timer.h"
 
 class Thinker
 {
@@ -31,25 +32,26 @@ public:
     void PostCmd(const EventQueue::HandlerFunc &handler);
     void PostCmd(EventQueue::HandlerFunc &&handler);
     // These should only be called indirectly through PostCmd().
+    void OnCmdMoveNow();
     void OnCmdThink();
     void OnCmdPonder();
     void OnCmdSearch();
 
+    inline int PollOneCmd(); // poll the internal cmdqueue.
+    
     // Currently, only claimed draws use RspDraw().  Automatic draws use
     // RspMove().
-    void RspDraw(MoveT move) const;
-    void RspMove(MoveT move) const;
-    void RspResign() const;
+    void RspDraw(MoveT move);
+    void RspMove(MoveT move);
+    void RspResign();
     void RspNotifyStats(const EngineStatsT &stats) const;
     void RspNotifyPv(const EngineStatsT &stats, const DisplayPv &pv) const;
-    void RspSearchDone(MoveT move, Eval eval, const SearchPv &pv) const;
+    void RspSearchDone(MoveT move, Eval eval, const SearchPv &pv);
     inline bool NeedsToMove() const;
 
     // Messages passed between Engine and Thinker threads.
     enum class Message
     {
-        // CmdMoveNow not needed until clustering
-        
         RspDraw,      // takes MoveT
         RspMove,      // takes MoveT
         RspResign,    // takes (void)
@@ -57,7 +59,14 @@ public:
         RspPv,        // takes EnginePvArgsT
         RspSearchDone // takes EngineSearchDoneArgsT
     };
-
+    enum class State : uint8
+    {
+        Idle,
+        Pondering,
+        Thinking,
+        Searching,
+    };
+    
     inline bool IsRootThinker() const;
     static inline Thinker &RootThinker();
 
@@ -77,9 +86,6 @@ public:
                          //  (or quiesce).
         int depth;       // Depth we are currently searching at (searching from
                          //  root == 0).
-
-        // Signals that we should move; set by CmdMoveNow().
-        volatile bool moveNow;
 
         struct
         {
@@ -128,25 +134,36 @@ public:
     // Returns 'true' iff the computer went idle after sending 'msg'.
     static bool IsFinalResponse(Message msg);
 private:
-    int slaveSock; // Receives commands and sends responses.
+    int slaveSock; // Sends responses.
     EventQueue cmdQueue; // Receives commands.
-    
     ContextT context;
     std::shared_ptr<SharedContextT> sharedContext;
-    
-    void threadFunc();
     std::thread *thread;
-
-    void sendRsp(Message rsp, const void *args, int argsLen) const;
+    arctic::Timer moveTimer;
     
+    // Private state:
+    State state;
+    int epoch;
+    bool moveNow; // Signals that we should move.
+
     // There is (currently) one 'master' thinker that coordinates all of the
     //  other thinkers, which act as search threads.
     static Thinker *rootThinker;
+
+    void moveToIdleState();
+    void onMoveTimerExpired(int epoch);
+    void sendRsp(Message rsp, const void *args, int argsLen) const;
+    void threadFunc();
 };
+
+inline int Thinker::PollOneCmd()
+{
+    return cmdQueue.PollOne();
+}
 
 inline bool Thinker::NeedsToMove() const
 {
-    return rootThinker->context.moveNow;
+    return moveNow;
 }
 
 inline bool Thinker::IsRootThinker() const
@@ -172,7 +189,8 @@ inline Thinker::SharedContextT &Thinker::SharedContext()
 // Operations on searcher threads:
 bool SearchersDelegateSearch(int alpha, int beta, MoveT move, int curDepth,
                              int maxDepth);
-Eval SearchersWaitOne(MoveT &move, SearchPv &pv, Thinker &parent);
+// Returns 'true' if interrupted by the cmdqueue; or 'false' otherwise.
+bool SearchersWaitOne(Thinker &parent, Eval &eval, MoveT &move, SearchPv &pv);
 void SearchersBail();
 void SearchersMakeMove(MoveT move);
 void SearchersUnmakeMove();
@@ -181,5 +199,6 @@ void SearchersSetBoard(const Board &board);
 // Initialize searcher threads on the fly.  Should be called only when the
 //  engine is idle.
 void SearchersSetNumThreads(int numThreads);
+void SearchersSetCmdQueue(const EventQueue &cmdQueue);
 
 #endif // THINKER_H

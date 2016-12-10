@@ -53,14 +53,6 @@ public:
     bool IsSearching() const;
     bool IsBusy() const;
 
-    // Return *clock* time we want to move at.  For instance if == 30000000, we
-    //  want to move when there is 30 seconds left on our clock.  When
-    //  CLOCK_TIME_INFINITE, we should rely on the Thinker to move itself.
-    // This is a bit bizarre compared to just returning the absolute time we
-    //  want to move at, but it helps us with displaying ticks, and time
-    //  management should be internal in the future anyway.
-    inline bigtime_t GoalTime() const;
-    
     // Returns a poll()able object that alerts you to call ProcessOneRsp().
     int MasterSock() const;
 
@@ -94,23 +86,15 @@ private:
     // Actual thinking happens on its own thread, and manipulates 'th'.
     std::unique_ptr<Thinker> th;
 
-    enum class State : uint8
-    {
-        Idle,
-        Pondering,
-        Thinking,
-        Searching
-    };
-    State state;
-    bigtime_t goalTime;
+    Thinker::State state;
+    bool moveNowRequested;
     class Config config;
     RspHandlerT rspHandler;
 
-    void calcGoalTime(const Clock &myClock);
     void sendCmd(Thinker::Message cmd) const;
     Thinker::Message recvRsp(void *buffer, int bufLen);
     void doThink(bool isPonder, const MoveList *mvlist);
-    void restoreState(State state);
+    void restoreState(Thinker::State state);
     void onMaxDepthChanged(const Config::SpinItem &item);
     void onMaxNodesChanged(const Config::SpinItem &item);
     void onRandomMovesChanged(const Config::CheckboxItem &item);
@@ -122,32 +106,27 @@ private:
 
 inline bool Engine::IsThinking() const
 {
-    return state == State::Thinking;
+    return state == Thinker::State::Thinking;
 }
 
 inline bool Engine::IsPondering() const
 {
-    return state == State::Pondering;
+    return state == Thinker::State::Pondering;
 }
 
 inline bool Engine::IsSearching() const
 {
-    return state == State::Searching;
+    return state == Thinker::State::Searching;
 }
 
 inline bool Engine::IsBusy() const
 {
-    return state != State::Idle;
+    return state != Thinker::State::Idle;
 }
 
 inline int Engine::MasterSock() const
 {
     return masterSock;
-}
-
-inline bigtime_t Engine::GoalTime() const
-{
-    return IsThinking() ? goalTime : CLOCK_TIME_INFINITE;
 }
 
 inline class Config &Engine::Config()

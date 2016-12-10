@@ -124,8 +124,6 @@ bigtime_t Clock::Time() const
         time;
 }
 
-// Returns the amount of time a player has to make their move before they
-//  could be flagged, taking per-move limits into account.
 bigtime_t Clock::PerMoveTime() const
 {
     bigtime_t result = MIN(perMoveLimit, time);

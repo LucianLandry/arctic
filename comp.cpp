@@ -568,10 +568,24 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
             }
             else 
             {
-                // Either do not have a move to search, or
-                // nobody to search on it.  Wait for an eval to become
-                // available.
-                myEval = SearchersWaitOne(move, childPv, *th);
+                // Either do not have a move to search, or nobody to search on
+                //  it.  Wait for an eval to become available.  May be
+                //  interrupted if we need to move.
+                if (SearchersWaitOne(*th, myEval, move, childPv))
+                {
+                    if (th->NeedsToMove())
+                    {
+                        SearchersBail(); // Wait for any searchers to terminate.
+                        return retVal.BumpHighBoundToWin();
+                    }
+                    // At this point we know we processed some non-"move now"
+                    //  command (we don't actually have such commands yet, but
+                    //  consider a move timer expiring when we decide not to
+                    //  move quite yet because our eval just dropped), and
+                    //  should retry.
+                    i--;
+                    continue;
+                }
                 i--; // this counters i++
             }
         }
@@ -615,6 +629,10 @@ static Eval minimax(Thinker *th, int alpha, int beta, SearchPv *goodPv,
             myEval = tryMove(th, move, alpha, beta, &childPv, nullptr);
         }
 
+        // Avoid processing the cmdqueue if we are already trying to punt.
+        if (!th->NeedsToMove())
+            th->PollOneCmd();
+        
         // If we need to move, we cannot trust (and should not hash) 'myEval'.
         // We must go with the best value/move we already had ... if any.
         if (th->NeedsToMove() ||

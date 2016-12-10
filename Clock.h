@@ -32,7 +32,9 @@ public:
     bigtime_t TimeTaken() const; // elapsed time of the last start-stop cycle.
 
     // Returns the amount of time a player has to make their move before they
-    //  could be flagged, taking per-move limits into account.
+    //  could be flagged.
+    bigtime_t Time() const;
+    // Like Time(), but also takes per-move limits into account.
     bigtime_t PerMoveTime() const;
 
     // All of the following operations may be chained.
@@ -65,7 +67,6 @@ public:
     void SetParameters(const Clock &other);
     
     // Getter functions.
-    bigtime_t Time() const;
     inline bigtime_t StartTime() const;
     inline bigtime_t Increment() const;
     inline int TimeControlPeriod() const;

@@ -79,19 +79,19 @@ void Engine::onHistoryWindowChanged(const Config::SpinItem &item)
     gHistoryWindow.SetWindow(item.Value());
 }
 
-void Engine::restoreState(Engine::State state)
+void Engine::restoreState(Thinker::State state)
 {
     Thinker::ContextT &context = th->Context(); // shorthand
 
     switch (state) // continue where we were interrupted, if applicable.
     {
-        case State::Pondering:
+        case Thinker::State::Pondering:
             CmdPonder(context.mvlist);
             break;
-        case State::Thinking:
+        case Thinker::State::Thinking:
             CmdThink(context.clock, context.mvlist);
             break;
-        case State::Searching:
+        case Thinker::State::Searching:
             CmdSearch(context.searchArgs.alpha, context.searchArgs.beta,
                       context.searchArgs.move, context.depth, context.maxDepth);
             break;
@@ -104,7 +104,7 @@ void Engine::onMaxMemoryChanged(const Config::SpinItem &item)
 {
     if (!th->IsRootThinker())
         return;
-    State origState = state;
+    Thinker::State origState = state;
     if (IsBusy())
         CmdBail();
     th->SharedContext().transTable.Reset(uint64(item.Value()) * 1024 * 1024);
@@ -115,7 +115,7 @@ void Engine::onMaxThreadsChanged(const Config::SpinItem &item)
 {
     if (!th->IsRootThinker())
         return;
-    State origState = state;
+    Thinker::State origState = state;
     if (IsBusy())
         CmdBail();
     th->SharedContext().maxThreads = item.Value();
@@ -124,7 +124,7 @@ void Engine::onMaxThreadsChanged(const Config::SpinItem &item)
 }
 
 // ctor.
-Engine::Engine()
+Engine::Engine() : state(Thinker::State::Idle), moveNowRequested(false)
 {
     int err;
     int socks[2];
@@ -133,8 +133,6 @@ Engine::Engine()
     assert(err == 0);
 
     masterSock = socks[0];
-    state = State::Idle;
-
     th.reset(new Thinker(socks[1]));
     
     // Register config callbacks.
@@ -180,8 +178,6 @@ Engine::Engine()
                          th->SharedContext().maxThreads,
                          std::bind(&Engine::onMaxThreadsChanged, this,
                                    std::placeholders::_1)));
-    
-    goalTime = CLOCK_TIME_INFINITE;
 }
 
 // dtor
@@ -206,8 +202,8 @@ Thinker::Message Engine::recvRsp(void *args, int argsLen)
     
     if (Thinker::IsFinalResponse(msg))
     {
-        state = State::Idle;
-        th->Context().moveNow = false;
+        state = Thinker::State::Idle;
+        moveNowRequested = false;
     }
     return msg;
 }
@@ -289,109 +285,14 @@ void Engine::doThink(bool isPonder, const MoveList *mvlist)
     
     if (!isPonder)
     {
-        state = State::Thinking;
+        state = Thinker::State::Thinking;
         th->PostCmd(std::bind(&Thinker::OnCmdThink, th.get()));
     }
     else
     {
-        state = State::Pondering;
+        state = Thinker::State::Pondering;
         th->PostCmd(std::bind(&Thinker::OnCmdPonder, th.get()));
     }
-}
-
-// Expected number of moves in a game.  Actually a little lower, as this is
-// biased toward initial moves.  The idea is that we would rather have less
-// time at the end to think about a won position than more time to think about
-// a lost position.
-#define GAME_NUM_MOVES 40
-// Minimum time we want left on the clock, presumably to compensate for
-// lag, in usec (however, normally we rely on timeseal to compensate for
-// network lag)
-#define MIN_TIME 500000
-// The clock doesn't run on the first move in an ICS game.
-// But as a courtesy, refuse to think over 5 seconds (unless our clock has
-// infinite time anyway)
-#define ICS_FIRSTMOVE_LIMIT 5000000
-void Engine::calcGoalTime(const Clock &myClock)
-{
-    const Board &board = th->Context().board; // shorthand.
-    int ply = board.Ply();
-    bigtime_t myTime, calcTime, altCalcTime, myInc, safeTime,
-        myPerMoveLimit, safeMoveLimit;
-    int myTimeControlPeriod, numMovesToNextTimeControl;
-    int numIncs;
-    
-    myTime = myClock.Time();
-    myPerMoveLimit = myClock.PerMoveLimit();
-    myTimeControlPeriod = myClock.TimeControlPeriod();
-    numMovesToNextTimeControl = myClock.NumMovesToNextTimeControl();
-    myInc = myClock.Increment();
-
-    safeMoveLimit =
-        myPerMoveLimit == CLOCK_TIME_INFINITE ? CLOCK_TIME_INFINITE :
-        myPerMoveLimit - MIN_TIME;      
-
-    if (myClock.IsFirstMoveFree() && ply < NUM_PLAYERS)
-        safeMoveLimit = MIN(safeMoveLimit, ICS_FIRSTMOVE_LIMIT);
-
-    safeMoveLimit = MAX(safeMoveLimit, 0);
-
-    // Degenerate case.
-    if (myClock.IsInfinite())
-    {
-        goalTime =
-            myPerMoveLimit == CLOCK_TIME_INFINITE ?
-            CLOCK_TIME_INFINITE :
-            MIN_TIME;
-        return;
-    }
-
-    safeTime = MAX(myTime - MIN_TIME, 0);
-
-    // 'calcTime' is the amount of time we want to think.
-    calcTime = safeTime / GAME_NUM_MOVES;
-
-    if (myTimeControlPeriod || numMovesToNextTimeControl)
-    {
-        // Anticipate the additional time we will possess to make our
-        // GAME_NUM_MOVES moves due to time-control increments.
-        if (myTimeControlPeriod)
-        {
-            numMovesToNextTimeControl =
-                myTimeControlPeriod - ((ply >> 1) % myTimeControlPeriod);
-        }
-        numIncs = GAME_NUM_MOVES <= numMovesToNextTimeControl ? 0 :
-            1 + (myTimeControlPeriod ?
-                 ((GAME_NUM_MOVES - numMovesToNextTimeControl - 1) /
-                  myTimeControlPeriod) :
-                 0);
-
-        calcTime += (myClock.StartTime() * numIncs) / GAME_NUM_MOVES;
-        // However, say we have :30 on the clock, 10 moves to make, and a one-
-        // minute increment every two moves.  We want to burn only :15.
-        altCalcTime = safeTime / MIN(GAME_NUM_MOVES,
-                                     numMovesToNextTimeControl);
-        calcTime = MIN(calcTime, altCalcTime);
-    }
-
-    // Anticipate the additional time we will possess to make our
-    // GAME_NUM_MOVES moves due to increments.
-    if (myInc)
-    {
-        numIncs = GAME_NUM_MOVES - 1;
-        calcTime += (myInc * numIncs) / GAME_NUM_MOVES;
-        // Fix cases like 10 second start time, 22 second increment
-        calcTime = MIN(calcTime, safeTime);
-    }
-
-    // Do not think over any per-move limit.
-    if (safeMoveLimit != CLOCK_TIME_INFINITE)
-        calcTime = MIN(calcTime, safeMoveLimit);
-
-    // Refuse to think for a "negative" time.
-    calcTime = MAX(calcTime, 0);
-
-    goalTime = myTime - calcTime;
 }
 
 void Engine::CmdThink(const Clock &myClock, const MoveList &mvlist)
@@ -399,8 +300,9 @@ void Engine::CmdThink(const Clock &myClock, const MoveList &mvlist)
     Thinker::ContextT &context = th->Context();
 
     context.clock = myClock;
+    // Because of the way we may stop and restart the Thinker (see:
+    //  restoreState()), we should never actually stop this clock.
     context.clock.Start();
-    calcGoalTime(myClock);
     doThink(false, &mvlist);
 }
 
@@ -410,7 +312,6 @@ void Engine::CmdThink(const Clock &myClock)
 
     context.clock = myClock;
     context.clock.Start();
-    calcGoalTime(myClock);
     doThink(false, nullptr);
 }
 
@@ -438,7 +339,7 @@ void Engine::CmdSearch(int alpha, int beta, MoveT move, int curDepth,
     context.searchArgs.move = move;
     context.depth = curDepth;
     context.maxDepth = maxDepth;
-    state = State::Searching;
+    state = Thinker::State::Searching;
     th->PostCmd(std::bind(&Thinker::OnCmdSearch, th.get()));
 }
 
@@ -446,11 +347,10 @@ void Engine::CmdSearch(int alpha, int beta, MoveT move, int curDepth,
 // For a synchronous analogue, see Game->MoveNow().
 void Engine::CmdMoveNow()
 {
-    if (IsBusy())
+    if (IsBusy() && !moveNowRequested)
     {
-        th->Context().moveNow = true;
-        // I do not think this is necessary until we try to support clustering.
-        // sendCmd(Thinker::Message::CmdMoveNow);
+        moveNowRequested = true;
+        th->PostCmd(std::bind(&Thinker::OnCmdMoveNow, th.get()));
     }
 }
 

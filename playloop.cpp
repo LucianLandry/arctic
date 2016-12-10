@@ -28,8 +28,7 @@ void PlayloopRun(Game &game, Engine &eng, Switcher &sw)
     struct pollfd pfds[2];
     int res;
 
-    int tickTimeout, moveNowTimeout, pollTimeout;
-    bool moveNowOnTimeout;
+    int tickTimeout;
     bigtime_t myTime;
     int turn;
 
@@ -42,10 +41,7 @@ void PlayloopRun(Game &game, Engine &eng, Switcher &sw)
     while (true)
     {
         tickTimeout = -1;
-        moveNowTimeout = -1;
-        pollTimeout = -1;
         turn = game.Board().Turn();
-        moveNowOnTimeout = false;
         const Clock &myClock = game.Clock(turn);
         myTime = myClock.PerMoveTime();
 
@@ -72,33 +68,13 @@ void PlayloopRun(Game &game, Engine &eng, Switcher &sw)
             tickTimeout += 1; // ... and adjusted for division truncation
         }
 
-        bigtime_t goalTime = eng.GoalTime();
-        // The engine cannot currently prompt itself to move (usually), so we
-        //  take care of that.
-        if (goalTime != CLOCK_TIME_INFINITE)
-        {
-            moveNowTimeout = (myTime - goalTime) / 1000;
-            moveNowTimeout = MAX(moveNowTimeout, 0);        
-
-            moveNowOnTimeout = tickTimeout == -1 || moveNowTimeout < tickTimeout;
-        }
-
-        pollTimeout =
-            tickTimeout != -1 && moveNowTimeout != -1 ?
-            MIN(tickTimeout, moveNowTimeout) :
-            tickTimeout != -1 ? tickTimeout :
-            moveNowTimeout;
-
         // poll for input from either stdin (UI), or the computer, or timeout.
-        res = poll(pfds, 2, pollTimeout);
+        res = poll(pfds, 2, tickTimeout);
 
         if (res == 0)
         {
-            // poll timed out.  Do appropriate action and re-poll.
-            if (moveNowOnTimeout)
-                eng.CmdMoveNow();
-            else
-                gUI->notifyTick(&game); // Tick, tock...
+            // poll timed out.
+            gUI->notifyTick(&game); // Tick, tock...
             continue;
         }
 

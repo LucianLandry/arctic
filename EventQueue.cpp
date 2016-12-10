@@ -88,7 +88,7 @@ int EventQueue::pollOneSlowPath()
     return 1;
 }
 
-const Pollable *EventQueue::PollableObject()
+const Pollable *EventQueue::PollableObject() const
 {
     std::unique_lock<std::mutex> lock(mutex);
     return pollObj.get();

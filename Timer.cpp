@@ -25,6 +25,8 @@ public:
     TimerThread();
     ~TimerThread();
     void Reschedule(arctic::Timer &timer, uint64 timeoutMs, bool isAbsolute);
+    void SetHandler(arctic::Timer &timer,
+                    const arctic::Timer::HandlerFunc &handler);
     void Start(arctic::Timer &timer);
     int Stop(arctic::Timer &timer);
 private:
@@ -78,6 +80,13 @@ void TimerThread::Reschedule(arctic::Timer &timer, uint64 timeoutMs,
     lock.unlock();
     if (isRunning)
         cv.notify_one();
+}
+
+void TimerThread::SetHandler(arctic::Timer &timer,
+                             const arctic::Timer::HandlerFunc &handler)
+{
+    std::unique_lock<decltype(rMutex)> lock(rMutex);
+    timer.handler = handler;
 }
 
 void TimerThread::Start(arctic::Timer &timer)
@@ -141,9 +150,9 @@ void TimerThread::threadFunc()
 namespace arctic
 {
 
-Timer::Timer(const HandlerFunc &func) :
-    handler(func), startTimeAbsMs(0), nextTimeoutAbsMs(0), timeoutMs(0),
-    expireCount(0), isRunning(false), isAbsolute(false)
+Timer::Timer() :
+    startTimeAbsMs(0), nextTimeoutAbsMs(0), timeoutMs(0), expireCount(0),
+    isRunning(false), isAbsolute(false)
 {
     // If you hit this, you did not call InitSubsystem() first.
     assert(gTimerThread != nullptr);
@@ -163,6 +172,12 @@ Timer &Timer::SetAbsoluteTimeout(uint64 timeoutMs)
 Timer &Timer::SetRelativeTimeout(uint64 timeoutMs)
 {
     gTimerThread->Reschedule(*this, timeoutMs, false);
+    return *this;
+}
+
+Timer &Timer::SetHandler(const HandlerFunc &func)
+{
+    gTimerThread->SetHandler(*this, func);
     return *this;
 }
 

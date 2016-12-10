@@ -55,9 +55,9 @@ public:
     void RunOne(); // Blocks until one event is ready, then runs it
     
     // Of course, this may change if another thread is altering the queue.
-    inline bool IsEmpty();
+    inline bool IsEmpty() const;
     
-    const Pollable *PollableObject();
+    const Pollable *PollableObject() const;
     // Consumes 'obj', when !nullptr.  Nothing should be polling on the current
     //  object, as it will be closed/invalidated.  'obj' should also be in an
     //  'empty' state.
@@ -71,7 +71,7 @@ private:
     std::queue<HandlerFunc, arctic::SimpleQueue<HandlerFunc>> queue;
     std::unique_ptr<Pollable> pollObj;
     std::condition_variable cv;
-    std::mutex mutex;
+    mutable std::mutex mutex;
     // With a degenerate vector implementation and arbitrary concurrent
     //  operations, it might not be safe to directly query queue.empty() w/out
     //  locking.
@@ -84,7 +84,7 @@ private:
     inline void setIsEmpty(bool val);
 };
 
-inline bool EventQueue::IsEmpty()
+inline bool EventQueue::IsEmpty() const
 {
 #ifdef HAS_COHERENT_CACHE
     return isEmpty;
