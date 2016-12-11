@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//           Thinker.h - chess-oriented message passing interface
+//             Thinker.h - Thinker thread (thinks, ponders, etc.)
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -14,6 +14,7 @@
 #ifndef THINKER_H
 #define THINKER_H
 
+#include <functional> // std::function
 #include <thread>     // std::thread
 
 #include "Board.h"
@@ -26,7 +27,25 @@
 class Thinker
 {
 public:
-    Thinker(int sock); // ctor
+
+    using RspDrawFunc = std::function<void(MoveT)>;
+    using RspMoveFunc = std::function<void(MoveT)>;
+    using RspResignFunc = std::function<void()>;
+    using RspNotifyStatsFunc = std::function<void(const EngineStatsT &)>;
+    using RspNotifyPvFunc = std::function<void(const EnginePvArgsT &)>;
+    using RspSearchDoneFunc =
+        std::function<void(const EngineSearchDoneArgsT &)>;
+    struct RspHandlerT
+    {
+        RspDrawFunc Draw;
+        RspMoveFunc Move;
+        RspResignFunc Resign;
+        RspNotifyStatsFunc NotifyStats;
+        RspNotifyPvFunc NotifyPv;
+        RspSearchDoneFunc SearchDone;
+    };
+    
+    Thinker(EventQueue &rspQueue, const RspHandlerT &handler); // ctor
     ~Thinker(); // dtor
 
     void PostCmd(const EventQueue::HandlerFunc &handler);
@@ -49,16 +68,6 @@ public:
     void RspSearchDone(MoveT move, Eval eval, const SearchPv &pv);
     inline bool NeedsToMove() const;
 
-    // Messages passed between Engine and Thinker threads.
-    enum class Message
-    {
-        RspDraw,      // takes MoveT
-        RspMove,      // takes MoveT
-        RspResign,    // takes (void)
-        RspStats,     // takes EngineStatsT
-        RspPv,        // takes EnginePvArgsT
-        RspSearchDone // takes EngineSearchDoneArgsT
-    };
     enum class State : uint8
     {
         Idle,
@@ -128,14 +137,10 @@ public:
     //  threads)
     inline SharedContextT &SharedContext();
 
-    static void sendMessage(int sock, Thinker::Message msg, const void *args,
-                            int argsLen);
-    static Message recvMessage(int sock, void *args, int argsLen);
-    // Returns 'true' iff the computer went idle after sending 'msg'.
-    static bool IsFinalResponse(Message msg);
 private:
-    int slaveSock; // Sends responses.
     EventQueue cmdQueue; // Receives commands.
+    EventQueue &rspQueue; // Sends responses.
+    RspHandlerT rspHandler; // handlers we want to use for responses.
     ContextT context;
     std::shared_ptr<SharedContextT> sharedContext;
     std::thread *thread;
@@ -152,7 +157,6 @@ private:
 
     void moveToIdleState();
     void onMoveTimerExpired(int epoch);
-    void sendRsp(Message rsp, const void *args, int argsLen) const;
     void threadFunc();
 };
 

@@ -1,6 +1,8 @@
 # Version 1.3:
 Optimization: Prefetch moves sooner (~2.5% speedup)
 Refactored into C++ class: ListT -> arctic::List (~1.2% speedup)
+Engine/Thinker refactoring: communicate w/EventQueues instead of sockets (~0.8%
+    slowdown); Thinker can now move itself when it reaches its goaltime.
 
 # Version 1.2:
 Refactored MoveT struct (added methods, removed unaligned load/store assumption)

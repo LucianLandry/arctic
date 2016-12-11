@@ -176,7 +176,8 @@ void SimpleQueue<Elem, Allocator>::reserve(int new_cap)
     {
         do
         {
-            *newMemHead++ = std::move(*head); // assumes move constructor does not throw
+            // assumes constructor does not throw
+            a.construct(newMemHead++, std::move(*head));
             if (++head == elemStorageEnd)
                 head = elemStorage;
         } while (head != tail);

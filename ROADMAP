@@ -1,11 +1,10 @@
 ## Near-term goals
 
-Continue refactoring Engine interface (probably use boost::asio instead of sockets; make move-at-goaltime internal)
 Get a graphical user interface working (based off Juce or Qt)
+Build a custom FICS interface ala Zippy.
 
 ## Out there (maybe never.  Project velocity is very slow)
 
-Build a custom FICS interface ala Zippy.
 xpgn-format save/restore.
 Adjustable strength.
 More aggressive use of transposition table (better draw handling)
@@ -30,8 +29,6 @@ uiXboard: implement analyze mode.
 Go directly from pondering to thinking on a ponderhit, just like any good UCI engine would do.  Not sure this is worth the complexity, assuming one is using a transposition table.
 Fractional ply extension. (+ 1/numMoves)
 Shrink search window (not null necessarily, but do shrink it)
-Better thread utilization: keep all threads busy through end of minimax compute
-    (including last move).
 
 ## Ummmm sure
 

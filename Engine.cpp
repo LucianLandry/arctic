@@ -11,30 +11,23 @@
 // obtain one at https://mozilla.org/MPL/2.0/.
 //--------------------------------------------------------------------------
 
-#include <limits.h>
-#include <sys/socket.h>
-#include <type_traits>  // std::is_trivially_copyable<>
-#include <unistd.h>     // close(2)
+#include <limits.h>     // INT_MAX
 
 #include "Engine.h"
 #include "HistoryWindow.h"
 #include "Variant.h"
-#include "Workarounds.h"
 
-/* Okay, here's the lowdown.
-   Communication between the main program and engine thread is done via 2
-   sockets, via Thinker::Messages.
+/* Communication between the main program ("Engine" interface) and the Thinker
+   thread proper is done via 2 EventQueues (Thinker's cmdQueue and
+   Engine's rspQueue).
 
-   Message format is:
-   msglen (1 byte)
-   msg ('msglen' bytes)
+   The Engine may post:
+   OnCmdThink
+   OnCmdPonder
+   OnCmdMoveNow # also used for bail, where the move may be discarded.
+   OnCmdSearch
 
-   Possible Messages the UI layer can send:
-   CmdThink
-   CmdPonder
-   CmdMoveNow # also used for bail, where the move may be discarded.
-
-   Possible Messages the computer can send:
+   The Thinker may post:
    RspDraw<move, MoveNone if none>
    RspMove<move>
    RspResign
@@ -124,16 +117,22 @@ void Engine::onMaxThreadsChanged(const Config::SpinItem &item)
 }
 
 // ctor.
-Engine::Engine() : state(Thinker::State::Idle), moveNowRequested(false)
+Engine::Engine() :
+    rspQueue(std::unique_ptr<Pollable>(new Pollable)),
+    state(Thinker::State::Idle), moveNowState(MoveNowState::IdleOrBusy)
 {
-    int err;
-    int socks[2];
-
-    err = socketpair(AF_UNIX, SOCK_STREAM, 0, socks);
-    assert(err == 0);
-
-    masterSock = socks[0];
-    th.reset(new Thinker(socks[1]));
+    Thinker::RspHandlerT tmp;
+    tmp.Draw = std::bind(&Engine::onRspDraw, this, std::placeholders::_1);
+    tmp.Move = std::bind(&Engine::onRspMove, this, std::placeholders::_1);
+    tmp.Resign = std::bind(&Engine::onRspResign, this);
+    tmp.NotifyStats = std::bind(&Engine::onRspNotifyStats, this,
+                                std::placeholders::_1);
+    tmp.NotifyPv = std::bind(&Engine::onRspNotifyPv, this,
+                             std::placeholders::_1);
+    tmp.SearchDone = std::bind(&Engine::onRspSearchDone, this,
+                               std::placeholders::_1);
+    
+    th.reset(new Thinker(rspQueue, tmp));
     
     // Register config callbacks.
     Config().Register(
@@ -183,29 +182,7 @@ Engine::Engine() : state(Thinker::State::Idle), moveNowRequested(false)
 // dtor
 Engine::~Engine()
 {
-    close(masterSock);
     th = nullptr;
-}
-
-void Engine::sendCmd(Thinker::Message cmd) const
-{
-    th->sendMessage(masterSock, cmd, nullptr, 0);
-}
-
-Thinker::Message Engine::recvRsp(void *args, int argsLen)
-{
-    Thinker::Message msg = th->recvMessage(masterSock, args, argsLen);
-
-    assert(msg == Thinker::Message::RspStats ||
-           msg == Thinker::Message::RspPv ||
-           Thinker::IsFinalResponse(msg));
-    
-    if (Thinker::IsFinalResponse(msg))
-    {
-        state = Thinker::State::Idle;
-        moveNowRequested = false;
-    }
-    return msg;
 }
 
 void Engine::CmdNewGame()
@@ -347,9 +324,9 @@ void Engine::CmdSearch(int alpha, int beta, MoveT move, int curDepth,
 // For a synchronous analogue, see Game->MoveNow().
 void Engine::CmdMoveNow()
 {
-    if (IsBusy() && !moveNowRequested)
+    if (IsBusy() && moveNowState == MoveNowState::IdleOrBusy)
     {
-        moveNowRequested = true;
+        moveNowState = MoveNowState::MoveNowRequested;
         th->PostCmd(std::bind(&Thinker::OnCmdMoveNow, th.get()));
     }
 }
@@ -359,13 +336,13 @@ void Engine::CmdBail()
     if (IsBusy())
     {
         CmdMoveNow();
+        moveNowState = MoveNowState::BailRequested;
 
         // Wait for, and discard, the computer's move.
-        Thinker::Message rsp;
         do
         {
-            rsp = recvRsp(nullptr, 0);
-        } while (!Thinker::IsFinalResponse(rsp));
+            ProcessOneRsp();
+        } while (moveNowState != MoveNowState::IdleOrBusy);
     }
     assert(!IsBusy());
 }
@@ -375,57 +352,46 @@ void Engine::SetRspHandler(const RspHandlerT &rspHandler)
     this->rspHandler = rspHandler;
 }
 
-void Engine::ProcessOneRsp()
+void Engine::onRspNotifyStats(const EngineStatsT &stats)
 {
-    alignas(sizeof(void *))
-        char rspBuf[MAX4(sizeof(EngineStatsT), sizeof(EnginePvArgsT),
-                         sizeof(MoveT), sizeof(EngineSearchDoneArgsT))];
-    EngineStatsT *stats = (EngineStatsT *)rspBuf;
-    EnginePvArgsT *pvArgs = (EnginePvArgsT *)rspBuf;
-    MoveT *move = (MoveT *)rspBuf;
-    EngineSearchDoneArgsT *searchDoneArgs = (EngineSearchDoneArgsT *)rspBuf;
+    if (moveNowState != MoveNowState::BailRequested)
+        rspHandler.NotifyStats(*this, stats);
+}
 
-    static_assert(std::is_trivially_copyable<EngineStatsT>::value,
-                  "EngineStatsT must be trivially copyable to copy it "
-                  "through a socket!");
-    static_assert(std::is_trivially_copyable<MoveT>::value,
-                  "MoveT must be trivially copyable to copy it "
-                  "through a socket!");
-#if 0 // Cannot check these, since their member 'SearchPv' has an optimized
-      // (but non-trivial) copy constructor.
-    static_assert(std::is_trivially_copyable<EnginePvArgsT>::value,
-                  "EnginePvStatsT must be trivially copyable to copy it "
-                  "through a socket!");
-    static_assert(std::is_trivially_copyable<EngineSearchDoneArgsT>::value,
-                  "EngineSearchDoneArgsT must be trivially copyable to copy it "
-                  "through a socket!");
-#endif
+void Engine::onRspNotifyPv(const EnginePvArgsT &pv)
+{
+    if (moveNowState != MoveNowState::BailRequested)
+        rspHandler.NotifyPv(*this, pv);
+}
 
-    Thinker::Message rsp = recvRsp(&rspBuf, sizeof(rspBuf));
+void Engine::onRspDraw(MoveT move)
+{
+    bool bailing = moveNowState == MoveNowState::BailRequested;
+    moveToIdleState();
+    if (!bailing)
+        rspHandler.Draw(*this, move);
+}
 
-    switch (rsp)
-    {
-        case Thinker::Message::RspDraw:
-            rspHandler.Draw(*this, *move);
-            break;
-        case Thinker::Message::RspMove:
-            rspHandler.Move(*this, *move);
-            break;
-        case Thinker::Message::RspResign:
-            rspHandler.Resign(*this);
-            break;
-        case Thinker::Message::RspStats:
-            rspHandler.NotifyStats(*this, *stats);
-            break;
-        case Thinker::Message::RspPv:
-            rspHandler.NotifyPv(*this, *pvArgs);
-            break;
-        case Thinker::Message::RspSearchDone:
-            rspHandler.SearchDone(*this, *searchDoneArgs);
-            break;
-        default:
-            LOG_EMERG("%s: unknown response type %d\n", __func__, int(rsp));
-            assert(0);
-            break;
-    }
+void Engine::onRspMove(MoveT move)
+{
+    bool bailing = moveNowState == MoveNowState::BailRequested;
+    moveToIdleState();
+    if (!bailing)
+        rspHandler.Move(*this, move);
+}
+
+void Engine::onRspResign()
+{
+    bool bailing = moveNowState == MoveNowState::BailRequested;
+    moveToIdleState();
+    if (!bailing)
+        rspHandler.Resign(*this);
+}
+
+void Engine::onRspSearchDone(const EngineSearchDoneArgsT &args)
+{
+    bool bailing = moveNowState == MoveNowState::BailRequested;
+    moveToIdleState();
+    if (!bailing)
+        rspHandler.SearchDone(*this, args);
 }

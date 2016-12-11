@@ -81,18 +81,22 @@ public:
     inline class Config &Config();
     
 private:
-    int masterSock; // Sends commands and receives responses.
+    EventQueue rspQueue; // receives responses from Thinker.
 
     // Actual thinking happens on its own thread, and manipulates 'th'.
     std::unique_ptr<Thinker> th;
 
     Thinker::State state;
-    bool moveNowRequested;
+
+    enum class MoveNowState
+    {
+        IdleOrBusy,
+        MoveNowRequested,
+        BailRequested
+    } moveNowState;
     class Config config;
     RspHandlerT rspHandler;
 
-    void sendCmd(Thinker::Message cmd) const;
-    Thinker::Message recvRsp(void *buffer, int bufLen);
     void doThink(bool isPonder, const MoveList *mvlist);
     void restoreState(Thinker::State state);
     void onMaxDepthChanged(const Config::SpinItem &item);
@@ -102,6 +106,17 @@ private:
     void onHistoryWindowChanged(const Config::SpinItem &item);
     void onMaxMemoryChanged(const Config::SpinItem &item);
     void onMaxThreadsChanged(const Config::SpinItem &item);
+
+    void moveToIdleState();
+    
+    // non-final responses.
+    void onRspNotifyStats(const EngineStatsT &stats);
+    void onRspNotifyPv(const EnginePvArgsT &pv);
+    // final responses.
+    void onRspDraw(MoveT move);
+    void onRspMove(MoveT move);
+    void onRspResign();
+    void onRspSearchDone(const EngineSearchDoneArgsT &args);
 };
 
 inline bool Engine::IsThinking() const
@@ -126,12 +141,23 @@ inline bool Engine::IsBusy() const
 
 inline int Engine::MasterSock() const
 {
-    return masterSock;
+    return rspQueue.PollableObject()->Fd();
 }
 
 inline class Config &Engine::Config()
 {
     return config;
+}
+
+inline void Engine::ProcessOneRsp()
+{
+    rspQueue.RunOne();
+}
+
+inline void Engine::moveToIdleState()
+{
+    state = Thinker::State::Idle;
+    moveNowState = MoveNowState::IdleOrBusy;
 }
 
 #endif // ENGINE_H

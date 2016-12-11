@@ -1,5 +1,5 @@
 //--------------------------------------------------------------------------
-//          Thinker.cpp - chess-oriented message passing interface
+//            Thinker.cpp - Thinker thread (thinks, ponders, etc.)
 //                           -------------------
 //  copyright            : (C) 2007 by Lucian Landry
 //  email                : lucian_b_landry@yahoo.com
@@ -12,15 +12,11 @@
 //--------------------------------------------------------------------------
 
 #include <poll.h>
-#include <sys/socket.h>
-#include <unistd.h>     // close(2)
 
 #include "aSystem.h"    // SystemTotalProcessors()
 #include "comp.h"
 #include "Engine.h"
 #include "Thinker.h"
-
-static const int kMaxBufLen = 160;
 
 Thinker *Thinker::rootThinker = nullptr;
 
@@ -143,13 +139,10 @@ Thinker::SharedContextT::SharedContextT() :
     maxLevel(DepthNoLimit), maxNodes(0), randomMoves(false), canResign(true),
     maxThreads(SystemTotalProcessors()), gameCount(0) {}
 
-Thinker::Thinker(int sock) :
-    cmdQueue(std::unique_ptr<Pollable>(new Pollable)), state(State::Idle),
-    epoch(0), moveNow(false)
+Thinker::Thinker(EventQueue &rspQueue, const RspHandlerT &handler) :
+    cmdQueue(std::unique_ptr<Pollable>(new Pollable)), rspQueue(rspQueue),
+    rspHandler(handler), state(State::Idle), epoch(0), moveNow(false)
 {
-    slaveSock = sock;
-    // 'context' initializes itself.
-
     // Assume the first Thinker created is the rootThinker.
     if (rootThinker == nullptr)
     {
@@ -178,115 +171,37 @@ Thinker::~Thinker()
     // -- implement an internal CmdExit() or something and use it here
     // thread->join()
     assert(0);
-    close(slaveSock);
     delete thread;
-}
-
-static void sendBuf(int sock, const void *buf, int len)
-{
-    int sent;
-    while (len > 0)
-    {
-        while ((sent = send(sock, buf, len, 0)) < 0 && errno == EINTR)
-            ;
-        assert(sent > 0);
-        len -= sent;
-        buf = (char *) buf + sent;
-    }
-}
-
-static void recvBuf(int sock, void *buf, int len)
-{
-    int recvd;
-    while (len > 0)
-    {
-        while ((recvd = recv(sock, buf, len, 0)) < 0 && errno == EINTR)
-            ;
-        assert(recvd > 0);
-        len -= recvd;
-        buf = (char *) buf + recvd;
-    }
-}
-
-void Thinker::sendMessage(int sock, Thinker::Message msg, const void *args,
-                          int argsLen)
-{
-    uint8 msgLen = sizeof(msg) + argsLen;
-    assert(msgLen >= sizeof(msg) &&
-           msgLen <= sizeof(msg) + kMaxBufLen);
-
-    // issue msgLen, Message, and args.
-    sendBuf(sock, &msgLen, 1);
-    sendBuf(sock, &msg, sizeof(msg));
-    if (argsLen)
-        sendBuf(sock, args, argsLen);
-}
-
-Thinker::Message Thinker::recvMessage(int sock, void *args, int argsLen)
-{
-    uint8 msgLen;
-    Message msg;
-    char tmpBuf[kMaxBufLen];
-
-    // Wait for the msgLen, response, and buffer (if any).
-    recvBuf(sock, &msgLen, 1);
-    assert(msgLen >= sizeof(msg) &&
-           msgLen <= sizeof(msg) + kMaxBufLen);
-    recvBuf(sock, &msg, sizeof(msg));
-    msgLen -= sizeof(msg);
-    if (msgLen) // any args to recv?
-    {
-        // Yup.
-        if (msgLen <= argsLen) // Can we get the full message?
-        {
-            // Yes, just recv directly into the buffer.
-            recvBuf(sock, args, msgLen);
-        }
-        else
-        {
-            // No -- get as much as we can.
-            recvBuf(sock, tmpBuf, msgLen);
-            if (args)
-                memcpy(args, tmpBuf, argsLen);
-        }
-    }
-
-    return msg;
-}
-
-void Thinker::sendRsp(Thinker::Message rsp, const void *args, int argsLen) const
-{
-    sendMessage(slaveSock, rsp, args, argsLen);
 }
 
 void Thinker::RspDraw(MoveT move)
 {
-    sendRsp(Message::RspDraw, &move, sizeof(MoveT));
+    rspQueue.Post(std::bind(rspHandler.Draw, move));
     moveToIdleState();
 }
 
 void Thinker::RspMove(MoveT move)
 {
-    sendRsp(Message::RspMove, &move, sizeof(MoveT));
+    rspQueue.Post(std::bind(rspHandler.Move, move));
     moveToIdleState();
 }
 
 void Thinker::RspResign()
 {
-    sendRsp(Message::RspResign, nullptr, 0);
+    rspQueue.Post(rspHandler.Resign);
     moveToIdleState();
 }
 
 void Thinker::RspSearchDone(MoveT move, Eval eval, const SearchPv &pv)
 {
     EngineSearchDoneArgsT args = {move, eval, pv};
-    sendRsp(Message::RspSearchDone, &args, sizeof(args));
+    rspQueue.Post(std::bind(rspHandler.SearchDone, args));
     moveToIdleState();
 }
 
 void Thinker::RspNotifyStats(const EngineStatsT &stats) const
 {
-    sendRsp(Message::RspStats, &stats, sizeof(stats));
+    rspQueue.Post(std::bind(rspHandler.NotifyStats, stats));
 }
 
 void Thinker::RspNotifyPv(const EngineStatsT &stats, const DisplayPv &pv) const
@@ -298,10 +213,8 @@ void Thinker::RspNotifyPv(const EngineStatsT &stats, const DisplayPv &pv) const
                  "probably zobrist collision\n",
                  __func__, sharedContext->gameCount);
     }
-    sendRsp(Message::RspPv, &args,
-            // We (lazily) copy the full struct.  We could have dug into
-            //  the pv and only sent the number of valid moves.
-            sizeof(EnginePvArgsT));
+
+    rspQueue.Post(std::bind(rspHandler.NotifyPv, args));
 }
 
 void Thinker::moveToIdleState()
@@ -313,13 +226,6 @@ void Thinker::moveToIdleState()
     state = State::Idle;
     moveNow = false;
     epoch++;
-}
-
-bool Thinker::IsFinalResponse(Message msg)
-{
-    return
-        msg == Message::RspDraw || msg == Message::RspMove ||
-        msg == Message::RspResign || msg == Message::RspSearchDone;
 }
 
 void Thinker::onMoveTimerExpired(int epoch)
