@@ -13,11 +13,15 @@ Support heterogenous time control sessions (example 40 minutes/40 moves followed
 Introduce UCI/CECP backends, which would enable Polyglot-like functionality.
 Try internal iterative deepening for move ordering and possible razoring.
 Implement some kind of easy-move scheme.
-Conversely, try allow more search time if first move's eval goes down.  Finish the level, or at least try to find a move that doesn't go down.  Especially if first move evals under the loss threshold.
+Conversely, try allow more search time if first move's eval goes down.  Finish
+    the level, or at least try to find a move that doesn't go down.  Especially
+    if first move evals under the loss threshold.
 More efficient smp search: keep all threads busy through end of minimax compute
     (including last move); propagate alpha increases to other threads?
 Get cross-platform support going.
-Support for other chess (or even non-chess) variants.  fischer-random, crazyhouse and Die come to mind.  Also consider the FICS wild variants + Xboard variants.
+Support for other chess (or even non-chess) variants.  fischer-random,
+    crazyhouse and Die come to mind.  Also consider the FICS wild variants +
+    Xboard variants.
 Adaptive back-propagating opening book?
 multiple-computer/clustering search.
     We will probably need to use a custom protocol for this.  The closest
@@ -26,7 +30,9 @@ multiple-computer/clustering search.
 Find a way to advance the pawn in the endgame w/out it getting crowded out by
     other moves?  Do I give pawn rank a bonus?  Or make it a preferred move?
 uiXboard: implement analyze mode.
-Go directly from pondering to thinking on a ponderhit, just like any good UCI engine would do.  Not sure this is worth the complexity, assuming one is using a transposition table.
+Go directly from pondering to thinking on a ponderhit, just like any good UCI
+    engine would do.  Not sure this is worth the complexity, assuming one is
+    using a transposition table.
 Fractional ply extension. (+ 1/numMoves)
 Shrink search window (not null necessarily, but do shrink it)
 

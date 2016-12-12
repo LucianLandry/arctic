@@ -24,7 +24,7 @@ class TimerThread
 public:
     TimerThread();
     ~TimerThread();
-    void Reschedule(arctic::Timer &timer, uint64 timeoutMs, bool isAbsolute);
+    void Reschedule(arctic::Timer &timer, int64 timeoutMs, bool isAbsolute);
     void SetHandler(arctic::Timer &timer,
                     const arctic::Timer::HandlerFunc &handler);
     void Start(arctic::Timer &timer);
@@ -61,18 +61,19 @@ static int compareSoonestTime(arctic::Timer *el1, arctic::Timer *el2)
     return el1->CompareNextTimeout(*el2);
 }
 
-void TimerThread::Reschedule(arctic::Timer &timer, uint64 timeoutMs,
+void TimerThread::Reschedule(arctic::Timer &timer, int64 timeoutMs,
                              bool isAbsolute)
 {
+    bigtime_t nowTime = CurrentTime();
     std::unique_lock<decltype(rMutex)> lock(rMutex);
     timer.isAbsolute = isAbsolute;
     timer.timeoutMs = timeoutMs;
-    timer.nextTimeoutAbsMs = timeoutMs;
-    if (!timer.isAbsolute)
-        timer.nextTimeoutAbsMs += CurrentTime() / 1000;
     bool isRunning = timer.isRunning;
     if (isRunning)
     {
+        timer.nextTimeoutAbsMs = timeoutMs;
+        if (!timer.isAbsolute)
+            timer.nextTimeoutAbsMs += nowTime / 1000;
         runningTimers.Remove(&timer);
         runningTimers.InsertBy((arctic::LIST_COMPAREFUNC) compareSoonestTime,
                                &timer);
@@ -91,11 +92,15 @@ void TimerThread::SetHandler(arctic::Timer &timer,
 
 void TimerThread::Start(arctic::Timer &timer)
 {
+    bigtime_t nowTime = CurrentTime();
     std::unique_lock<decltype(rMutex)> lock(rMutex);
     if (timer.isRunning)
         return;
     timer.isRunning = true;
-    timer.startTimeAbsMs = CurrentTime() / 1000;
+    timer.startTimeAbsMs = nowTime / 1000;
+    timer.nextTimeoutAbsMs = timer.timeoutMs;
+    if (!timer.isAbsolute)
+        timer.nextTimeoutAbsMs += timer.startTimeAbsMs;
     runningTimers.InsertBy((arctic::LIST_COMPAREFUNC) compareSoonestTime,
                            &timer);
     lock.unlock();
@@ -131,8 +136,7 @@ void TimerThread::threadFunc()
         {
             // Run any expired handlers.
             arctic::Timer *timer = (arctic::Timer *) runningTimers.Head();
-            uint64 absTimeoutMs = timer->nextTimeoutAbsMs;
-            int timeoutMs = absTimeoutMs - CurrentTime() / 1000;
+            int64 timeoutMs = timer->nextTimeoutAbsMs - CurrentTime() / 1000;
             if (timeoutMs <= 0)
             {
                 runningTimers.Pop();
@@ -163,13 +167,13 @@ Timer::~Timer()
     Stop(); // Take ourselves off the running timers list.
 }
 
-Timer &Timer::SetAbsoluteTimeout(uint64 timeoutMs)
+Timer &Timer::SetAbsoluteTimeout(int64 timeoutMs)
 {
     gTimerThread->Reschedule(*this, timeoutMs, true);
     return *this;
 }
 
-Timer &Timer::SetRelativeTimeout(uint64 timeoutMs)
+Timer &Timer::SetRelativeTimeout(int64 timeoutMs)
 {
     gTimerThread->Reschedule(*this, timeoutMs, false);
     return *this;

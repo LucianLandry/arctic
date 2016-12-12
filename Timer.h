@@ -21,7 +21,7 @@
 
 #include <functional> // std::function
 #include "aList.h"
-#include "aTypes.h"   // uint64
+#include "aTypes.h"   // int64
 
 class TimerThread; // forward declaration
 
@@ -38,10 +38,10 @@ public:
     ~Timer();
 
     // Manipulators:
-    Timer &SetAbsoluteTimeout(uint64 timeoutMs); // in UTC
+    Timer &SetAbsoluteTimeout(int64 timeoutMs); // in UTC
     // Schedules an expiration 'timeoutMs' from "now" (the timeout only fires
     //  if the timer is running)
-    Timer &SetRelativeTimeout(uint64 timeoutMs);
+    Timer &SetRelativeTimeout(int64 timeoutMs);
     Timer &SetHandler(const HandlerFunc &func);
     
     void Start(); // Starts the timer.  When the timer expires, the pollable
@@ -63,12 +63,14 @@ private:
     ListElement elem; // For timerthread use
     HandlerFunc handler;   // What handler we invoke when we expire
 
-    uint64 startTimeAbsMs;   // absolute time we were started at
-    uint64 nextTimeoutAbsMs; // how the timer thread sorts us
-    uint64 timeoutMs; // timeout passed from Set*Timeout(); may be absolute or
-                      //  relative.
-    int expireCount;  // Returned by Stop()
-    bool isRunning;   // Is the timer running
+    // Only valid when running.  Abs time we were started.
+    int64 startTimeAbsMs;
+    // Only valid when running.  Abs time we should expire.
+    int64 nextTimeoutAbsMs;
+    int64 timeoutMs; // timeout passed from Set*Timeout(); may be absolute or
+                     //  relative.
+    int expireCount;  // Returned by Stop(); number of times this timer expired.
+    bool isRunning;   // Is the timer currently running
     bool isAbsolute;  // Were we set with an absolute timeout or not
 };
 

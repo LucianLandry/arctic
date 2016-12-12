@@ -38,9 +38,6 @@ static SearcherGroupT gSG;
 
 // Returns time (from now, ie relative timeout) that we want to move at.  May
 //  be CLOCK_TIME_INFINITE, in which case we have no timeout.
-// This is a bit bizarre compared to just returning the absolute time we
-//  want to move at, but it helps us with displaying ticks, and time
-//  management should be internal in the future anyway.
 static bigtime_t calcGoalTime(const Board &board, const Clock &myClock)
 {
     // Expected number of moves in a game.  Actually a little lower, as this is
@@ -232,7 +229,7 @@ void Thinker::onMoveTimerExpired(int epoch)
 {
     // In the future, this could be more intelligent.
     if (this->epoch == epoch)
-        OnCmdMoveNow();
+        PostCmd(std::bind(&Thinker::OnCmdMoveNow, this));
 }
 
 void Thinker::OnCmdMoveNow()
@@ -249,9 +246,8 @@ void Thinker::OnCmdThink()
     bigtime_t goalTime = calcGoalTime(context.board, context.clock);
     if (goalTime != CLOCK_TIME_INFINITE)
     {
-        moveTimer.SetHandler(std::bind(&Thinker::onMoveTimerExpired, this,
-                                       epoch))
-            .SetRelativeTimeout(goalTime / 1000)
+        moveTimer.SetRelativeTimeout(goalTime / 1000)
+            .SetHandler(std::bind(&Thinker::onMoveTimerExpired, this, epoch))
             .Start();
     }
     state = State::Thinking;
