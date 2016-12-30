@@ -84,7 +84,7 @@ static const MoveStyleT gMoveStyleUCI = {mnCAN, csK2, false};
 #define MAXBUFLEN (1 * 1024 * 1024)
 
 // Forward declarations.
-static void uciNotifyMove(Game *game, MoveT move);
+static void uciNotifyMove(MoveT move);
 
 enum class UciState
 {
@@ -128,6 +128,7 @@ static struct
         MoveT ponderMove;
     } result;
 
+    Game *game;
     Switcher *sw;
 } gUciState;
 
@@ -218,6 +219,7 @@ static void uciInit(Game *game, Switcher *sw)
     gUciState.ponderMove = MoveNone;
     gUciState.result.bestMove = MoveNone;
     gUciState.result.ponderMove = MoveNone;
+    gUciState.game = game;
     gUciState.sw = sw;
     
 #if 1 // bldbg: goes out for debugging
@@ -735,7 +737,7 @@ static void processStopCommand(Game *game)
         //  the bestmove.
         gUciState.state = UciState::Thinking;
         // Could not notify of the move while infinite; so try again now.
-        uciNotifyMove(game, gUciState.result.bestMove);
+        uciNotifyMove(gUciState.result.bestMove);
     }
 }
 
@@ -745,10 +747,11 @@ static void processStopCommand(Game *game)
 // One possibility if we set a bad position or otherwise get into a bad
 // state is to just let the computer play null moves until a good position
 // is set.
-static void uciPlayerMove(Game *game)
+static void uciPlayerMove()
 {
     const char *inputStr;
-
+    Game *game = gUciState.game; // shorthand
+    
     // Skip past any unrecognized stuff.
     inputStr =
         findRecognizedToken(
@@ -813,7 +816,7 @@ static void uciPlayerMove(Game *game)
     gUciState.sw->Switch(); // Wait for more input.
 }
 
-static void uciNotifyMove(Game *game, MoveT move)
+static void uciNotifyMove(MoveT move)
 {
     char tmpStr[MOVE_STRING_MAX], tmpStr2[MOVE_STRING_MAX];
 
@@ -839,10 +842,10 @@ static void uciNotifyMove(Game *game, MoveT move)
            bShowPonderMove ? " ponder " : "",
            (bShowPonderMove ?
             ponderMove.ToString(tmpStr2, &gMoveStyleUCI, NULL) : ""));
-    moveToIdleState(game);
+    moveToIdleState(gUciState.game);
 }
 
-static void uciNotifyDraw(Game *game, const char *reason, MoveT *move)
+static void uciNotifyDraw(const char *reason, MoveT *move)
 {
     // UCI seems to rely on a GUI arbiter to claim draws, simply because there
     // is no designated way for the engine to do it.  Nevertheless, when we
@@ -852,16 +855,16 @@ static void uciNotifyDraw(Game *game, const char *reason, MoveT *move)
     // in order to justify complicating the engine code to say "I cannot claim
     // a draw but my opponent can, what is my best move".
     printf("info string engine claims a draw (reason: %s)\n", reason);
-    uciNotifyMove(game, move != NULL ? *move : MoveNone);
+    uciNotifyMove(move != NULL ? *move : MoveNone);
 }
 
-static void uciNotifyResign(Game *game, int turn)
+static void uciNotifyResign(int turn)
 {
     // The info string is just for the benefit of a human trying to understand
     //  our output.  Since our resignation threshold is so low, we normally do
     //  not "resign" unless we are actually mated.
     printf("info string engine (turn %d) resigns\n", turn);
-    uciNotifyMove(game, MoveNone);
+    uciNotifyMove(MoveNone);
 }
 
 // Assumes "result" is long enough to hold the actual result (say 80 chars to
@@ -887,11 +890,12 @@ static char *buildStatsString(char *result, Game *game,
     return result;
 }
 
-static void uciNotifyPV(Game *game, const EnginePvArgsT *pvArgs)
+static void uciNotifyPV(const EnginePvArgsT *pvArgs)
 {
     bool bDisplayPv = true, bDisplayEval = true;
-    DisplayPv pv = pvArgs->pv; // copy for modification
-    Board board = game->Board(); // copy for modification
+    Game *game = gUciState.game; // shorthand
+    Board board = game->Board();  // copy for modification
+    DisplayPv pv = pvArgs->pv;    // copy for modification
     
     if (gUciState.state == UciState::PonderAll)
     {
@@ -956,20 +960,18 @@ static void uciNotifyPV(Game *game, const EnginePvArgsT *pvArgs)
 }
 
 
-static void uciNotifyComputerStats(Game *game, const EngineStatsT *stats)
+static void uciNotifyComputerStats(const EngineStatsT *stats)
 {
     char statsString[80];
 
-    printf("info %s\n", buildStatsString(statsString, game, stats));
+    printf("info %s\n", buildStatsString(statsString, gUciState.game, stats));
 }
 
 static void uciPositionRefresh(const Position &position) { }
-static void uciNoop(void) { }
-static void uciStatusDraw(Game *game) { }
-static void uciNotifyTick(Game *game) { }
+static void uciNoop() { }
 static void uciNotifyCheckmated(int turn) { }
 
-UIFuncTableT *uiUciOps(void)
+UIFuncTableT *uiUciOps()
 {
     static UIFuncTableT uciUIFuncTable =
     {
@@ -977,8 +979,8 @@ UIFuncTableT *uiUciOps(void)
         .playerMove = uciPlayerMove,
         .positionRefresh = uciPositionRefresh,
         .exit = uciNoop,
-        .statusDraw = uciStatusDraw,
-        .notifyTick = uciNotifyTick,
+        .statusDraw = uciNoop,
+        .notifyTick = uciNoop,
         .notifyMove = uciNotifyMove,
         .notifyError = uciNotifyError,
         .notifyPV = uciNotifyPV,

@@ -36,7 +36,7 @@ static void juceInit(Game *game, Switcher *sw)
     exit(0);
 }
 
-static void jucePlayerMove(Game *game)
+static void jucePlayerMove()
 {
 }
 
@@ -44,19 +44,19 @@ static void jucePositionRefresh(const Position &position)
 {
 }
 
-static void juceExit(void)
+static void juceExit()
 {
 }
 
-static void juceStatusDraw(Game *game)
+static void juceStatusDraw()
 {
 }
 
-static void juceNotifyTick(Game *game)
+static void juceNotifyTick()
 {
 }
 
-static void juceNotifyMove(Game *game, MoveT move)
+static void juceNotifyMove(MoveT move)
 {
 }
 
@@ -64,27 +64,27 @@ static void juceNotifyError(char *reason)
 {
 }
 
-static void juceNotifyPV(Game *game, const EnginePvArgsT *pvArgs)
+static void juceNotifyPV(const EnginePvArgsT *pvArgs)
 {
 }
 
-static void juceNotifyThinking(void)
+static void juceNotifyThinking()
 {
 }
 
-static void juceNotifyPonder(void)
+static void juceNotifyPonder()
 {
 }
 
-static void juceNotifyReady(void)
+static void juceNotifyReady()
 {
 }
 
-static void juceNotifyComputerStats(Game *game, const EngineStatsT *stats)
+static void juceNotifyComputerStats(const EngineStatsT *stats)
 {
 }
 
-static void juceNotifyDraw(Game *game, const char *reason, MoveT *move)
+static void juceNotifyDraw(const char *reason, MoveT *move)
 {
 }
 
@@ -92,11 +92,11 @@ static void juceNotifyCheckmated(int turn)
 {
 }
 
-static void juceNotifyResign(Game *game, int turn)
+static void juceNotifyResign(int turn)
 {
 }
 
-UIFuncTableT *uiJuceOps(void)
+UIFuncTableT *uiJuceOps()
 {
     // Designated initializers are C99 and do not work in C++, so here we
     // initialize manually.

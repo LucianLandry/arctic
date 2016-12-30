@@ -74,7 +74,7 @@ void PlayloopRun(Game &game, Engine &eng, Switcher &sw)
         if (res == 0)
         {
             // poll timed out.
-            gUI->notifyTick(&game); // Tick, tock...
+            gUI->notifyTick(); // Tick, tock...
             continue;
         }
 

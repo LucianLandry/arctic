@@ -57,7 +57,7 @@ void Game::refresh()
         // time, we would never update the status correctly).
         // statusDraw() should be quick enough that it is still fair.
         clocks[turn].Start();
-        gUI->statusDraw(this);
+        gUI->statusDraw();
 
         MoveList mvlist;
         board.GenerateLegalMoves(mvlist, false);
@@ -65,14 +65,14 @@ void Game::refresh()
         if (board.IsDrawInsufficientMaterial())
         {
             stopClocks();
-            gUI->notifyDraw(this, "insufficient material", NULL);
+            gUI->notifyDraw("insufficient material", NULL);
             done = true;
         }
         else if (!mvlist.NumMoves())
         {
             stopClocks();
             if (!board.IsInCheck())
-                gUI->notifyDraw(this, "stalemate", NULL);
+                gUI->notifyDraw("stalemate", NULL);
             else
                 gUI->notifyCheckmated(turn);
             done = true;
@@ -448,7 +448,7 @@ void Game::onEngineRspDraw(Engine &eng, MoveT move)
         // Decided (or forced) to draw while pondering.  Ignore and let the
         // player make their move.
         if (!autoPlayEngineMoves)
-            gUI->notifyMove(this, move); // (hacky) UCI wants a bestmove.
+            gUI->notifyMove(move); // (hacky) UCI wants a bestmove.
         gUI->notifyReady();
         return;
     }
@@ -469,9 +469,9 @@ void Game::onEngineRspDraw(Engine &eng, MoveT move)
     gUI->notifyReady();
 
     if (board.IsDrawFiftyMove())
-        gUI->notifyDraw(this, "fifty-move rule", &move);
+        gUI->notifyDraw("fifty-move rule", &move);
     else if (board.IsDrawThreefoldRepetition())
-        gUI->notifyDraw(this, "threefold repetition", &move);
+        gUI->notifyDraw("threefold repetition", &move);
     else
         assert(0);
     if (wasRunning)
@@ -486,12 +486,12 @@ void Game::onEngineRspMove(Engine &eng, MoveT move)
         // Decided (or forced) to move while pondering.  Ignore and let the
         // player make their move.
         if (!autoPlayEngineMoves)
-            gUI->notifyMove(this, move); // (hacky) UCI wants a bestmove.
+            gUI->notifyMove(move); // (hacky) UCI wants a bestmove.
         gUI->notifyReady();
         return;
     }
 
-    gUI->notifyMove(this, move);
+    gUI->notifyMove(move);
     if (autoPlayEngineMoves)
         MakeMove(move);
     LogFlush();
@@ -511,19 +511,19 @@ void Game::onEngineRspResign(Engine &eng)
     gUI->notifyReady();
     LOG_DEBUG("%d resigns\n", turn);
     LogFlush();
-    gUI->notifyResign(this, turn);
+    gUI->notifyResign(turn);
 }
 
 void Game::onEngineRspNotifyStats(Engine &eng, const EngineStatsT &stats)
 {
     sanityCheckBadRsp(__func__);
-    gUI->notifyComputerStats(this, &stats);
+    gUI->notifyComputerStats(&stats);
 }
 
 void Game::onEngineRspNotifyPv(Engine &eng, const EnginePvArgsT &pvArgs)
 {
     sanityCheckBadRsp(__func__);
-    gUI->notifyPV(this, &pvArgs);
+    gUI->notifyPV(&pvArgs);
 }
 
 void Game::setEngineRspHandler(Engine &eng)

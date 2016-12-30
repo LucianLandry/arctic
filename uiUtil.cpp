@@ -474,7 +474,7 @@ static void uiThread(Game *game, Switcher *sw, Semaphore *readySem)
     readySem->post();
     sw->Register();
     while (true)
-        gUI->playerMove(game);
+        gUI->playerMove();
 }
 
 void uiThreadInit(Game *game, Switcher *sw, Semaphore *readySem)

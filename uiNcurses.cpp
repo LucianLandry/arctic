@@ -50,6 +50,7 @@ static struct {
     int col[2];    // player colors.
     int flipped;   // bool, is the board inverted (black on the bottom)
     int cursCoord; // coordinate cursor is at.
+    Game *game;
     Switcher *sw;
 } gBoardIf;
 
@@ -89,7 +90,7 @@ static void UIPrintPositionStatus(const Position &position)
         cprintf("%c%c ", AsciiFile(ncheck), AsciiRank(ncheck));
 }
 
-static void UINotifyTick(Game *game)
+static void UINotifyTick()
 {
     char timeStr[CLOCK_TIME_STR_LEN];
     int i;
@@ -101,7 +102,7 @@ static void UINotifyTick(Game *game)
     gotoxy(OPTIONS_X, 18);
     for (i = 0; i < NUM_PLAYERS; i++)
     {
-        const Clock &myClock = game->Clock(i);
+        const Clock &myClock = gBoardIf.game->Clock(i);
         myTime = myClock.Time();
 
         // The clock goes red even when the time supposedly reaches 0, probably
@@ -127,14 +128,15 @@ static void UINotifyTick(Game *game)
     }
 }
 
-static void UIStatusDraw(Game *game)
+static void UIStatusDraw()
 {
     bigtime_t timeTaken;
+    Game *game = gBoardIf.game;        // shorthand
     const Board &board = game->Board(); // shorthand.
     int turn = board.Turn();
 
     UIPrintPositionStatus(board.Position());
-    UINotifyTick(game);
+    UINotifyTick();
 
     gotoxy(OPTIONS_X, 20);
     timeTaken = game->Clock(turn ^ 1).TimeTaken();
@@ -149,7 +151,7 @@ static void UIStatusDraw(Game *game)
 }
 
 // prints out expected move sequence at the bottom of the screen.
-static void UINotifyPV(Game *game, const EnginePvArgsT *pvArgs)
+static void UINotifyPV(const EnginePvArgsT *pvArgs)
 {
     char spaces[80];
     char mySanString[79 - 18];
@@ -160,7 +162,7 @@ static void UINotifyPV(Game *game, const EnginePvArgsT *pvArgs)
 
     // Get a suitable string of moves to print.
     if (pv.BuildMoveString(mySanString, sizeof(mySanString), pvStyle,
-                           game->Board()) < 1)
+                           gBoardIf.game->Board()) < 1)
     {
         return;
     }
@@ -334,7 +336,7 @@ static void UIOptionsDraw(Game *game)
 #endif
 }
 
-static void UIEditOptionsDraw(void)
+static void UIEditOptionsDraw()
 {
     UIWindowClear(OPTIONS_X, 1, SCREEN_WIDTH - OPTIONS_X, 12);
     gotoxy(OPTIONS_X, 1);
@@ -441,7 +443,7 @@ static void UIPositionRefresh(const Position &position)
     textbackground(BLACK);
 }
 
-static void UITicksDraw(void)
+static void UITicksDraw()
 {
     int x;
     textcolor(TICKCOL);
@@ -462,7 +464,7 @@ static void UITicksDraw(void)
             "  a    b    c    d    e    f    g    h                 ");
 }
 
-static void UIExit(void)
+static void UIExit()
 {
     doneconio();
 }
@@ -780,7 +782,7 @@ static void UITimeMenu(Game *game)
                 break;
             case 'a':
                 game->ResetClocks();
-                UIStatusDraw(game);
+                UIStatusDraw();
                 break;
             case 'c':
                 if (++applyToggle > APPLY_BOTH)
@@ -860,7 +862,7 @@ static void UIGetCommand(uint8 command[], Game *game)
     } // end while
 }
 
-static void UIBoardDraw(void)
+static void UIBoardDraw()
 {
     int i, j;
 
@@ -895,7 +897,7 @@ static void UIBoardFlip(const Board &board)
     UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
 }
 
-static void UIPlayerColorChange(void)
+static void UIPlayerColorChange()
 {
     const char *colors[NUM_PLAYERS] = {"White", "Black"};
     int i;
@@ -915,7 +917,7 @@ static void UIPlayerColorChange(void)
     }
 }
 
-static void UISetDebugLoggingLevel(void)
+static void UISetDebugLoggingLevel()
 {
     int i;
     while ((i = modal("Set debug level to (0-2) (higher -> more verbose)? >") - '0') < 0 ||
@@ -924,14 +926,14 @@ static void UISetDebugLoggingLevel(void)
     LogSetLevel(LogLevelT(i));
 }
 
-static void UINotifyThinking(void)
+static void UINotifyThinking()
 {
     gotoxy(OPTIONS_X, 24);
     textcolor(RED);
     cprintf("Thinking         ");
 }
 
-static void UINotifyPonder(void)
+static void UINotifyPonder()
 {
     gotoxy(OPTIONS_X, 24);
     textcolor(LIGHTGREEN);
@@ -939,7 +941,7 @@ static void UINotifyPonder(void)
     UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
 }
 
-static void UINotifyReady(void)
+static void UINotifyReady()
 {
     gotoxy(OPTIONS_X, 24);
     textcolor(LIGHTGREEN);
@@ -947,7 +949,7 @@ static void UINotifyReady(void)
     UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
 }
 
-static void UINotifyComputerStats(Game *game, const EngineStatsT *stats)
+static void UINotifyComputerStats(const EngineStatsT *stats)
 {
     gotoxy(1, 1);
     textcolor(SYSTEMCOL);
@@ -956,7 +958,7 @@ static void UINotifyComputerStats(Game *game, const EngineStatsT *stats)
             stats->hashHitGood);
 }
 
-static void UINotifyDraw(Game *game, const char *reason, MoveT *move)
+static void UINotifyDraw(const char *reason, MoveT *move)
 {
     modal("Game is drawn (%s).", reason);
 }
@@ -966,7 +968,7 @@ static void UINotifyCheckmated(int turn)
     modal("%s is checkmated.", turn ? "Black" : "White");
 }
 
-static void UINotifyResign(Game *game, int turn)
+static void UINotifyResign(int turn)
 {
     modal("%s resigns.", turn ? "Black" : "White");
 }
@@ -997,6 +999,7 @@ static void UIInit(Game *game, Switcher *sw)
     gBoardIf.col[1] = LIGHTGRAY;
     gBoardIf.flipped = 0;
     gBoardIf.cursCoord = 0;
+    gBoardIf.game = game;
     gBoardIf.sw = sw;
     
     UIBoardDraw();
@@ -1007,7 +1010,7 @@ static void UIInit(Game *game, Switcher *sw)
 }
 
 // This function intended to get player input and adjust variables accordingly.
-static void UIPlayerMove(Game *game)
+static void UIPlayerMove()
 {
     const MoveT *foundMove;
     uint8 chr;
@@ -1016,7 +1019,7 @@ static void UIPlayerMove(Game *game)
     MoveT myMove = MoveNone;
     int myLevel;
     char myStr[3];
-
+    Game *game = gBoardIf.game; // shorthand
     const Board &board = game->Board(); // shorthand
 
     UIGetCommand(comstr, game);
@@ -1143,7 +1146,7 @@ static void UIPlayerMove(Game *game)
         UITicksDraw();
         UIOptionsDraw(game);
         UIPositionRefresh(board.Position());
-        UIStatusDraw(game);
+        UIStatusDraw();
         UICursorDraw(gBoardIf.cursCoord, CURSOR_BLINK);
         return;
     }
@@ -1181,7 +1184,7 @@ static void UIPlayerMove(Game *game)
     game->MakeMove(myMove);
 }
 
-static void UINotifyMove(Game *game, MoveT move) { }
+static void UINotifyMove(MoveT move) { }
 
 static UIFuncTableT myUIFuncTable =
 {
@@ -1203,7 +1206,7 @@ static UIFuncTableT myUIFuncTable =
     .notifyResign = UINotifyResign,
 };
 
-UIFuncTableT *uiNcursesOps(void)
+UIFuncTableT *uiNcursesOps()
 {
     return &myUIFuncTable;
 }

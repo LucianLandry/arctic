@@ -22,38 +22,38 @@
 
 typedef struct {
     void (*init)(Game *game, Switcher *sw);
-    void (*playerMove)(Game *game);
+    void (*playerMove)();
     void (*positionRefresh)(const Position &position);
-    void (*exit)(void);
-    void (*statusDraw)(Game *game);
-    void (*notifyTick)(Game *game);
-    void (*notifyMove)(Game *game, MoveT move);
+    void (*exit)();
+    void (*statusDraw)();
+    void (*notifyTick)();
+    void (*notifyMove)(MoveT move);
     void (*notifyError)(char *reason);
-    void (*notifyPV)(Game *game, const EnginePvArgsT *pvArgs);
-    void (*notifyThinking)(void);
-    void (*notifyPonder)(void);
-    void (*notifyReady)(void);
-    void (*notifyComputerStats)(Game *game, const EngineStatsT *stats);
-    void (*notifyDraw)(Game *game, const char *reason, MoveT *move);
+    void (*notifyPV)(const EnginePvArgsT *pvArgs);
+    void (*notifyThinking)();
+    void (*notifyPonder)();
+    void (*notifyReady)();
+    void (*notifyComputerStats)(const EngineStatsT *stats);
+    void (*notifyDraw)(const char *reason, MoveT *move);
     void (*notifyCheckmated)(int turn);
-    void (*notifyResign)(Game *game, int turn);
+    void (*notifyResign)(int turn);
 } UIFuncTableT;
 extern UIFuncTableT *gUI;
 
 // uiNcurses.cpp
-UIFuncTableT *uiNcursesOps(void);
+UIFuncTableT *uiNcursesOps();
 
 // uiXboard.cpp
-UIFuncTableT *uiXboardOps(void);
+UIFuncTableT *uiXboardOps();
 void processXboardCommand(Game *game, Switcher *sw);
 
 // uiUci.cpp
-UIFuncTableT *uiUciOps(void);
+UIFuncTableT *uiUciOps();
 void processUciCommand(Game *game, Switcher *sw);
 
 #ifdef ENABLE_UI_JUCE
 // uiJuce.cpp
-UIFuncTableT *uiJuceOps(void);
+UIFuncTableT *uiJuceOps();
 #endif
 
 #endif // UI_H

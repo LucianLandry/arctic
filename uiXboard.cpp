@@ -44,6 +44,7 @@ static struct {
     bool badPosition; // can be triggered by editing a bad position
     bool newgame;     // turned on every "new", turned off every "go"
     bool ponder;
+    Game *game;
     Switcher *sw;
     int engineLastPlayed; // player engine last played for (0 -> white,
                           //  1 -> black).  The engine might not be currently
@@ -135,6 +136,7 @@ static void xboardInit(Game *game, Switcher *sw)
     // input if we want to poll() correctly.)
     setbuf(stdout, NULL);
     setbuf(stdin, NULL);
+    gXboardState.game = game;
     gXboardState.sw = sw;
     gXboardState.hintMove = MoveNone;
     // UCI may have clobbered autoplay, so reset
@@ -424,14 +426,13 @@ void processCoresCommand(Game *game, const char *inputStr)
 
 // This runs as a coroutine with the main thread, and can switch off to it
 // at any time.  If it simply exits, it will immediately be called again.
-static void xboardPlayerMove(Game *game)
+static void xboardPlayerMove()
 {
     char *inputStr;
     int turn;
     Board tmpBoard;
     MoveT myMove;
-
-    // Other various commands' vars.
+    Game *game = gXboardState.game;     // shorthand
     const Board &board = game->Board(); // shorthand
     
     inputStr = getStdinLine(MAXBUFLEN, gXboardState.sw);
@@ -693,7 +694,7 @@ static void xboardPlayerMove(Game *game)
     gXboardState.sw->Switch(); // Wait for more input.
 }
 
-static void xboardNotifyMove(Game *game, MoveT move)
+static void xboardNotifyMove(MoveT move)
 {
     char tmpStr[MOVE_STRING_MAX];
     // This should switch on the fly to csOO if we ever implement chess960.
@@ -702,7 +703,7 @@ static void xboardNotifyMove(Game *game, MoveT move)
     printf("move %s\n", move.ToString(tmpStr, &ms, NULL));
 }
 
-static void xboardNotifyDraw(Game *game, const char *reason, MoveT *move)
+static void xboardNotifyDraw(const char *reason, MoveT *move)
 {
     // I do not know of a way to claim a draw w/move atomically with Xboard
     //  (for instance, we know this next move will get us draw by repetition
@@ -710,12 +711,12 @@ static void xboardNotifyDraw(Game *game, const char *reason, MoveT *move)
     //  can make a move before we can claim the draw.  This only matters
     //  when playing on a chess server.  FIXME.
     if (move != NULL && *move != MoveNone)
-        xboardNotifyMove(game, *move);
+        xboardNotifyMove(*move);
     printf("1/2-1/2 {%s}\n", reason);
     gXboardState.hintMove = MoveNone;
 }
 
-static void xboardNotifyResign(Game *game, int turn)
+static void xboardNotifyResign(int turn)
 {
     printf("%d-%d {%s resigns}\n",
            turn, turn ^ 1, turn ? "Black" : "White");
@@ -729,10 +730,11 @@ static void xboardNotifyCheckmated(int turn)
     gXboardState.hintMove = MoveNone;
 }
 
-static void xboardNotifyPV(Game *game, const EnginePvArgsT *pvArgs)
+static void xboardNotifyPV(const EnginePvArgsT *pvArgs)
 {
     char mySanString[kMaxPvStringLen];
-    const DisplayPv &pv = pvArgs->pv; // shorthand
+    const DisplayPv &pv = pvArgs->pv;   // shorthand
+    Game *game = gXboardState.game;     // shorthand
     const Board &board = game->Board(); // shorthand
     MoveStyleT pvStyle = {mnSAN, csOO, true};
 
@@ -751,14 +753,11 @@ static void xboardNotifyPV(Game *game, const EnginePvArgsT *pvArgs)
            pvArgs->stats.nodes, mySanString);
 }
 
-static void xboardNotifyComputerStats(Game *game,
-                                      const EngineStatsT *stats) { }
+static void xboardNotifyComputerStats(const EngineStatsT *stats) { }
 static void xboardPositionRefresh(const Position &position) { }
-static void xboardNoop(void) { }
-static void xboardStatusDraw(Game *game) { }
-static void xboardNotifyTick(Game *game) { }
+static void xboardNoop() { }
 
-UIFuncTableT *uiXboardOps(void)
+UIFuncTableT *uiXboardOps()
 {
     static UIFuncTableT xboardUIFuncTable =
     {
@@ -766,8 +765,8 @@ UIFuncTableT *uiXboardOps(void)
         .playerMove = xboardPlayerMove,
         .positionRefresh = xboardPositionRefresh,
         .exit = xboardNoop,
-        .statusDraw = xboardStatusDraw,
-        .notifyTick = xboardNotifyTick,
+        .statusDraw = xboardNoop,
+        .notifyTick = xboardNoop,
         .notifyMove = xboardNotifyMove,
         .notifyError = xboardNotifyError,
         .notifyPV = xboardNotifyPV,
