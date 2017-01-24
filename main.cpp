@@ -44,6 +44,9 @@ static void usage(char *programName)
 #ifdef ENABLE_UI_JUCE
            "juce,"
 #endif
+#ifdef ENABLE_UI_QT
+           "qt,"
+#endif
            "uci,xboard>]\n"
            "\t'hashtablesize' examples: 200000, 100k, 0M, 1G\n"
            // as picked by TransTable::DefaultSize()
@@ -114,6 +117,9 @@ static bool isValidUI(char *str)
 #ifdef ENABLE_UI_JUCE
         !strcmp(str, "juce") ||
 #endif
+#ifdef ENABLE_UI_QT
+        !strcmp(str, "qt") ||
+#endif
         !strcmp(str, "console") || !strcmp(str, "uci") ||
         !strcmp(str, "xboard");
 }
@@ -181,6 +187,9 @@ int main(int argc, char *argv[])
     gUI =
 #ifdef ENABLE_UI_JUCE
         !strcmp(uiString, "juce") ? uiJuceOps() :
+#endif
+#ifdef ENABLE_UI_QT
+        !strcmp(uiString, "qt") ? uiQtOps() :
 #endif
         !strcmp(uiString, "console") ? uiNcursesOps() :
         !strcmp(uiString, "xboard") ? uiXboardOps() :

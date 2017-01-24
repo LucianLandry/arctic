@@ -62,6 +62,7 @@ cd <builddir>
 cmake -DCMAKE_C_COMPILER=`which gcc` -DCMAKE_CXX_COMPILER=`which g++` ../src
 cmake -DCMAKE_C_COMPILER=`which clang` -DCMAKE_CXX_COMPILER=`which clang++` ../src
 cmake -DENABLE_STRICT_COMPILE="ON" -DENABLE_UI_JUCE="ON" -DJUCE_PATH=~/juce -DCMAKE_C_COMPILER=`which clang` -DCMAKE_CXX_COMPILER=`which clang++` ../src
+cmake -DENABLE_STRICT_COMPILE="ON" -DENABLE_UI_QT="ON" -DCMAKE_C_COMPILER=`which clang` -DCMAKE_CXX_COMPILER=`which clang++` ../src
 
 make
 

@@ -56,4 +56,9 @@ void processUciCommand(Game *game, Switcher *sw);
 UIFuncTableT *uiJuceOps();
 #endif
 
+#ifdef ENABLE_UI_QT
+// uiQt.cpp
+UIFuncTableT *uiQtOps();
+#endif
+
 #endif // UI_H
