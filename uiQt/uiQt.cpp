@@ -11,8 +11,11 @@
 // obtain one at https://mozilla.org/MPL/2.0/.
 //--------------------------------------------------------------------------
 
+#include <QAction>
 #include <QApplication>
-#include <QPushButton>
+#include <QMainWindow>
+#include <QMenuBar>
+#include <QSvgWidget>
 #include <stdio.h>
 #include "ui.h"
 
@@ -25,13 +28,32 @@ static void qtInit(Game *game, Switcher *sw)
     
     QApplication app(fakeArgc, fakeArgv);
 
-    QPushButton hello("Hello, world!", 0);
-    hello.resize(100, 30);
-    hello.show();
+    // Setup the main window:
+    QMainWindow window;
+    window.setCentralWidget(new QSvgWidget("../src/resources/Chess_ndt45.svg", nullptr));
+    QMenuBar *menuBar = new QMenuBar;
+    QMenu *fileMenu = new QMenu("&File");
 
+    // Must do it like this to make fileMenu take ownership
+    QAction *quitAction = fileMenu->addAction("Quit");
+    // Hard-code 'quit' if it is not bound, for instance under Cinnamon (and
+    //  hope it is not bound to anything else).
+    if (!QKeySequence::keyBindings(QKeySequence::Quit).isEmpty())
+        quitAction->setShortcuts(QKeySequence::Quit);
+    else
+        quitAction->setShortcut(Qt::CTRL + Qt::Key_Q);
+    quitAction->setStatusTip("Quit the application");
+    quitAction->setShortcutContext(Qt::ApplicationShortcut);
+    QObject::connect(quitAction, &QAction::triggered,
+                     &app, &QApplication::quit);
+
+    menuBar->addMenu(fileMenu);
+    window.setMenuBar(menuBar);
+    window.show();
+    
     app.exec();
     printf("bye.\n");
-    exit(0);
+    exit(0); // This crashes occasionally on main window close w/Qt 5.3.2
 }
 
 static void qtPlayerMove()

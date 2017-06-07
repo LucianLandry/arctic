@@ -37,6 +37,8 @@ if(ENABLE_STRICT_COMPILE STREQUAL "ON")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
 endif(ENABLE_STRICT_COMPILE STREQUAL "ON")
 
+add_executable(arctic aList.cpp aSemaphore.cpp aSystem.cpp Board.cpp BoardMoveGen.cpp Clock.cpp clockUtil.cpp comp.cpp Config.cpp conio.c Engine.cpp Eval.cpp EventQueue.cpp Game.cpp gPreCalc.cpp HistoryWindow.cpp log.cpp main.cpp move.cpp MoveList.cpp Piece.cpp playloop.cpp Pollable.cpp Position.cpp Pv.cpp SaveGame.cpp stringUtil.cpp Switcher.cpp Thinker.cpp Timer.cpp TransTable.cpp uiNcurses.cpp uiUci.cpp uiUtil.cpp uiXboard.cpp Variant.cpp)
+
 # Juce dependencies.
 option(ENABLE_UI_JUCE "Enable a Juce-based GUI (experimental)" OFF)
 if(ENABLE_UI_JUCE STREQUAL "ON")
@@ -48,19 +50,18 @@ if(ENABLE_UI_JUCE STREQUAL "ON")
     option(ENABLE_UI_JUCE_DEBUG "Build juce+uiJuce with debugging enabled" ON)
     add_subdirectory(uiJuce)
     set(JUCE_DEP_LIBS rt dl GL X11 Xext freetype)
-    set(EXTRA_LIBS uiJuce juce ${JUCE_DEP_LIBS})
+    set(EXTRA_LIBS ${EXTRA_LIBS} uiJuce juce ${JUCE_DEP_LIBS})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_UI_JUCE=1")
 endif(ENABLE_UI_JUCE STREQUAL "ON")
 
+# Qt dependencies.
 option(ENABLE_UI_QT "Enable a Qt-based GUI (experimental)" OFF)
 if(ENABLE_UI_QT STREQUAL "ON")
     add_subdirectory(uiQt)    
-    find_package(Qt5Widgets REQUIRED)
-    set(EXTRA_LIBS uiQt Qt5::Widgets)
+    find_package(Qt5 COMPONENTS Widgets Svg REQUIRED)
+    set(EXTRA_LIBS ${EXTRA_LIBS} uiQt Qt5::Widgets Qt5::Svg)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_UI_QT=1")
 endif(ENABLE_UI_QT STREQUAL "ON")
-
-add_executable(arctic aList.cpp aSemaphore.cpp aSystem.cpp Board.cpp BoardMoveGen.cpp Clock.cpp clockUtil.cpp comp.cpp Config.cpp conio.c Engine.cpp Eval.cpp EventQueue.cpp Game.cpp gPreCalc.cpp HistoryWindow.cpp log.cpp main.cpp move.cpp MoveList.cpp Piece.cpp playloop.cpp Pollable.cpp Position.cpp Pv.cpp SaveGame.cpp stringUtil.cpp Switcher.cpp Thinker.cpp Timer.cpp TransTable.cpp uiNcurses.cpp uiUci.cpp uiUtil.cpp uiXboard.cpp Variant.cpp)
 
 # ncursesw (instead of ncurses) is necessary for a UTF-8 console cursor.
 target_link_libraries(arctic ncurses pthread ${EXTRA_LIBS})
