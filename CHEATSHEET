@@ -101,14 +101,15 @@ cd ~
 ln -s juce-git.20160919/JUCE juce
 
 Juce needs (at least) these Debian packages:
-g++                  # g++
-libasound2-dev       # alsa/asoundlib.h
-libgl1-mesa-dev      # libGL.so
-libxcursor-dev       # Xcursor.h
-libxinerama-dev      # Xinerama.h
-libxrandr-dev        # Xrandr.h
-mesa-common-dev      # GL/gl.h
-libcurl4-openssl-dev # curl/curl.h # maybe could use nss-dev or gnutls-dev
+g++                   # g++
+libasound2-dev        # alsa/asoundlib.h
+libgl1-mesa-dev       # libGL.so
+libxcursor-dev        # Xcursor.h
+libxinerama-dev       # Xinerama.h
+libxrandr-dev         # Xrandr.h
+mesa-common-dev       # GL/gl.h
+libcurl4-openssl-dev  # curl/curl.h # maybe could use nss-dev or gnutls-dev
+libwebkit2gtk-4.0-dev # (used for projucer build)
 
 -------------------------------------------------------------------------------
 JUCE GOTCHAS:

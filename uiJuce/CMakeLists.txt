@@ -17,8 +17,8 @@ endif(ENABLE_UI_JUCE_DEBUG STREQUAL "ON")
 # This is the stuff that would normally go into a Projucer-generated
 # AppConfig.h.  Since we now build Juce's source directly, it is easier to just
 # define everything here.  Alternatively, we could "-include AppConfig.h" or
-# something similar.
-set(JUCE_FLAGS "-DJUCE_MODULE_AVAILABLE_juce_core=1 -DJUCE_MODULE_AVAILABLE_juce_data_structures=1 -DJUCE_MODULE_AVAILABLE_juce_events=1 -DJUCE_MODULE_AVAILABLE_juce_graphics=1 -DJUCE_MODULE_AVAILABLE_juce_gui_basics=1 -DJUCE_STANDALONE_APPLICATION=1 -DJUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1")
+# something similar.  We use Juce under the GPLv3 option.
+set(JUCE_FLAGS "-DJUCE_MODULE_AVAILABLE_juce_core=1 -DJUCE_MODULE_AVAILABLE_juce_data_structures=1 -DJUCE_MODULE_AVAILABLE_juce_events=1 -DJUCE_MODULE_AVAILABLE_juce_graphics=1 -DJUCE_MODULE_AVAILABLE_juce_gui_basics=1 -DJUCE_STANDALONE_APPLICATION=1 -DJUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1 -DJUCE_DISPLAY_SPLASH_SCREEN=0 -DJUCE_REPORT_APP_USAGE=0")
 
 # Platform-specific junk.
 set(JUCE_PLATFORM_SPECIFIC_FLAGS "-DLINUX=1")
