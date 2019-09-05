@@ -29,6 +29,7 @@
 
 #include <atomic>             // std::atomic_bool
 #include <condition_variable> // std::condition_variable
+#include <functional>         // std::function
 #include <memory>             // std::unique_ptr
 #include <queue>              // std::queue
 
